@@ -15,8 +15,6 @@ const express = require('express');
 const { db, seedDefaultSettings } = require('./db');
 const auth = require('./auth');
 const dispatch = require('./index-dispatch');
-const fs = require('fs');
-const path = require('path');
 
 const PORT = Number(process.env.PORT || process.env.DASH_PORT || 8787);
 const STATIC_ROOT = process.env.DASH_STATIC_ROOT || path.join(__dirname, '..', '..');
