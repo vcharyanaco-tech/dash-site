@@ -3,7 +3,7 @@
   "build": {
     "builder": "DOCKERFILE",
     "dockerfilePath": "Dockerfile",
-    "rootDirectory": "src/server"
+    "rootDirectory": "."
   },
   "deploy": {
     "startCommand": "node index.js",
@@ -19,3 +19,4 @@
     "PORT": "8787"
   }
 }
+
