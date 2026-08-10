@@ -1,0 +1,47 @@
+# dash-site
+
+India Post Dashboard — Circle Office, Haryana. This repository is the
+**website-deployable** form of the project: the app itself lives at the repo
+root (deployed straight to GitHub Pages), and the supporting backend + source
+material is organised under `src/`.
+
+## Deployable website (repo root)
+
+| Path | What it is |
+| --- | --- |
+| `index.html` | Public landing page |
+| `app.html` | The dashboard app (SPA) |
+| `app.js` | App bundle (talks to the GAS/Worker API) |
+| `offline-queue.js` | Offline request queue for the app |
+| `sw.js` / `manifest.json` | PWA service worker + manifest |
+| `assets/styles.css` | App styles |
+| `assets/site.css` | Landing-page styles |
+| `about.html`, `privacy.html`, `support.html`, `terms.html`, `data-deletion.html` | Public info pages |
+| `CNAME` | Custom domain (`dashboardharyana.site`) |
+
+GitHub Actions (`.github/workflows/pages.yml`) deploys the repo root to GitHub
+Pages on every push to `main`.
+
+## Supporting source (`src/`)
+
+| Path | What it is |
+| --- | --- |
+| `src/gas/` | Google Apps Script backend (CRUD, auth, reports, notifications) — push with `clasp` |
+| `src/worker/` | Cloudflare Worker proxy (routes `/api/*`, static `/app.html`) |
+| `src/tests/` | Node unit tests (`node --test src/tests`) |
+| `src/scripts/` | Deploy / build PowerShell scripts |
+| `src/docs/` | Architecture, deployment, developer + admin guides |
+
+The live deployment uses the Apps Script backend and Cloudflare Worker from
+the original `dashv1` repo; this repo mirrors that stack in a self-contained,
+deployable layout.
+
+## Quick start
+
+```bash
+# Serve the website locally
+python -m http.server 8080
+
+# Run the unit tests
+node --test src/tests
+```

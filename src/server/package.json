@@ -1,0 +1,24 @@
+{
+  "name": "dash-site-server",
+  "version": "1.0.0",
+  "description": "Node.js + SQLite backend for the India Post Dashboard website (port of the Google Apps Script backend).",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js",
+    "seed": "node seed.js",
+    "test": "node --test tests/smoke.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "express": "^4.21.2",
+    "jszip": "^3.10.1",
+    "pdfkit": "^0.15.2"
+  },
+  "allowScripts": {
+    "better-sqlite3@13.0.3": true
+  }
+}

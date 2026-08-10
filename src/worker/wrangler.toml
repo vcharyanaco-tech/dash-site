@@ -1,0 +1,19 @@
+name = "dashv1-proxy"
+main = "worker.js"
+account_id = "a01eb877733d755cb57e25827a9c52fe"
+compatibility_date = "2026-08-04"
+
+# Routes: serve the Worker at dashboardharyana.site
+# Requires the domain to be active on Cloudflare (nameservers pointing to Cloudflare)
+routes = [
+  { pattern = "dashboardharyana.site/*", zone_name = "dashboardharyana.site" },
+  { pattern = "www.dashboardharyana.site/app*", zone_name = "dashboardharyana.site" }
+]
+
+[vars]
+GAS_URL = "https://script.google.com/macros/s/AKfycbxPwINC2LOPQ-II6vhMXuEqy30Fim32INQNjK3j0sK_9kBClr2MrbSPDnR91AmC7Ian/exec"
+GAS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxPwINC2LOPQ-II6vhMXuEqy30Fim32INQNjK3j0sK_9kBClr2MrbSPDnR91AmC7Ian/"
+
+[[kv_namespaces]]
+binding = "AI_INSIGHTS_KV"
+id = "3aed6a4c7ad842c7b5fba1558a68ab06"

@@ -1,0 +1,18 @@
+
+# Backup files
+*.bak
+
+# Session / chat transcripts (not part of the deployable site)
+SESSION.md
+SESSION_EXPORT.md
+session-*.md
+
+# Local tooling
+.wrangler/
+.vscode/
+
+# Node
+node_modules/
+
+# Local server runtime state (created by src/server on startup)
+data/
