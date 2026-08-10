@@ -15,7 +15,6 @@ COPY src/server/ ./
 RUN npm install
 
 ENV DASH_DATA_DIR=/app/data
-ENV PORT=8787
 EXPOSE 8787
 
 CMD ["sh", "-c", "node seed.js || true; node index.js"]
