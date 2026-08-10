@@ -1,0 +1,12 @@
+# Keep the Docker build context small (root Dockerfile copies src/server).
+node_modules
+**/node_modules
+data
+**/data
+.git
+**/.git
+*.log
+**/*.log
+.wrangler
+.dockerignore
+.railwayignore
