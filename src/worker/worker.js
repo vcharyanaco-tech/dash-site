@@ -40,47 +40,47 @@ export default {
       });
     }
 
-    // ── Route: /api/* → enterprise API (health, AI insights, WhatsApp notify) ─
-    // External secrets (GEMINI_API_KEY, WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID)
-    // live only in Worker secrets/environment and are read from `env` here.
+    // ── Route: /api/* ───────────────────────────────────────────────────────
+    // Enterprise routes (AI insights, WhatsApp) use Worker-only secrets and are
+    // handled locally. ALL other /api/* calls (the dashboard dispatcher + file
+    // streaming) are forwarded to the Node/SQLite backend (SERVER_ORIGIN),
+    // which replaces the old Google Apps Script backend.
     if (url.pathname.startsWith('/api/')) {
-      return handleEnterpriseRoute(request, env, url);
+      if (isEnterpriseApiPath(url.pathname)) {
+        return handleEnterpriseRoute(request, env, url);
+      }
+      const serverOrigin = env.SERVER_ORIGIN;
+      if (!serverOrigin) {
+        return new Response('Worker not configured: SERVER_ORIGIN missing', { status: 500, headers: COMMON_HEADERS });
+      }
+      return forwardToServer(request, url, serverOrigin);
+    }
+
+    // ── Route: /macros/* → Node server dispatcher (was GAS script) ──────────
+    // Legacy client posts function(args) here; forward to /api.
+    if (url.pathname.startsWith('/macros/')) {
+      const serverOrigin = env.SERVER_ORIGIN;
+      if (!serverOrigin) {
+        return new Response('Worker not configured: SERVER_ORIGIN missing', { status: 500, headers: COMMON_HEADERS });
+      }
+      const target = new URL(serverOrigin + '/api' + (url.search || ''));
+      return forwardToServer(request, target, serverOrigin);
+    }
+
+    // ── Route: /static/* → Node server static assets (was GAS warden) ───────
+    if (url.pathname.startsWith('/static/')) {
+      const serverOrigin = env.SERVER_ORIGIN;
+      if (!serverOrigin) {
+        return new Response('Worker not configured: SERVER_ORIGIN missing', { status: 500, headers: COMMON_HEADERS });
+      }
+      const target = new URL(serverOrigin + url.pathname + (url.search || ''));
+      return forwardToServer(request, target, serverOrigin);
     }
 
     const GAS_BASE_URL = env.GAS_URL;
     const GAS_SCRIPT_URL = env.GAS_SCRIPT_URL;
-
-    if (!GAS_BASE_URL || !GAS_SCRIPT_URL) {
-      return new Response('Worker not configured', { status: 500, headers: COMMON_HEADERS });
-    }
-
-    const path = url.pathname;
-
-    // ── Route: /static/* → script.google.com (GAS warden sub-resources) ──────
-    // ── Route: /macros/* → script.google.com (API calls from docs/app.js) ────
-    // Passes through method + body so POST API calls work with CORS headers.
-    const gasScriptOrigin = new URL(GAS_SCRIPT_URL).origin;
-    if (path.startsWith('/static/') || path.startsWith('/macros/')) {
-      const targetUrl = gasScriptOrigin + path + (url.search || '');
-      const proxyHeaders = new Headers();
-      // Copy safe headers only — avoid sending Host/Origin which confuse GAS
-      const ct = request.headers.get('Content-Type');
-      if (ct) proxyHeaders.set('Content-Type', ct);
-      proxyHeaders.set('User-Agent', 'Mozilla/5.0');
-      // Read body as text to avoid ReadableStream-passthrough issues in Workers
-      const isGetHead = request.method === 'GET' || request.method === 'HEAD';
-      const bodyText = isGetHead ? undefined : await request.text();
-      const resp = await fetch(targetUrl, {
-        method: request.method,
-        headers: proxyHeaders,
-        body: bodyText,
-        redirect: 'follow',
-      });
-      const newHeaders = new Headers(resp.headers);
-      Object.entries(COMMON_HEADERS).forEach(([k, v]) => newHeaders.set(k, v));
-      const respBody = await resp.arrayBuffer();
-      return new Response(respBody, { status: resp.status, headers: newHeaders });
-    }
+    // GAS is no longer required for routing; GAS_URL/GAS_SCRIPT_URL are kept
+    // only for backward compatibility and are otherwise unused.
 
     // ── Route: everything else → GitHub Pages static bundle (docs/) ─────────
     // /app.html is served as docs/app.html (standalone static page, no GAS wrapper).
@@ -360,6 +360,42 @@ function bearerToken(request) {
   const auth = request.headers.get('Authorization') || '';
   const m = auth.match(/^Bearer\s+(.+)$/i);
   return m ? m[1].trim() : '';
+}
+
+/** Enterprise routes are handled locally by the Worker (they use Worker-only
+ *  secrets). Everything else under /api/* is forwarded to the Node server. */
+function isEnterpriseApiPath(pathname) {
+  return pathname === '/api/health' ||
+    pathname === '/api/ai-insights' ||
+    pathname === '/api/notify-whatsapp';
+}
+
+/** Forwards a request to the Node/SQLite backend, preserving method, headers
+ *  (minus host/origin) and body, and re-applying CORS + the auth bearer so the
+ *  server's token checks pass. */
+async function forwardToServer(request, url, serverOrigin) {
+  const target = new URL(serverOrigin + url.pathname + (url.search || ''));
+  const fwd = new Headers();
+  const ct = request.headers.get('Content-Type');
+  if (ct) fwd.set('Content-Type', ct);
+  const auth = request.headers.get('Authorization');
+  if (auth) fwd.set('Authorization', auth);
+  fwd.set('User-Agent', 'Mozilla/5.0');
+
+  const isGetHead = request.method === 'GET' || request.method === 'HEAD';
+  const bodyText = isGetHead ? undefined : await request.text();
+
+  const resp = await fetch(target.toString(), {
+    method: request.method,
+    headers: fwd,
+    body: bodyText,
+    redirect: 'follow',
+  });
+
+  const newHeaders = new Headers(resp.headers);
+  Object.entries(COMMON_HEADERS).forEach(([k, v]) => newHeaders.set(k, v));
+  const respBody = await resp.arrayBuffer();
+  return new Response(respBody, { status: resp.status, headers: newHeaders });
 }
 
 async function handleEnterpriseRoute(request, env, url) {

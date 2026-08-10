@@ -11,6 +11,10 @@ routes = [
 ]
 
 [vars]
+# Node/SQLite backend that replaces the Google Apps Script data source.
+# Set this to your hosted server origin, e.g. https://dash-api.yourhost.com
+SERVER_ORIGIN = "https://REPLACE_WITH_SERVER_ORIGIN"
+# Retained for backward compatibility; no longer used for routing.
 GAS_URL = "https://script.google.com/macros/s/AKfycbxPwINC2LOPQ-II6vhMXuEqy30Fim32INQNjK3j0sK_9kBClr2MrbSPDnR91AmC7Ian/exec"
 GAS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxPwINC2LOPQ-II6vhMXuEqy30Fim32INQNjK3j0sK_9kBClr2MrbSPDnR91AmC7Ian/"
 

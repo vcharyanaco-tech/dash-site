@@ -50,7 +50,10 @@ const EventBus = {
     order and token injection, and turns results into Promises. No UI code
     calls fetch directly. */
 
-var API_URL = 'http://localhost:8787/api';
+// In production the Cloudflare Worker forwards /api/* to the Node server;
+// locally it can point at the dev server. Derive from the page origin so the
+// same build works on dashboardharyana.site and localhost.
+var API_URL = (window.location.protocol + '//' + window.location.host + '/api');
 
 function apiCall_(fn) {
   const args = Array.prototype.slice.call(arguments, 1);
