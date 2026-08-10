@@ -27,7 +27,7 @@ if (fs.existsSync(MIGRATION_DIR) && fs.existsSync(path.join(MIGRATION_DIR, 'reco
   try {
     console.log('[migrate] found migration CSVs — importing...');
     process.env.DASH_IMPORT_DIR = MIGRATION_DIR;
-    require('./import-from-gas');
+    require('./import-from-gas').main();
     console.log('[migrate] import complete.');
   } catch (migErr) {
     console.error('[migrate] import warning: ' + (migErr && migErr.message));
