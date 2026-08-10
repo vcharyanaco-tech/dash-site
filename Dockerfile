@@ -12,9 +12,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy the server sources from src/server into /app
 COPY src/server/ ./
 
-RUN npm install
+# Force a clean build of better-sqlite3 from source so the native .node
+# binary matches the container's libc/arch (avoids silent load crashes that
+# make the server never bind to the port).
+RUN npm install --build-from-source=better-sqlite3
 
 ENV DASH_DATA_DIR=/app/data
 EXPOSE 8787
 
-CMD ["sh", "-c", "node seed.js || true; node index.js"]
+# Start with a launcher that surfaces any startup error to the logs
+# (better-sqlite3 load failure, db open error, etc.) instead of exiting silent.
+CMD ["node", "start.js"]
