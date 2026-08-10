@@ -45,10 +45,17 @@ routes `/static/` and `/macros/` to the GAS script. That is the cutover point.
 
 ### Phase 1 — Production data cutover
 1. Export live data from the spreadsheet (records, users, tasks, audit,
-   documents) to JSON/CSV.
-2. Add an idempotent import script (`src/server/import-from-gas.js`) that
-   inserts rows into the SQLite tables, preserving `row` numbers for records so
-   display IDs stay stable.
+   documents) to CSV.
+   - One-time helper: `src/server/export-from-gas.js` reads the live sheet via
+     the gviz JSON endpoint using a session cookie (never hardcoded):
+     `set DASH_SPREADSHEET_ID=...; set DASH_GAS_COOKIE="SID=...; ..."; npm run export`
+     → writes `records.csv`, `users.csv`, `tasks.csv`, `submissions.csv`,
+     `notifications.csv`, `approvals.csv`, `audit.csv`, `documents.csv` into
+     `data/export/` (gitignored).
+2. Idempotent import: `src/server/import-from-gas.js` (`npm run import`)
+   inserts rows into the SQLite tables, preserving record `row` numbers so
+   display IDs (`id = row - START_ROW + 1`) stay stable. Existing rows are
+   skipped via `INSERT OR IGNORE`.
 3. Seed bootstrap admin + settings via existing `seed.js`.
 4. Snapshot the old spreadsheet as read-only archive (keep for rollback).
 
