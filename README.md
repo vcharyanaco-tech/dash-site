@@ -36,6 +36,11 @@ The live deployment uses the Apps Script backend and Cloudflare Worker from
 the original `dashv1` repo; this repo mirrors that stack in a self-contained,
 deployable layout.
 
+> **Migration base:** `src/server/` is a complete SQLite-backed Node port of the
+> GAS backend (see `MIGRATION.md`). It already serves the app via
+> `POST /api` (the same `function(args)` surface as GAS), so the spreadsheet can
+> be retired as the data source without changing frontend functionality.
+
 ## Quick start
 
 ```bash
