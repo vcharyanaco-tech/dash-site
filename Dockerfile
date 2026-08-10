@@ -1,7 +1,8 @@
 # Root Dockerfile — Railway builds from repo root but the app lives in src/server.
 # We copy that directory in as the build context so the existing
 # src/server/Dockerfile content is reproduced here at the root path Railway expects.
-FROM node:20-bookworm-slim
+# Node 22 matches better-sqlite3@13's engine requirement (>=22).
+FROM node:22-bookworm-slim
 
 WORKDIR /app
 
