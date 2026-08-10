@@ -20,11 +20,18 @@ const PORT = Number(process.env.PORT || process.env.DASH_PORT || 8787);
 const STATIC_ROOT = process.env.DASH_STATIC_ROOT || path.join(__dirname, '..', '..');
 const API_PREFIX = '/api';
 
-seedDefaultSettings();
+// Attempt to seed default settings, but do not fail if it errors
+try {
+  seedDefaultSettings();
+} catch (err) {
+  console.warn('Default settings seeding warning:', err.message);
+}
+
+// Attempt to ensure bootstrap admin, but do not fail if it errors
 try {
   auth.ensureBootstrapAdmin();
 } catch (err) {
-  console.error('Bootstrap admin seeding failed: ' + err.message);
+  console.warn('Bootstrap admin seeding warning: ' + err.message);
 }
 
 const app = express();
@@ -109,7 +116,7 @@ app.get(API_PREFIX + '/files/:key', function (req, res) {
   const isDownload = req.query.download === '1';
   res.setHeader('Content-Type', meta.mimeType || 'application/octet-stream');
   res.setHeader('Content-Length', String(meta.size));
-  res.setHeader('Content-Disposition', (isDownload ? 'attachment' : 'inline') + '; filename="' + String(meta.fileName || 'document').replace(/"/g, '') + '"');
+  res.setHeader('Content-Disposition', (isDownload ? 'attachment' : 'inline') + '; filename="' + String(meta.fileName || 'document').replace(/\"/g, '') + '"');
   res.setHeader('Cache-Control', 'private, max-age=300');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.sendFile(found.path);
@@ -137,3 +144,4 @@ if (require.main === module) {
 }
 
 module.exports = { app, server, dispatch };
+
