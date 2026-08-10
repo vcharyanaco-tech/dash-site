@@ -59,20 +59,34 @@ routes `/static/` and `/macros/` to the GAS script. That is the cutover point.
 3. Seed bootstrap admin + settings via existing `seed.js`.
 4. Snapshot the old spreadsheet as read-only archive (keep for rollback).
 
-### Phase 2 — Re-point the Cloudflare Worker
-1. Change Worker routing so `/macros/*` and `/static/*` no longer proxy to GAS;
-   instead send API calls to the Node server (origin set via `env.SERVER_ORIGIN`)
-   and serve static assets from GitHub Pages / R2.
-2. Keep `/api/*` enterprise routes (AI, WhatsApp) as-is — they already use env
-   secrets, not the spreadsheet.
-3. Deploy Worker via `src/worker/deploy-worker-api.js`.
+### Phase 2 — Re-point the Cloudflare Worker ✅ DONE
+1. `src/worker/worker.js` now forwards `/api/*` (except enterprise routes),
+   `/macros/*` and `/static/*` to the Node server via `env.SERVER_ORIGIN`.
+   Enterprise routes (`/api/ai-insights`, `/api/notify-whatsapp`,
+   `/api/health`) stay local — they use Worker-only secrets.
+2. `app.js` `API_URL` derives from `location.origin + '/api'` so the same
+   build works on `dashboardharyana.site` and localhost.
+3. Set `SERVER_ORIGIN` (Worker env var / secret) to the hosted server URL, then
+   deploy the Worker: `node src/worker/deploy-worker-api.js $CLOUDFLARE_API_TOKEN`
+   (or `wrangler deploy` in `src/worker`).
 
 ### Phase 3 — Deployment & hosting
-1. Host the Node server on a free tier: Cloudflare Workers + D1, Railway,
-   Render, or Fly.io (free). Use the existing `data/dashboard.db` (or D1).
-2. Update `app.js` `API_URL` to the production origin (env-injected, not
-   hardcoded `localhost`).
-3. Keep `dashv1` (GAS) untouched as a fallback/reference.
+1. Containerise the server: `src/server/Dockerfile` + `.dockerignore`
+   (compiles `better-sqlite3` at build; `railway.json` for one-click free-tier
+   deploy, or use Render/Fly.io with the same Dockerfile).
+2. On the host, set `SERVER_ORIGIN` = the public server URL (e.g.
+   `https://dash-api.up.railway.app`). Persist `data/` (SQLite + uploads) on a
+   mounted volume so the DB survives restarts.
+3. Import the live data once on first run: copy the exported CSVs into the
+   host's `data/export/` and run `npm run import` (or bake a seeded DB into the
+   image for a fresh start).
+4. Set the Worker `SERVER_ORIGIN` secret and deploy the Worker (Phase 2 step 3).
+5. Verify: `GET <server>/api/health` returns ok, and
+   `POST <worker>/api {function:'getData'}` returns the live records.
+6. Keep `dashv1` (GAS) untouched as a fallback/reference.
+
+> Note: file uploads live on disk under `data/uploads/`. On serverless hosts,
+> move them to R2 / object storage and update `documents.resolveDocumentFile`.
 
 ### Phase 4 — Decommission GAS (optional, after soak)
 1. Stop the time-driven GAS triggers once the Node server runs the equivalent
