@@ -15,10 +15,26 @@ const express = require('express');
 const { db, seedDefaultSettings } = require('./db');
 const auth = require('./auth');
 const dispatch = require('./index-dispatch');
+const fs = require('fs');
+const path = require('path');
 
 const PORT = Number(process.env.PORT || process.env.DASH_PORT || 8787);
 const STATIC_ROOT = process.env.DASH_STATIC_ROOT || path.join(__dirname, '..', '..');
 const API_PREFIX = '/api';
+
+// First-boot data migration: if migration CSVs are baked into the image,
+// import them once (INSERT OR IGNORE keeps reboots idempotent).
+const MIGRATION_DIR = path.join(__dirname, 'migration-export');
+if (fs.existsSync(MIGRATION_DIR) && fs.existsSync(path.join(MIGRATION_DIR, 'records.csv'))) {
+  try {
+    console.log('[migrate] found migration CSVs — importing...');
+    process.env.DASH_IMPORT_DIR = MIGRATION_DIR;
+    require('./import-from-gas');
+    console.log('[migrate] import complete.');
+  } catch (migErr) {
+    console.error('[migrate] import warning: ' + (migErr && migErr.message));
+  }
+}
 
 seedDefaultSettings();
 try {
