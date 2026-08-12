@@ -1,0 +1,172 @@
+/* ==========================================================================
+   India Post Dashboard — Landing page (site.css)
+   Enterprise palette (matches the app design system):
+   primary #da291c · secondary/accent #004b87 · surface/bg/text from tokens.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+  --primary: #da291c;
+  --primary-hover: #b92317;
+  --secondary: #004b87;
+  --secondary-hover: #003c6d;
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --text: #1d2129;
+  --muted: #667085;
+  --border: #e4e7ec;
+  --border-strong: #d0d5dd;
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 10px;
+  --shadow-sm: 0 2px 8px rgba(16, 24, 40, .06);
+  --shadow-md: 0 6px 20px rgba(16, 24, 40, .09);
+  --font-body: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg);
+}
+
+a { color: var(--secondary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+  z-index: 100;
+  padding: 10px 16px;
+  background: var(--secondary);
+  color: #fff;
+  border-radius: 0 0 var(--radius-sm) 0;
+}
+.skip-link:focus { left: 0; }
+
+/* ------------------------------- Header -------------------------------- */
+.site-header { background: var(--surface); border-bottom: 1px solid var(--border); }
+.site-header__bar {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text-strong, #0f1115); font-weight: 700; font-size: 18px; }
+.brand:hover { text-decoration: none; }
+.brand img { height: 40px; width: auto; }
+
+.site-nav { display: flex; gap: 20px; align-items: center; font-weight: 500; }
+.site-nav a { color: var(--muted); }
+.site-nav a:hover { color: var(--secondary); text-decoration: none; }
+.site-nav a.is-active { color: var(--secondary); font-weight: 600; }
+.site-nav a[href="app.html"] { color: var(--primary); }
+.site-nav a[href="app.html"]:hover { color: var(--primary-hover); }
+
+/* -------------------------------- Hero --------------------------------- */
+.hero {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 64px 24px 32px;
+  text-align: center;
+}
+.hero h1 {
+  font-size: 34px;
+  line-height: 1.2;
+  margin: 0 0 16px;
+  color: var(--text-strong, #0f1115);
+}
+.hero p { max-width: 760px; margin: 0 auto 24px; color: var(--muted); font-size: 17px; }
+
+.hero__meta { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 0 0 28px; }
+.badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+.cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+/* ------------------------------- Buttons ------------------------------- */
+.btn {
+  display: inline-block;
+  padding: 12px 22px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+.btn:hover { text-decoration: none; }
+.btn--primary { background: var(--primary); color: #fff; }
+.btn--primary:hover { background: var(--primary-hover); }
+.btn--ghost { background: var(--surface); color: var(--secondary); border-color: var(--border-strong); }
+.btn--ghost:hover { border-color: var(--secondary); }
+
+/* -------------------------------- Cards -------------------------------- */
+main#main { max-width: 1080px; margin: 0 auto; padding: 8px 24px 56px; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px 30px;
+  margin: 0 0 24px;
+  box-shadow: var(--shadow-sm);
+}
+.card h2 { margin: 0 0 12px; color: var(--text-strong, #0f1115); font-size: 22px; }
+.card h3 { margin: 0 0 8px; font-size: 16px; color: var(--secondary); }
+.card p { margin: 0 0 12px; color: var(--muted); }
+.card p:last-child { margin-bottom: 0; }
+.card ul { margin: 0 0 8px; padding-left: 22px; color: var(--muted); }
+.card li { margin-bottom: 6px; }
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin: 8px 0 20px;
+}
+.feature { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 18px; }
+
+/* -------------------------------- Footer ------------------------------- */
+.site-footer { border-top: 1px solid var(--border); background: var(--surface); }
+.site-footer__inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 14px;
+}
+.site-footer a { color: var(--secondary); }
+
+/* ------------------------------ Responsive ----------------------------- */
+@media (max-width: 640px) {
+  .hero { padding-top: 40px; }
+  .hero h1 { font-size: 26px; }
+  .site-header__bar { flex-direction: column; align-items: flex-start; }
+  .card { padding: 20px; }
+}
