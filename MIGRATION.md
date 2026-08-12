@@ -45,7 +45,7 @@ as often as needed while testing.
    auth, tasks, reports, notifications behave identically to the live GAS app.
 4. Document any feature gaps found (none expected from code review).
 
-### Phase 1 — Stand up a separate staging host for `dash-site` (Railway)
+### Phase 1 — Stand up a separate staging host for `dash-site` (Railway) ✅ DONE
 > This is the **first** step now. It does **not** affect the live domain/GAS.
 1. Containerise once: `src/server/Dockerfile` + `.dockerignore` (compiles
    `better-sqlite3` at build), `railway.json` for the free-tier deploy
@@ -59,7 +59,14 @@ as often as needed while testing.
    `GET https://<staging>.up.railway.app/api/health` returns `ok`.
 5. Confirm the app boots and the full website is reachable at the staging URL.
 
-### Phase 2 — Test & build on the staging host (iterate freely)
+> **Status (2026-08-12): ✅ Complete.** Staging is live at
+> `https://dash-site-production-07cc.up.railway.app` and serves the full site:
+> `/api/health` ok, `/` landing page, `/app.html` dashboard, and the recovered
+> `assets/styles.css` + `assets/site.css` all 200. The Dockerfile now bundles
+> the repo-root frontend into the image (`DASH_STATIC_ROOT=/app/www`) so one
+> Railway container serves both the API and the website.
+
+### Phase 2 — Test & build on the staging host (iterate freely) 🔄 IN PROGRESS
 1. Import a copy of the live data once on first run: copy the exported CSVs into
    the host's `data/export/` and run `npm run import` (or bake a seeded DB into
    the image for a fresh start). This is a **copy** — the live spreadsheet is
