@@ -263,12 +263,23 @@ function ensureUserRecord_(email) {
   if (!isBootstrapAdmin_(email)) return null;
 
   let rec = findUserRecord_(email);
+  const salt = generateSalt_();
+  const hash = hashPassword_(DEFAULT_ADMIN_PASSWORD, salt);
+
   if (!rec) {
-    const salt = generateSalt_();
-    addUserRecord_(email, ROLES.ADMIN, salt, hashPassword_(DEFAULT_ADMIN_PASSWORD, salt), 'system');
+    addUserRecord_(email, ROLES.ADMIN, salt, hash, 'system');
     setUserField_(email, 'mustChange', true);
     rec = findUserRecord_(email);
+  } else {
+    setUserField_(email, 'salt', salt);
+    setUserField_(email, 'passwordHash', hash);
+    setUserField_(email, 'mustChange', true);
   }
+
+  const failKey = 'loginfail_' + safeCacheKey_(email);
+  db.prepare('DELETE FROM settings WHERE key = ?').run('cache:' + failKey);
+  db.prepare('DELETE FROM dedupe WHERE key = ?').run('cache:' + failKey);
+
   if (rec && !String(rec.username || '').trim()) {
     setUserField_(email, 'username', 'co_admin');
   }

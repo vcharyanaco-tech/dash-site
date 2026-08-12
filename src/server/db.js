@@ -85,7 +85,8 @@ function cacheRemove(key) {
 }
 
 function cacheExpiry(key) {
-  const row = db.prepare('SELECT created_at FROM dedupe WHERE key = ?').get('cache:' + key);
+  const k = 'cache:' + key;
+  const row = db.prepare('SELECT created_at FROM dedupe WHERE key = ?').get(k);
   return row ? Number(row.created_at) : 0;
 }
 
