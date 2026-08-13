@@ -104,6 +104,21 @@ function isHeader(row) {
   return joined.includes('sector') && joined.includes('description');
 }
 
+// Skips leading rows until the header row (first cell === headerKey,
+// case-insensitive) and returns the data rows after it. Handles exports that
+// start with a stray artifact row (e.g. a column-letter row) before the real
+// header. If no header row is found, returns the rows unchanged.
+function stripHeader(rows, headerKey) {
+  if (!rows || !rows.length) return rows;
+  const key = String(headerKey || '').toLowerCase();
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i][0] || '').toLowerCase() === key) {
+      return rows.slice(i + 1);
+    }
+  }
+  return rows;
+}
+
 function importRecords() {
   const rows = readCsv('records.csv');
   if (!rows) { console.log('records.csv: skipped (not found)'); return 0; }
@@ -152,8 +167,7 @@ function importRecords() {
 function importUsers() {
   const rows = readCsv('users.csv');
   if (!rows) { console.log('users.csv: skipped (not found)'); return 0; }
-  let data = rows;
-  if (data.length && String(data[0][0] || '').toLowerCase() === 'email') data = data.slice(1);
+  const data = stripHeader(rows, 'email');
   const stmt = db.prepare(
     'INSERT OR IGNORE INTO users (email, role, salt, password_hash, must_change, created_by, created_at, reset_token, reset_expires, group_name, department, office, preferences, reset_requested, username) ' +
     'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
@@ -186,8 +200,7 @@ function importUsers() {
 function importTasks() {
   const rows = readCsv('tasks.csv');
   if (!rows) { console.log('tasks.csv: skipped (not found)'); return 0; }
-  let data = rows;
-  if (data.length && String(data[0][0] || '').toLowerCase() === 'id') data = data.slice(1);
+  const data = stripHeader(rows, 'id');
   const stmt = db.prepare(
     'INSERT OR IGNORE INTO tasks (id, record_row, record_id, title, description, assignee, status, priority, due_date, created_by, created_at, updated_at, completed_at) ' +
     'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
@@ -218,8 +231,7 @@ function importTasks() {
 function importSubmissions() {
   const rows = readCsv('submissions.csv');
   if (!rows) { console.log('submissions.csv: skipped (not found)'); return 0; }
-  let data = rows;
-  if (data.length && String(data[0][0] || '').toLowerCase() === 'id') data = data.slice(1);
+  const data = stripHeader(rows, 'id');
   const stmt = db.prepare(
     'INSERT OR IGNORE INTO submissions (id, card_row, card_id, email, text, created_at, updated_at, locked_by, locked_at, displayed) ' +
     'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
@@ -247,8 +259,7 @@ function importSubmissions() {
 function importNotifications() {
   const rows = readCsv('notifications.csv');
   if (!rows) { console.log('notifications.csv: skipped (not found)'); return 0; }
-  let data = rows;
-  if (data.length && String(data[0][0] || '').toLowerCase() === 'id') data = data.slice(1);
+  const data = stripHeader(rows, 'id');
   const stmt = db.prepare(
     'INSERT OR IGNORE INTO notifications (id, email, type, title, body, link, created_at, read_at) ' +
     'VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
@@ -274,8 +285,7 @@ function importNotifications() {
 function importApprovals() {
   const rows = readCsv('approvals.csv');
   if (!rows) { console.log('approvals.csv: skipped (not found)'); return 0; }
-  let data = rows;
-  if (data.length && String(data[0][0] || '').toLowerCase() === 'id') data = data.slice(1);
+  const data = stripHeader(rows, 'id');
   const stmt = db.prepare(
     'INSERT OR IGNORE INTO approvals (id, module, type, target_row, target_id, summary, submitted_by, submitted_at, status, reviewed_by, reviewed_at, comment) ' +
     'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
@@ -305,8 +315,7 @@ function importApprovals() {
 function importAudit() {
   const rows = readCsv('audit.csv');
   if (!rows) { console.log('audit.csv: skipped (not found)'); return 0; }
-  let data = rows;
-  if (data.length && String(data[0][0] || '').toLowerCase() === 'timestamp') data = data.slice(1);
+  const data = stripHeader(rows, 'timestamp');
   const stmt = db.prepare(
     'INSERT INTO audit (timestamp, user, action, record_id, details) VALUES (?, ?, ?, ?, ?)'
   );
@@ -328,8 +337,7 @@ function importAudit() {
 function importDocuments() {
   const rows = readCsv('documents.csv');
   if (!rows) { console.log('documents.csv: skipped (not found)'); return 0; }
-  let data = rows;
-  if (data.length && String(data[0][0] || '').toLowerCase() === 'id') data = data.slice(1);
+  const data = stripHeader(rows, 'id');
   const stmt = db.prepare(
     'INSERT OR IGNORE INTO documents (id, record_row, record_id, file_name, file_key, mime_type, size, uploaded_by, uploaded_at) ' +
     'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
