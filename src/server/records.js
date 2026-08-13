@@ -84,13 +84,29 @@ function reviewStatusForRow_(row) {
  * Link helpers
  * ============================================================ */
 
+// Older clients appended the link display text to the field value; drop a
+// trailing occurrence so the text isn't duplicated next to the hyperlink.
+function stripTrailingLinkText_(value, linkText) {
+  const s = String(value == null ? '' : value);
+  const t = String(linkText || '').trim();
+  if (!s || !t) return s;
+  const trimmed = s.replace(/\s+$/, '');
+  if (trimmed.endsWith(t)) {
+    return trimmed.slice(0, trimmed.length - t.length).replace(/\s+$/, '');
+  }
+  return s;
+}
+
 function fieldHtml_(value, linkObj) {
   const link = linkObj && linkObj.url ? linkObj : null;
   if (link) {
     const url = absUrl_(link.url);
     if (!url) return linkifyText_(value);
     const text = String(link.text || '').trim() || String(value || '');
-    return '<a href="' + escHtml_(url) + '" target="_blank" rel="noopener noreferrer" data-embed="1">' + escHtml_(text) + '</a>';
+    // Show the field's own text first, then a blank line, then the hyperlink.
+    const textHtml = linkifyText_(stripTrailingLinkText_(value, text));
+    const linkHtml = '<a href="' + escHtml_(url) + '" target="_blank" rel="noopener noreferrer" data-embed="1">' + escHtml_(text) + '</a>';
+    return (textHtml ? textHtml + '<br><br>' : '') + linkHtml;
   }
   return linkifyText_(value);
 }

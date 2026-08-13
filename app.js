@@ -4432,21 +4432,8 @@ function saveLinkModal(e) {
     text: textEl.value.trim(),
     url: normalizeLinkUrl_(urlEl.value)
   };
-  const inputId = linkFields_[fieldKey];
-  const fieldEl = getEl(inputId);
-  if (fieldEl) {
-    const linkText = appState.fieldLinks[fieldKey].text;
-    const currentValue = fieldEl.value;
-    if (currentValue.includes(linkText)) {
-      // Link text already in field, keep as is
-    } else if (currentValue.trim()) {
-      // Append link text to existing content with a space
-      fieldEl.value = currentValue.trim() + ' ' + linkText;
-    } else {
-      // New entry, set link text as the value
-      fieldEl.value = linkText;
-    }
-  }
+  // Keep the field's own text as the user typed it: the hyperlink display
+  // text lives in fieldLinks and is rendered below the field text.
   updateFieldLinkButton(fieldKey);
   closeLinkModal();
   showToast('Hyperlink applied to ' + fieldKey, 'success');
