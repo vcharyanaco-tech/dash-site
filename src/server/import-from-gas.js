@@ -19,9 +19,10 @@
  *   2. node import-from-gas.js
  *
  * Row rules (matches GAS):
- *   - records.csv has a header row then data starting at the sheet's
- *     START_ROW. We map the spreadsheet's physical row number = START_ROW + i
- *     so display id = row - START_ROW + 1, exactly as in the live app.
+ *   - records.csv optionally has a header row (auto-detected), then data
+ *     starting at the sheet's START_ROW. We map the spreadsheet's physical
+ *     row number = START_ROW + i so display id = row - START_ROW + 1,
+ *     exactly as in the live app.
  *   - All other sheets are keyed by their Id column; existing rows are skipped.
  * ============================================================
  */
@@ -33,14 +34,67 @@ const { CONFIG } = require('./config');
 
 const EXPORT_DIR = process.env.DASH_IMPORT_DIR || path.join(__dirname, '..', '..', 'data', 'export');
 
+// RFC-4180-style CSV parser. Handles quoted fields containing commas,
+// embedded newlines (LF/CRLF) and escaped quotes (""), which the old
+// split(',')/split('\n') approach mangled for multi-line action/text fields.
+function parseCsv(text) {
+  // Strip a UTF-8 BOM if present.
+  if (text && text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  let i = 0;
+  const n = text ? text.length : 0;
+  while (i < n) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i += 2; }  // escaped quote
+        else { inQuotes = false; i++; }
+      } else {
+        field += c;
+        i++;
+      }
+      continue;
+    }
+    if (c === '"') { inQuotes = true; i++; continue; }
+    if (c === ',') { row.push(field); field = ''; i++; continue; }
+    if (c === '\n') {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+      i++;
+      continue;
+    }
+    if (c === '\r') {
+      // consume a following \n so CRLF is treated as a single newline
+      if (text[i + 1] === '\n') i++;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+      i++;
+      continue;
+    }
+    field += c;
+    i++;
+  }
+  // Flush the final field/row when the file does not end with a newline.
+  if (field !== '' || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows;
+}
+
 function readCsv(file) {
   const p = path.join(EXPORT_DIR, file);
   if (!fs.existsSync(p)) return null;
-  const text = fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const lines = text.split('\n').filter(function (l) { return l.length || l === ''; });
-  if (!lines.length) return [];
-  // Strip a single header row if present (first line looks like a header).
-  const rows = lines.map(function (l) { return l.split(','); });
+  const text = fs.readFileSync(p, 'utf8');
+  const rows = parseCsv(text);
+  if (!rows.length) return [];
   return rows;
 }
 
@@ -55,6 +109,17 @@ function importRecords() {
   if (!rows) { console.log('records.csv: skipped (not found)'); return 0; }
   let data = rows;
   if (data.length && isHeader(data[0])) data = data.slice(1);
+
+  // Opt-in full re-seed: DASH_IMPORT_RESET=1 or --reset deletes existing
+  // records first, so a re-run can repair a DB seeded by an earlier buggy
+  // import (INSERT OR IGNORE alone would skip rows whose `row` already
+  // exists). One-time use: it overwrites any manual record edits.
+  const reset = process.env.DASH_IMPORT_RESET === '1' ||
+    process.argv.indexOf('--reset') !== -1;
+  if (reset) {
+    db.prepare('DELETE FROM records').run();
+    console.log('records: existing rows cleared (DASH_IMPORT_RESET / --reset)');
+  }
 
   const startRow = CONFIG.SHEET.START_ROW;
   const stmt = db.prepare(

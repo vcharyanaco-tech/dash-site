@@ -25,7 +25,7 @@ try {
     try {
       console.log('[start] found export CSVs — running one-time import...');
       process.env.DASH_IMPORT_DIR = exportDir;
-      require('./import-from-gas');
+      require('./import-from-gas').main();
       console.log('[start] import complete.');
     } catch (impErr) {
       console.error('[start] import warning: ' + (impErr && impErr.message));
