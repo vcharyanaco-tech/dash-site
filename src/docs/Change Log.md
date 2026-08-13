@@ -216,8 +216,9 @@ Major refresh and stabilization of the India Post Dashboard for Circle Office, H
 
 ### Submissions
 - Viewers can submit updates against records; count shown on each card button.
-- 24-hour "new" flash on the submission badge counter; badge uses the blue accent
-  with a theme-adaptive flash ring.
+- The submission badge counter flashes while a card has updates the admin has not
+  read yet; once the admin opens the card's update list the counter stays but
+  stops flashing. Badge uses the blue accent with a theme-adaptive flash ring.
 - Admin lock/unlock/delete for submissions; admin locks block editor edits.
 - Admin "display" toggle shows selected submissions directly on the cards.
 - Removed the redundant "My submissions" card button.

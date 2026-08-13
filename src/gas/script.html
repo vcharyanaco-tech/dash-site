@@ -4527,6 +4527,15 @@ function loadSubmissions() {
   ApiService.getSubmissions(Number(appState.submissionCardRow)).then(function (list) {
     appState.submissions = list || [];
     renderSubmissionList();
+    // Reading a card's update list counts as reading it: an admin who opens
+    // the modal stops that card's badge flashing (the counter stays).
+    if (appState.isAdmin && appState.submissionCardRow) {
+      const row = Number(appState.submissionCardRow);
+      if (appState.submissionFlash[row]) {
+        appState.submissionFlash[row] = false;
+        renderDashboard(true);
+      }
+    }
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
     showToast('Could not load submissions: ' + (err.message || err), 'error');

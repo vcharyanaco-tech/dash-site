@@ -29,6 +29,38 @@ db.pragma('foreign_keys = ON');
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 db.exec(schema);
 
+/* ---- Migration: dedupe users + enforce unique email ----
+   users.email has no UNIQUE constraint, so the first-boot CSV import's
+   INSERT OR IGNORE never conflicts on re-import — once the data dir
+   persists (volume), every deploy appends a fresh copy of every user.
+   Keep the earliest row per normalized email, then lock the column down
+   so future imports skip existing accounts. The index normalizes exactly
+   like the dedupe (lower + trim) so it can never admit a row the dedupe
+   would remove. Runs on every boot; it is a no-op on a fresh or
+   already-clean DB. */
+db.exec(
+  'DELETE FROM users WHERE id NOT IN (' +
+  '  SELECT MIN(id) FROM users GROUP BY lower(trim(email))' +
+  ')'
+);
+db.exec('DROP INDEX IF EXISTS idx_users_email_unique');
+db.exec(
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users(lower(trim(email)))'
+);
+
+/* ---- Migration: submissions.read_at (admin-read marker) ----
+   The submission counter badge on a card flashes while that card has
+   updates the admin has not read yet (see submissions.js). Older DBs lack
+   the column; add it and backfill existing submissions as already read
+   (read_at = created_at) so historical updates do not flash on deploy.
+   New submissions default to read_at = 0 and flash until an admin opens
+   the card's update list. */
+const submissionColumns = db.prepare('PRAGMA table_info(submissions)').all();
+if (!submissionColumns.some(function (c) { return String(c.name) === 'read_at'; })) {
+  db.exec('ALTER TABLE submissions ADD COLUMN read_at INTEGER NOT NULL DEFAULT 0');
+  db.exec('UPDATE submissions SET read_at = COALESCE(created_at, 0)');
+}
+
 settings.setDb(db);
 
 /* ============================================================

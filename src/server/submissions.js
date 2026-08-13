@@ -23,7 +23,8 @@ function submissionRecordFromRow_(row) {
     updatedAt: row.updated_at,
     lockedBy: String(row.locked_by || ''),
     lockedAt: row.locked_at,
-    displayed: !!row.displayed
+    displayed: !!row.displayed,
+    readAt: row.read_at || 0
   };
 }
 
@@ -124,13 +125,13 @@ function getSubmissionOverview_() {
   const counts = {};
   const flash = {};
   const displayed = [];
-  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
 
   readSubmissionRows_().forEach(function (rec) {
     const key = Number(rec.cardRow);
     counts[key] = (counts[key] || 0) + 1;
-    const ts = Number(rec.createdAt) || 0;
-    if (ts >= cutoff) flash[key] = true;
+    // Flash while the admin has not read this card's updates (read_at unset);
+    // the counter itself keeps showing the total either way.
+    if (!rec.readAt) flash[key] = true;
     if (rec.displayed) {
       displayed.push({
         cardRow: key,
@@ -150,6 +151,12 @@ function getSubmissionOverview_() {
 
 function getSubmissions(token, cardRow) {
   const user = auth.requireLogin(token);
+  // An admin reading a card's update list marks its submissions as read so
+  // the counter badge stops flashing; the count itself is unaffected.
+  if (user.role === ROLES.ADMIN && cardRow !== undefined && cardRow !== null && cardRow !== '') {
+    db.prepare('UPDATE submissions SET read_at = ? WHERE card_row = ? AND read_at = 0')
+      .run(Date.now(), Number(cardRow));
+  }
   return submissionsForCard_(cardRow, user);
 }
 

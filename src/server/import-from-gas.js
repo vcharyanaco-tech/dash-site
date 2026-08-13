@@ -231,23 +231,27 @@ function importSubmissions() {
   const rows = readCsv('submissions.csv');
   if (!rows) { console.log('submissions.csv: skipped (not found)'); return 0; }
   const data = stripHeader(rows, 'id');
+  // Imported history counts as already read (read_at = created_at) so it
+  // does not flash the badge; only updates submitted after the import do.
   const stmt = db.prepare(
-    'INSERT OR IGNORE INTO submissions (id, card_row, card_id, email, text, created_at, updated_at, locked_by, locked_at, displayed) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT OR IGNORE INTO submissions (id, card_row, card_id, email, text, created_at, updated_at, locked_by, locked_at, displayed, read_at) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
   let n = 0;
   data.forEach(function (c) {
+    const createdAt = Number(c[5]) || Date.now();
     stmt.run(
       String(c[0] || ''),
       Number(c[1]) || 0,
       String(c[2] || ''),
       String(c[3] || ''),
       String(c[4] || ''),
-      Number(c[5]) || Date.now(),
-      Number(c[6]) || Date.now(),
+      createdAt,
+      Number(c[6]) || createdAt,
       String(c[7] || ''),
       Number(c[8]) || 0,
-      Number(c[9]) ? 1 : 0
+      Number(c[9]) ? 1 : 0,
+      createdAt
     );
     n++;
   });

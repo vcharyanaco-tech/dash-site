@@ -255,22 +255,34 @@ function listUserRecords() {
   return listUserRecords_();
 }
 
+// True when a stored hash was produced by this app's hashPassword_ (64-char
+// sha256 hex). The users.csv bake-in carries the sheet's `pbkdf2$...` hashes,
+// which this app cannot verify — those need re-seeding so login works.
+function isAppFormatHash_(hash) {
+  return typeof hash === 'string' && /^[0-9a-f]{64}$/i.test(hash);
+}
+
 function ensureUserRecord_(email) {
   email = String(email || '').toLowerCase().trim();
   if (!email) return null;
   if (!isBootstrapAdmin_(email)) return null;
 
   let rec = findUserRecord_(email);
-  const salt = generateSalt_();
-  const hash = hashPassword_(DEFAULT_ADMIN_PASSWORD, salt);
 
   if (!rec) {
-    addUserRecord_(email, ROLES.ADMIN, salt, hash, 'system');
+    // No account at all — create the bootstrap admin.
+    const salt = generateSalt_();
+    addUserRecord_(email, ROLES.ADMIN, salt, hashPassword_(DEFAULT_ADMIN_PASSWORD, salt), 'system');
     setUserField_(email, 'mustChange', true);
     rec = findUserRecord_(email);
-  } else {
+  } else if (!isAppFormatHash_(rec.passwordHash)) {
+    // Row exists but carries a hash this app can't verify (e.g. the pbkdf2
+    // hash baked into users.csv on a fresh DB). Re-seed the bootstrap
+    // password so admin login works. Never touch an app-format hash — that
+    // would silently revert a password the admin has changed.
+    const salt = generateSalt_();
     setUserField_(email, 'salt', salt);
-    setUserField_(email, 'passwordHash', hash);
+    setUserField_(email, 'passwordHash', hashPassword_(DEFAULT_ADMIN_PASSWORD, salt));
     setUserField_(email, 'mustChange', true);
   }
 

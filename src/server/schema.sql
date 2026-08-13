@@ -56,7 +56,10 @@ CREATE TABLE IF NOT EXISTS submissions (
   updated_at INTEGER,
   locked_by TEXT NOT NULL DEFAULT '',
   locked_at INTEGER,
-  displayed INTEGER NOT NULL DEFAULT 0
+  displayed INTEGER NOT NULL DEFAULT 0,
+  -- when the admin last read this submission (0 = not read yet). The
+  -- submission-badge on the card flashes while any update is unread.
+  read_at INTEGER NOT NULL DEFAULT 0
 );
 
 -- Tasks (mirrors the hidden 'Tasks' sheet).

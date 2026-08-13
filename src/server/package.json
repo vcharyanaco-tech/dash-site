@@ -9,7 +9,7 @@
     "seed": "node seed.js",
     "export": "node export-from-gas.js",
     "import": "node import-from-gas.js",
-    "test": "node --test tests/smoke.test.js"
+    "test": "node --test"
   },
   "engines": {
     "node": ">=22"

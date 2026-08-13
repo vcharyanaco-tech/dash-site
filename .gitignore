@@ -16,3 +16,6 @@ node_modules/
 
 # Local server runtime state (created by src/server on startup)
 data/
+
+# Smoke-test scratch DBs (created when running npm test with a scratch dir)
+.dash_test*/
