@@ -219,6 +219,9 @@ Major refresh and stabilization of the India Post Dashboard for Circle Office, H
 - The submission badge counter flashes while a card has updates the admin has not
   read yet; once the admin opens the card's update list the counter stays but
   stops flashing. Badge uses the blue accent with a theme-adaptive flash ring.
+- Admin "Mark all as read" button (dashboard actions) clears every flashing
+  badge at once; the counters stay. Shown only to admins while any badge
+  flashes.
 - Admin lock/unlock/delete for submissions; admin locks block editor edits.
 - Admin "display" toggle shows selected submissions directly on the cards.
 - Removed the redundant "My submissions" card button.

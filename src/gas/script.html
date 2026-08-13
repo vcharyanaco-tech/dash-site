@@ -1625,6 +1625,16 @@ function renderProfile() {
   if (addButton) addButton.style.display = appState.isEditor ? 'inline-flex' : 'none';
   const meetingBtn = getEl('meetingNotesBtn');
   if (meetingBtn) meetingBtn.style.display = appState.isAdmin ? 'inline-flex' : 'none';
+  updateMarkAllSubmissionsReadBtn();
+}
+
+// Show the "Mark all as read" action only to admins while at least one card
+// badge is flashing; hide it once everything is read (or for non-admins).
+function updateMarkAllSubmissionsReadBtn() {
+  const btn = getEl('markAllSubmissionsReadBtn');
+  if (!btn) return;
+  const anyFlash = appState.isAdmin && Object.keys(appState.submissionFlash || {}).some(function (k) { return appState.submissionFlash[k]; });
+  btn.style.display = anyFlash ? 'inline-flex' : 'none';
 }
 
 /* ---------------------------------- Notifications ---------------------------------- */
@@ -4518,6 +4528,16 @@ function closeSubmissionsModal() {
   closeDialog('submissionsModal');
 }
 
+function markAllSubmissionsRead() {
+  if (!appState.isAdmin) return;
+  // The GAS backend has no read tracking (flash is time-based there), so this
+  // action clears the flashing badges client-side only; the counters stay.
+  appState.submissionFlash = {};
+  renderDashboard(true);
+  updateMarkAllSubmissionsReadBtn();
+  showToast('All updates marked as read', 'success');
+}
+
 function resetSubmissionCompose() {
   getEl('submitSubmissionBtn').textContent = 'Submit update';
   getEl('cancelSubmissionBtn').classList.add('hidden');
@@ -4534,6 +4554,7 @@ function loadSubmissions() {
       if (appState.submissionFlash[row]) {
         appState.submissionFlash[row] = false;
         renderDashboard(true);
+        updateMarkAllSubmissionsReadBtn();
       }
     }
   }).catch(function (err) {

@@ -256,6 +256,15 @@ function deleteSubmission(submissionId, token) {
   });
 }
 
+function markAllSubmissionsRead(token) {
+  const admin = auth.requireAdmin(token);
+
+  db.prepare('UPDATE submissions SET read_at = ? WHERE read_at = 0').run(Date.now());
+
+  try { require('./audit').logAudit_(ACTIONS.SUBMISSION_READ_ALL, '', 'Marked all submissions as read', admin.email); } catch (err) {}
+  return getSubmissionOverview_();
+}
+
 function toggleSubmissionDisplay(submissionId, token) {
   const admin = auth.requireAdmin(token);
 
@@ -279,5 +288,6 @@ module.exports = {
   lockSubmission,
   unlockSubmission,
   deleteSubmission,
+  markAllSubmissionsRead,
   toggleSubmissionDisplay
 };

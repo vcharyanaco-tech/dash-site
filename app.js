@@ -119,6 +119,7 @@ const ApiService = {
   unlockSubmission: function (submissionId) { return apiCall_('unlockSubmission', submissionId, getAuthToken()); },
   deleteSubmission: function (submissionId) { return apiCall_('deleteSubmission', submissionId, getAuthToken()); },
   toggleSubmissionDisplay: function (submissionId) { return apiCall_('toggleSubmissionDisplay', submissionId, getAuthToken()); },
+  markAllSubmissionsRead: function () { return apiCall_('markAllSubmissionsRead', getAuthToken()); },
   getAuditEntries: function (limit) { return apiCall_('getAuditEntries', limit || 80); },
   adminDeleteAuditRows: function (rowNumbers) { return apiCall_('adminDeleteAuditRows', rowNumbers, getAuthToken()); },
   adminClearAudit: function () { return apiCall_('adminClearAudit', getAuthToken()); },
@@ -1630,6 +1631,16 @@ function renderProfile() {
   if (addButton) addButton.style.display = appState.isEditor ? 'inline-flex' : 'none';
   const meetingBtn = getEl('meetingNotesBtn');
   if (meetingBtn) meetingBtn.style.display = appState.isAdmin ? 'inline-flex' : 'none';
+  updateMarkAllSubmissionsReadBtn();
+}
+
+// Show the "Mark all as read" action only to admins while at least one card
+// badge is flashing; hide it once everything is read (or for non-admins).
+function updateMarkAllSubmissionsReadBtn() {
+  const btn = getEl('markAllSubmissionsReadBtn');
+  if (!btn) return;
+  const anyFlash = appState.isAdmin && Object.keys(appState.submissionFlash || {}).some(function (k) { return appState.submissionFlash[k]; });
+  btn.style.display = anyFlash ? 'inline-flex' : 'none';
 }
 
 /* ---------------------------------- Notifications ---------------------------------- */
@@ -4643,6 +4654,24 @@ function closeSubmissionsModal() {
   closeDialog('submissionsModal');
 }
 
+function markAllSubmissionsRead() {
+  if (!appState.isAdmin) return;
+  showOverlay('Marking all updates as read…');
+  ApiService.markAllSubmissionsRead().then(function (overview) {
+    hideOverlay();
+    appState.submissionCounts = (overview && overview.counts) || {};
+    appState.submissionFlash = (overview && overview.flash) || {};
+    appState.displayedSubmissions = (overview && overview.displayed) || [];
+    renderDashboard(true);
+    updateMarkAllSubmissionsReadBtn();
+    showToast('All updates marked as read', 'success');
+  }).catch(function (err) {
+    hideOverlay();
+    if (handleServerFailure(err)) return;
+    showToast('Could not mark updates as read: ' + (err.message || err), 'error');
+  });
+}
+
 function resetSubmissionCompose() {
   getEl('submitSubmissionBtn').textContent = 'Submit update';
   getEl('cancelSubmissionBtn').classList.add('hidden');
@@ -4659,6 +4688,7 @@ function loadSubmissions() {
       if (appState.submissionFlash[row]) {
         appState.submissionFlash[row] = false;
         renderDashboard(true);
+        updateMarkAllSubmissionsReadBtn();
       }
     }
   }).catch(function (err) {

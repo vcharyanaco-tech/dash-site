@@ -82,6 +82,7 @@ const dispatch = {
   lockSubmission: function (args) { return submissions.lockSubmission(A(args, 0), A(args, 1)); },
   unlockSubmission: function (args) { return submissions.unlockSubmission(A(args, 0), A(args, 1)); },
   deleteSubmission: function (args) { return submissions.deleteSubmission(A(args, 0), A(args, 1)); },
+  markAllSubmissionsRead: function (args) { return submissions.markAllSubmissionsRead(A(args, 0)); },
   toggleSubmissionDisplay: function (args) { return submissions.toggleSubmissionDisplay(A(args, 0), A(args, 1)); },
 
   getAuditEntries: function (args) { return audit.getAuditEntries(A(args, 0)); },

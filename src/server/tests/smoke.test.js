@@ -146,6 +146,43 @@ test('submission badge flashes until an admin reads the updates', async function
   await post('adminDeleteUser', [viewerEmail, token]);
 });
 
+test('mark all submissions as read clears every flashing badge at once', async function () {
+  // Admin adds updates on two different cards so both badges flash.
+  const a = await post('addSubmission', [4, 'card-1', 'Mark-all flash A', token]);
+  const b = await post('addSubmission', [5, 'card-2', 'Mark-all flash B', token]);
+  const idA = a[0].id;
+  const idB = b[0].id;
+
+  let appData = await post('getAppData', [token]);
+  assert.strictEqual(appData.submissionFlash[4], true);
+  assert.strictEqual(appData.submissionFlash[5], true);
+
+  // A viewer cannot mark everything read.
+  const viewerEmail = 'markallviewer@example.com';
+  await post('adminAddUser', [viewerEmail, 'markallviewer', 'VIEWER', 'Viewer@123', '', '', '', token]);
+  const vlogin = await post('login', [viewerEmail, 'Viewer@123']);
+  assert.strictEqual(vlogin.success, true);
+  await assert.rejects(post('markAllSubmissionsRead', [vlogin.token]));
+
+  // The admin clears both flashing badges in one call; counts stay.
+  const overview = await post('markAllSubmissionsRead', [token]);
+  assert.ok(!overview.flash[4]);
+  assert.ok(!overview.flash[5]);
+  assert.ok(overview.counts[4] >= 1);
+  assert.ok(overview.counts[5] >= 1);
+
+  appData = await post('getAppData', [token]);
+  assert.ok(!appData.submissionFlash[4]);
+  assert.ok(!appData.submissionFlash[5]);
+  assert.ok(appData.submissionCounts[4] >= 1);
+  assert.ok(appData.submissionCounts[5] >= 1);
+
+  // Cleanup.
+  await post('deleteSubmission', [idA, token]);
+  await post('deleteSubmission', [idB, token]);
+  await post('adminDeleteUser', [viewerEmail, token]);
+});
+
 test('tasks flow', async function () {
   const created = await post('createTask', [{ title: 'Smoke task', description: 'desc', priority: 'HIGH', assignee: 'vcharyanaco@gmail.com' }, token]);
   assert.strictEqual(created.title, 'Smoke task');
