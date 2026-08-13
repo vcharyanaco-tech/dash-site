@@ -1,33 +1,11 @@
 Timestamp,User,Action,Record ID,Details
-8/9/2026 17:19:04,,AUDIT_CLEAR,,Cleared the entire audit log
-8/9/2026 19:29:01,vcharyanaco@gmail.com,LOGIN,,Signed in
-8/10/2026 1:48:56,vcharyanaco@gmail.com,LOGIN,,Signed in
-8/10/2026 10:08:34,vcharyanaco@gmail.com,LOGIN,,Signed in
-8/10/2026 10:08:44,vcharyanaco@gmail.com,LOGIN,,Signed in
-8/10/2026 11:12:00,vcharyanaco@gmail.com,LOGIN,,Signed in
-8/10/2026 14:05:49,vcharyanaco@gmail.com,LOGIN,,Signed in
-8/10/2026 14:05:57,vcharyanaco@gmail.com,LOGIN,,Signed in
-8/10/2026 14:09:01,vcharyanaco@gmail.com,SUBMISSION_ADD,8,"{""id"":""d02fd480cbcd4c1a8c6c7b507953b669"",""cardRow"":8,""text"":""All Divisions except Ambala (04 BOs) and Rohtak have authrorized BOs for International Mail Booking.""}"
-8/10/2026 14:09:32,vcharyanaco@gmail.com,SUBMISSION_DISPLAY,8,"{""id"":""d02fd480cbcd4c1a8c6c7b507953b669""}"
-8/10/2026 14:09:34,vcharyanaco@gmail.com,SUBMISSION_HIDE,8,"{""id"":""d02fd480cbcd4c1a8c6c7b507953b669""}"
-8/10/2026 14:10:35,vcharyanaco@gmail.com,SUBMISSION_DELETE,8,"{""id"":""d02fd480cbcd4c1a8c6c7b507953b669"",""text"":""All Divisions except Ambala (04 BOs) and Rohtak have authrorized BOs for International Mail Booking.""}"
-8/10/2026 14:10:55,vcharyanaco@gmail.com,SUBMISSION_ADD,9,"{""id"":""a6ba74b939254a97a4871aa9f402c5bd"",""cardRow"":9,""text"":""All Divisions except Ambala (04 BOs) and Rohtak have authrorized BOs for International Mail Booking.""}"
-8/10/2026 14:12:11,vcharyanaco@gmail.com,SUBMISSION_ADD,9,"{""id"":""daabfd16860b41caab54e49a767bfe52"",""cardRow"":9,""text"":""All Divisions except Ambala (04 BOs) and Rohtak have authrorized BOs and completed training for International Mail Booking.""}"
-8/10/2026 14:12:33,vcharyanaco@gmail.com,SUBMISSION_DELETE,9,"{""id"":""a6ba74b939254a97a4871aa9f402c5bd"",""text"":""All Divisions except Ambala (04 BOs) and Rohtak have authrorized BOs for International Mail Booking.""}"
-8/10/2026 14:12:45,vcharyanaco@gmail.com,SUBMISSION_DISPLAY,9,"{""id"":""daabfd16860b41caab54e49a767bfe52""}"
-8/10/2026 14:21:34,vcharyanaco@gmail.com,SUBMISSION_ADD,22,"{""id"":""58049d83e40b4e918ff39408abee8c12"",""cardRow"":22,""text"":""All divisional heads informed that they have reached out to local social media influencers and formulated strategies for increasing social media reach.\n\nExclusive person for social media in Division Office have been identified except Bhiwani and Gurgaon Division.""}"
-8/10/2026 14:21:48,vcharyanaco@gmail.com,SUBMISSION_DISPLAY,22,"{""id"":""58049d83e40b4e918ff39408abee8c12""}"
-8/10/2026 14:23:26,vcharyanaco@gmail.com,SUBMISSION_ADD,22,"{""id"":""8d1ae3f11f29425a86c713f38e12d2ac"",""cardRow"":22,""text"":""All divisional heads except Bhiwani and Hisar informed that they have reached out to local social media influencers and formulated strategies for increasing social media reach.\n\nFurther, an exclusive person has been identified in Division Offices except Bhiwani and Gurgaon.""}"
-8/10/2026 14:23:43,vcharyanaco@gmail.com,SUBMISSION_DELETE,22,"{""id"":""8d1ae3f11f29425a86c713f38e12d2ac"",""text"":""All divisional heads except Bhiwani and Hisar informed that they have reached out to local social media influencers and formulated strategies for increasing social media reach.\n\nFurther, an exclusive person has been identified in Division Offices except Bhiwani and Gurgaon.""}"
-8/10/2026 14:26:50,vcharyanaco@gmail.com,SUBMISSION_ADD,9,"{""id"":""c201025dbd0144aaaefb554c461fb14f"",""cardRow"":9,""text"":""All Divisions except Ambala (04 BOs) and Rohtak have authrorized BOs and completed training for International Mail Booking.\n\nFurther, proposals for weiging scale procurement have been recieved from Ambala, Faridabad, Hisar and Kurukshetra.""}"
-8/10/2026 14:27:03,vcharyanaco@gmail.com,SUBMISSION_DISPLAY,9,"{""id"":""c201025dbd0144aaaefb554c461fb14f""}"
-8/10/2026 14:27:16,vcharyanaco@gmail.com,SUBMISSION_DELETE,9,"{""id"":""daabfd16860b41caab54e49a767bfe52"",""text"":""All Divisions except Ambala (04 BOs) and Rohtak have authrorized BOs and completed training for International Mail Booking.""}"
-8/10/2026 14:32:55,vcharyanaco@gmail.com,SUBMISSION_ADD,12,"{""id"":""b3b24a362e86469eb43a8c7c9267a48b"",""cardRow"":12,""text"":""All divisional heads have informed that they have further issued the instructions to the field units regarding the new target of achieving Atamnirbhar BO status.""}"
-8/10/2026 14:34:13,vcharyanaco@gmail.com,SUBMISSION_DISPLAY,12,"{""id"":""b3b24a362e86469eb43a8c7c9267a48b""}"
-8/10/2026 14:38:24,vcharyanaco@gmail.com,SUBMISSION_ADD,16,"{""id"":""f08260cd4d2242aea3b82f319a44e4b0"",""cardRow"":16,""text"":""All divisional heads informed that Marketing executives have been identified as per the instructions and further specific verticals have been allotted to them.""}"
-8/10/2026 14:38:58,vcharyanaco@gmail.com,SUBMISSION_DISPLAY,16,"{""id"":""f08260cd4d2242aea3b82f319a44e4b0""}"
-8/10/2026 17:01:41,vcharyanaco@gmail.com,SUBMISSION_UPDATE,9,"{""id"":""c201025dbd0144aaaefb554c461fb14f"",""text"":""All Divisions except Ambala (04 BOs) and Rohtak have authrorized BOs and completed training for International Mail Booking.\n\nFurther, proposals for weiging scale procurement have been recieved from Ambala, Faridabad, Hisar and Kurukshetra.""}"
-8/10/2026 17:41:05,vcharyanaco@gmail.com,LOGIN,,Signed in
-8/10/2026 17:42:44,vcharyanaco@gmail.com,SUBMISSION_HIDE,12,"{""id"":""b3b24a362e86469eb43a8c7c9267a48b""}"
-8/10/2026 17:42:49,vcharyanaco@gmail.com,SUBMISSION_DISPLAY,12,"{""id"":""b3b24a362e86469eb43a8c7c9267a48b""}"
-8/10/2026 18:47:30,vcharyanaco@gmail.com,LOGIN,,Signed in
+8/12/2026 13:21:00,,AUDIT_CLEAR,,Cleared the entire audit log
+8/12/2026 13:21:23,vcharyanaco@gmail.com,LOGIN,,Signed in
+8/12/2026 17:13:23,vcharyanaco@gmail.com,LOGIN,,Signed in
+8/12/2026 17:41:44,vcharyanaco@gmail.com,LOGIN,,Signed in
+8/12/2026 17:42:16,vcharyanaco@gmail.com,LOGIN,,Signed in
+8/13/2026 9:20:19,vcharyanaco@gmail.com,LOGIN,,Signed in
+8/13/2026 9:20:31,vcharyanaco@gmail.com,LOGIN,,Signed in
+8/13/2026 9:20:32,vcharyanaco@gmail.com,LOGIN,,Signed in
+8/13/2026 9:20:34,vcharyanaco@gmail.com,LOGIN,,Signed in
+8/13/2026 9:31:54,vcharyanaco@gmail.com,LOGIN,,Signed in
