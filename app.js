@@ -1952,7 +1952,7 @@ function generateReviewNotifications() {
   });
 }
 
-function applyFilters() {
+function applyFilters(preservePage) {
   const query = appState.searchQuery.toLowerCase();
   const sector = appState.sector;
   appState.filtered = appState.items.filter(function (item) {
@@ -1960,7 +1960,11 @@ function applyFilters() {
       .join(' ').toLowerCase();
     return (!query || haystack.indexOf(query) !== -1) && (!sector || item.sector === sector);
   });
-  appState.page = 1;
+  // Reset to page 1 only when the filter inputs changed (search/sector); a
+  // plain re-render after an edit/update/delete keeps the current page.
+  if (!preservePage) appState.page = 1;
+  const pages = Math.max(1, Math.ceil(appState.filtered.length / PAGE_SIZE));
+  if (appState.page > pages) appState.page = pages;
 }
 
 function handleSectorFilterChange() {
@@ -2186,14 +2190,20 @@ function renderDashboardCards() {
 
   if (!pageItems.length) { grid.innerHTML = emptyStateHtml(); teardownDashScroller_(); return; }
 
-  // Batch 1 synchronously (keeps above-the-fold instant)
+  // Batch 1 synchronously (keeps above-the-fold instant). BATCH can exceed
+  // the page size, so cap the rendered count at the actual number inserted.
   grid.innerHTML = pageItems.slice(0, dashScroll.BATCH).map(buildCardHtml).join('');
-  dashScroll.rendered = dashScroll.BATCH;
+  dashScroll.rendered = Math.min(dashScroll.BATCH, pageItems.length);
   ensureDashSentinel_(grid, pageItems);
 }
 
 function ensureDashSentinel_(grid, pageItems) {
+  // teardown resets dashScroll.rendered to 0, so snapshot it first: without
+  // this the "all rendered" check below is always false and scrolling
+  // re-appends the whole page (double-rendered cards).
+  const alreadyRendered = dashScroll.rendered;
   teardownDashScroller_();
+  dashScroll.rendered = alreadyRendered;
   if (dashScroll.rendered >= pageItems.length) return; // all rendered
 
   dashScroll.sentinel = document.createElement('div');
@@ -2375,9 +2385,9 @@ function setPage(page) {
   if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function renderDashboard() {
+function renderDashboard(preservePage) {
   teardownDashScroller_();
-  applyFilters();
+  applyFilters(preservePage);
   renderKpiCards();
   updateFilterChips();
   const grid = getEl('dashboardCards');
@@ -2404,7 +2414,7 @@ function refreshData() {
     applyAppData(data);
     populateFilters();
     populateResponsibilitySelect();
-  renderDashboard();
+  renderDashboard(true);
     generateReviewNotifications();
     auditLoaded = false;
     const auditPanel = getEl('audit');
@@ -4208,7 +4218,7 @@ function autoRefreshTick() {
     applyAppData(data);
     populateFilters();
     populateResponsibilitySelect();
-    renderDashboard();
+    renderDashboard(true);
     generateReviewNotifications();
     EventBus.emit('DataRefreshed');
   }).catch(function (err) {
@@ -4550,7 +4560,7 @@ function submitNewItem(item) {
     appState.summary = data.summary || {};
     appState.analytics = data.analytics || {};
     populateFilters();
-    renderDashboard();
+    renderDashboard(true);
     showToast('New item created', 'success');
   }).catch(function (err) {
     hideOverlay();
@@ -4567,7 +4577,7 @@ function saveItem(item) {
     appState.items = data.items || [];
     appState.summary = data.summary || {};
     appState.analytics = data.analytics || {};
-    renderDashboard();
+    renderDashboard(true);
     showToast('Record saved', 'success');
   }).catch(function (err) {
     hideOverlay();
@@ -4591,7 +4601,7 @@ function deleteItem(row) {
       appState.items = data.items || [];
       appState.summary = data.summary || {};
       appState.analytics = data.analytics || {};
-      renderDashboard();
+      renderDashboard(true);
       showToast('Record deleted', 'success');
     }).catch(function (err) {
       hideOverlay();
@@ -4644,7 +4654,7 @@ function markReviewDone(row) {
       hideOverlay();
       appState.items = data.items || [];
       appState.summary = data.summary || {};
-      renderDashboard();
+      renderDashboard(true);
       showToast('Marked review as done', 'success');
     }).catch(function (err) {
       hideOverlay();
@@ -4667,7 +4677,7 @@ function markReviewNotDone(row) {
       hideOverlay();
       appState.items = data.items || [];
       appState.summary = data.summary || {};
-      renderDashboard();
+      renderDashboard(true);
       showToast('Review reopened — record is review due', 'success');
     }).catch(function (err) {
       hideOverlay();
@@ -4806,7 +4816,7 @@ function submitSubmission() {
       resetSubmissionCompose();
       getEl('submissionStatus').textContent = '';
       renderSubmissionList();
-      renderDashboard();
+      renderDashboard(true);
       showToast('Update submitted', 'success');
     }).catch(function (err) {
       hideOverlay();
