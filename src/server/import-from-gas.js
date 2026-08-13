@@ -88,6 +88,17 @@ function parseCsv(text) {
   return rows;
 }
 
+// GAS gviz exports serialize Date cells as formatted strings like
+// "8/10/2026 14:32:54" (with the sheet locale), or as raw epoch ms when
+// unformatted. Coerce both to epoch ms; returns 0 when unparseable.
+function importTimestamp_(v) {
+  if (v === null || v === undefined || v === '') return 0;
+  const n = Number(v);
+  if (isFinite(n)) return n;
+  const t = Date.parse(String(v));
+  return isFinite(t) ? t : 0;
+}
+
 function readCsv(file) {
   const p = path.join(EXPORT_DIR, file);
   if (!fs.existsSync(p)) return null;
@@ -239,7 +250,11 @@ function importSubmissions() {
   );
   let n = 0;
   data.forEach(function (c) {
-    const createdAt = Number(c[5]) || Date.now();
+    const createdAt = importTimestamp_(c[5]) || Date.now();
+    // ReadAt column (13th, after RowVersion/UpdatedBy) is present in exports
+    // from the updated GAS sheet; when missing (older CSV) history is
+    // imported as already read.
+    const readAt = importTimestamp_(c[12]) || createdAt;
     stmt.run(
       String(c[0] || ''),
       Number(c[1]) || 0,
@@ -251,7 +266,7 @@ function importSubmissions() {
       String(c[7] || ''),
       Number(c[8]) || 0,
       Number(c[9]) ? 1 : 0,
-      createdAt
+      readAt
     );
     n++;
   });

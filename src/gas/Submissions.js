@@ -6,7 +6,12 @@
  * ============================================================
  */
 
-const SUBMISSION_HEADERS = ['Id', 'CardRow', 'CardId', 'Email', 'Text', 'CreatedAt', 'UpdatedAt', 'LockedBy', 'LockedAt', 'Displayed'];
+// ReadAt mirrors the Node port's submissions.read_at: blank = the admin has
+// not read this update yet (its card badge flashes); a timestamp = read.
+// RowVersion/UpdatedBy are extra columns present on the live sheet (managed
+// elsewhere); ReadAt is appended AFTER them so those columns keep their
+// position.
+const SUBMISSION_HEADERS = ['Id', 'CardRow', 'CardId', 'Email', 'Text', 'CreatedAt', 'UpdatedAt', 'LockedBy', 'LockedAt', 'Displayed', 'RowVersion', 'UpdatedBy', 'ReadAt'];
 
 const SUBMISSION_COL = Object.freeze({
   ID: 1,
@@ -18,7 +23,10 @@ const SUBMISSION_COL = Object.freeze({
   UPDATED_AT: 7,
   LOCKED_BY: 8,
   LOCKED_AT: 9,
-  DISPLAYED: 10
+  DISPLAYED: 10,
+  ROW_VERSION: 11,
+  UPDATED_BY: 12,
+  READ_AT: 13
 });
 
 
@@ -44,12 +52,32 @@ function submissionsSheet_() {
 
   const header = sh.getRange(1, 1, 1, SUBMISSION_HEADERS.length).getValues()[0] || [];
   if (header.join('') !== SUBMISSION_HEADERS.join('')) {
+    // Upgrade from a pre-ReadAt layout (10 or 12 columns): existing rows
+    // predate read tracking, so backfill their ReadAt with their CreatedAt.
+    // This runs exactly once (afterwards the header matches), so historical
+    // updates do not suddenly flash on deploy.
+    const alreadyHasReadAt = String(header[SUBMISSION_COL.READ_AT - 1] || '').trim() === 'ReadAt';
     sh.getRange(1, 1, 1, SUBMISSION_HEADERS.length).setValues([SUBMISSION_HEADERS]);
     sh.getRange(1, 1, 1, SUBMISSION_HEADERS.length).setFontWeight('bold');
+    if (!alreadyHasReadAt) {
+      const lastRow = sh.getLastRow();
+      if (lastRow > 1) {
+        const created = sh.getRange(2, SUBMISSION_COL.CREATED_AT, lastRow - 1, 1).getValues();
+        const backfill = created.map(function (c) {
+          const v = c[0];
+          return [readAtIsSet_(v) ? v : new Date()];
+        });
+        sh.getRange(2, SUBMISSION_COL.READ_AT, backfill.length, 1).setValues(backfill);
+      }
+    }
   }
 
   __submissionsSheetCache__ = sh;
   return sh;
+}
+
+function readAtIsSet_(v) {
+  return Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime());
 }
 
 function submissionRecordFromRow_(row, rowIndex) {
@@ -64,7 +92,8 @@ function submissionRecordFromRow_(row, rowIndex) {
     updatedAt: row[SUBMISSION_COL.UPDATED_AT - 1],
     lockedBy: String(row[SUBMISSION_COL.LOCKED_BY - 1] || ''),
     lockedAt: row[SUBMISSION_COL.LOCKED_AT - 1],
-    displayed: row[SUBMISSION_COL.DISPLAYED - 1] === true || String(row[SUBMISSION_COL.DISPLAYED - 1]).toLowerCase() === 'true'
+    displayed: row[SUBMISSION_COL.DISPLAYED - 1] === true || String(row[SUBMISSION_COL.DISPLAYED - 1]).toLowerCase() === 'true',
+    readAt: row[SUBMISSION_COL.READ_AT - 1]
   };
 }
 
@@ -183,13 +212,13 @@ function getSubmissionOverview_() {
   const counts = {};
   const flash = {};
   const displayed = [];
-  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
 
   readSubmissionRows_().forEach(function (rec) {
     const key = Number(rec.cardRow);
     counts[key] = (counts[key] || 0) + 1;
-    const ts = Object.prototype.toString.call(rec.createdAt) === '[object Date]' ? rec.createdAt.getTime() : 0;
-    if (ts >= cutoff) flash[key] = true;
+    // Flash while the admin has not read this card's updates (ReadAt blank);
+    // the counter itself keeps showing the total either way.
+    if (!readAtIsSet_(rec.readAt)) flash[key] = true;
     if (rec.displayed) {
       displayed.push({
         cardRow: key,
@@ -209,6 +238,25 @@ function getSubmissionOverview_() {
  * Public API (all token-gated)
  * ============================================================ */
 
+function markCardSubmissionsRead_(cardRow) {
+  return runWithLock_(function () {
+    const sh = submissionsSheet_();
+    if (!sh) return;
+    const lastRow = sh.getLastRow();
+    if (lastRow < 2) return;
+    const values = sh.getRange(2, 1, lastRow - 1, SUBMISSION_HEADERS.length).getValues();
+    const now = new Date();
+    for (let i = 0; i < values.length; i++) {
+      if (!String(values[i][SUBMISSION_COL.ID - 1] || '').trim()) continue;
+      if (Number(values[i][SUBMISSION_COL.CARD_ROW - 1]) !== Number(cardRow)) continue;
+      if (!readAtIsSet_(values[i][SUBMISSION_COL.READ_AT - 1])) {
+        sh.getRange(i + 2, SUBMISSION_COL.READ_AT).setValue(now);
+      }
+    }
+    __submissionOverviewCache__ = null;
+  });
+}
+
 /**
  * Lists submissions, optionally filtered to a card, as visibility-tagged
  * objects for the requesting user.
@@ -218,6 +266,11 @@ function getSubmissionOverview_() {
  */
 function getSubmissions(token, cardRow) {
   const user = requireLogin_(token);
+  // An admin reading a card's update list marks its submissions as read so
+  // the counter badge stops flashing; the count itself is unaffected.
+  if (user.role === ROLES.ADMIN && cardRow !== undefined && cardRow !== null && cardRow !== '') {
+    markCardSubmissionsRead_(Number(cardRow));
+  }
   return submissionsForCard_(cardRow, user);
 }
 
@@ -245,7 +298,9 @@ function addSubmission(cardRow, cardId, text, token) {
     const sh = submissionsSheet_();
     const id = Utilities.getUuid().replace(/-/g, '');
     const now = new Date();
-    sh.appendRow([id, cardRow, String(cardId || ''), user.email, content, now, now, '', null]);
+    // New submissions are unread (ReadAt blank) so their card badge flashes
+    // until an admin reads them.
+    sh.appendRow([id, cardRow, String(cardId || ''), user.email, content, now, now, '', null, null, null, null, null]);
 
     try { logAudit_(ACTIONS.SUBMISSION_ADD, cardRow, { id: id, cardRow: cardRow, text: content }, user.email); } catch (err) {}
     try {
@@ -353,6 +408,37 @@ function deleteSubmission(submissionId, token) {
     try { logAudit_(ACTIONS.SUBMISSION_DELETE, rec.cardRow, { id: submissionId, text: rec.text }, admin.email); } catch (err) {}
     return submissionsForCard_(rec.cardRow, admin);
   });
+}
+
+/**
+ * Marks every unread submission as read so no card badge flashes (admin
+ * only). The counters are unaffected.
+ * @param {string} token Session token (admin required).
+ * @returns {{counts: Object, flash: Object, displayed: Object[]}} Overview.
+ */
+function markAllSubmissionsRead(token) {
+  const admin = requireAdmin_(token);
+
+  runWithLock_(function () {
+    const sh = submissionsSheet_();
+    if (sh) {
+      const lastRow = sh.getLastRow();
+      if (lastRow > 1) {
+        const now = new Date();
+        const values = sh.getRange(2, 1, lastRow - 1, SUBMISSION_HEADERS.length).getValues();
+        const rowsToWrite = [];
+        for (let i = 0; i < values.length; i++) {
+          if (!String(values[i][SUBMISSION_COL.ID - 1] || '').trim()) continue;
+          if (!readAtIsSet_(values[i][SUBMISSION_COL.READ_AT - 1])) rowsToWrite.push(i + 2);
+        }
+        rowsToWrite.forEach(function (r) { sh.getRange(r, SUBMISSION_COL.READ_AT).setValue(now); });
+      }
+    }
+    __submissionOverviewCache__ = null;
+  });
+
+  try { logAudit_(ACTIONS.SUBMISSION_READ_ALL, '', 'Marked all submissions as read', admin.email); } catch (err) {}
+  return getSubmissionOverview_();
 }
 
 /**

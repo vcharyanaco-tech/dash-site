@@ -114,6 +114,7 @@ const ApiService = {
   unlockSubmission: function (submissionId) { return apiCall_('unlockSubmission', submissionId, getAuthToken()); },
   deleteSubmission: function (submissionId) { return apiCall_('deleteSubmission', submissionId, getAuthToken()); },
   toggleSubmissionDisplay: function (submissionId) { return apiCall_('toggleSubmissionDisplay', submissionId, getAuthToken()); },
+  markAllSubmissionsRead: function () { return apiCall_('markAllSubmissionsRead', getAuthToken()); },
   getAuditEntries: function (limit) { return apiCall_('getAuditEntries', limit || 80); },
   adminDeleteAuditRows: function (rowNumbers) { return apiCall_('adminDeleteAuditRows', rowNumbers, getAuthToken()); },
   adminClearAudit: function () { return apiCall_('adminClearAudit', getAuthToken()); },
@@ -4530,12 +4531,20 @@ function closeSubmissionsModal() {
 
 function markAllSubmissionsRead() {
   if (!appState.isAdmin) return;
-  // The GAS backend has no read tracking (flash is time-based there), so this
-  // action clears the flashing badges client-side only; the counters stay.
-  appState.submissionFlash = {};
-  renderDashboard(true);
-  updateMarkAllSubmissionsReadBtn();
-  showToast('All updates marked as read', 'success');
+  showOverlay('Marking all updates as read…');
+  ApiService.markAllSubmissionsRead().then(function (overview) {
+    hideOverlay();
+    appState.submissionCounts = (overview && overview.counts) || {};
+    appState.submissionFlash = (overview && overview.flash) || {};
+    appState.displayedSubmissions = (overview && overview.displayed) || [];
+    renderDashboard(true);
+    updateMarkAllSubmissionsReadBtn();
+    showToast('All updates marked as read', 'success');
+  }).catch(function (err) {
+    hideOverlay();
+    if (handleServerFailure(err)) return;
+    showToast('Could not mark updates as read: ' + (err.message || err), 'error');
+  });
 }
 
 function resetSubmissionCompose() {

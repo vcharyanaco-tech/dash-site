@@ -222,6 +222,11 @@ Major refresh and stabilization of the India Post Dashboard for Circle Office, H
 - Admin "Mark all as read" button (dashboard actions) clears every flashing
   badge at once; the counters stay. Shown only to admins while any badge
   flashes.
+- GAS backend parity: submissions sheet gained a `ReadAt` column (appended
+  after the sheet's extra RowVersion/UpdatedBy columns). The flash is now
+  read-based there too — admin reads and "Mark all as read" write ReadAt,
+  existing history is backfilled as read on the first boot after deploy.
+  Node importer preserves ReadAt when present in the exported CSV.
 - Admin lock/unlock/delete for submissions; admin locks block editor edits.
 - Admin "display" toggle shows selected submissions directly on the cards.
 - Removed the redundant "My submissions" card button.
