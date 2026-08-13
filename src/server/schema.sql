@@ -88,21 +88,6 @@ CREATE TABLE IF NOT EXISTS notifications (
   read_at INTEGER
 );
 
--- Approvals / workflow (mirrors the hidden 'Approvals' sheet).
-CREATE TABLE IF NOT EXISTS approvals (
-  id TEXT PRIMARY KEY,
-  module TEXT NOT NULL DEFAULT 'records',
-  type TEXT NOT NULL DEFAULT 'RECORD_REVIEW',
-  target_row INTEGER NOT NULL DEFAULT 0,
-  target_id TEXT NOT NULL DEFAULT '',
-  summary TEXT NOT NULL DEFAULT '',
-  submitted_by TEXT NOT NULL DEFAULT '',
-  submitted_at INTEGER,
-  status TEXT NOT NULL DEFAULT 'PENDING',
-  reviewed_by TEXT NOT NULL DEFAULT '',
-  reviewed_at INTEGER,
-  comment TEXT NOT NULL DEFAULT ''
-);
 
 -- Audit log (mirrors the 'Audit Log' sheet).
 CREATE TABLE IF NOT EXISTS audit (
@@ -167,6 +152,5 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_submissions_card_row ON submissions(card_row);
 CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee);
 CREATE INDEX IF NOT EXISTS idx_notifications_email ON notifications(email);
-CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit(timestamp);
 CREATE INDEX IF NOT EXISTS idx_documents_record_row ON documents(record_row);

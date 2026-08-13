@@ -36,7 +36,6 @@ const SHEETS = [
   { name: 'Tasks', file: 'tasks.csv', header: true },
   { name: 'Submissions', file: 'submissions.csv', header: true },
   { name: 'Notifications', file: 'notifications.csv', header: true },
-  { name: 'Approvals', file: 'approvals.csv', header: true },
   { name: 'Audit Log', file: 'audit.csv', header: true },
   { name: 'Documents', file: 'documents.csv', header: true },
 ];

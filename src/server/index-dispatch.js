@@ -18,7 +18,6 @@ const records = require('./records');
 const reports = require('./reports');
 const submissions = require('./submissions');
 const tasks = require('./tasks');
-const workflow = require('./workflow');
 const helpers = require('./helpers');
 
 const A = function (args, n) { return args[n]; };
@@ -56,10 +55,7 @@ const dispatch = {
   markNotificationsRead: function (args) { return notifications.markNotificationsRead(A(args, 0), A(args, 1)); },
   clearMyNotifications: function (args) { return notifications.clearMyNotifications(A(args, 0)); },
 
-  submitRecordReview: function (args) { return workflow.submitRecordReview(A(args, 0), A(args, 1), A(args, 2)); },
-  getPendingApprovals: function (args) { return workflow.getPendingApprovals(A(args, 0)); },
-  getMyApprovals: function (args) { return workflow.getMyApprovals(A(args, 0)); },
-  reviewApproval: function (args) { return workflow.reviewApproval(A(args, 0), A(args, 1), A(args, 2), A(args, 3)); },
+  getTaskCounts: function (args) { return tasks.getTaskCounts(A(args, 0)); },
 
   createTask: function (args) { return tasks.createTask(A(args, 0), A(args, 1)); },
   getTasks: function (args) { return tasks.getTasks(A(args, 0), A(args, 1)); },

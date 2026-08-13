@@ -214,8 +214,6 @@ function renameUserEmail_(oldEmail, newEmail) {
   replaceColumn('tasks', 'assignee');
   replaceColumn('tasks', 'created_by');
   replaceColumn('notifications', 'email');
-  replaceColumn('approvals', 'submitted_by');
-  replaceColumn('approvals', 'reviewed_by');
 
   const users = db.prepare('SELECT id, email FROM users').all();
   for (let i = 0; i < users.length; i++) {

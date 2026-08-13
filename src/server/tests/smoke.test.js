@@ -124,21 +124,10 @@ test('tasks flow', async function () {
   assert.ok(mine.some(function (t) { return t.id === created.id; }));
   const updated = await post('updateTask', [created.id, { status: 'DONE' }, token]);
   assert.strictEqual(updated.status, 'DONE');
+  const counts = await post('getTaskCounts', [token]);
+  assert.strictEqual(typeof counts.openTasks, 'number');
+  assert.strictEqual(typeof counts.dueToday, 'number');
   await post('deleteTask', [created.id, token]);
-});
-
-test('approvals flow (self-review blocked)', async function () {
-  const submitted = await post('submitRecordReview', [4, 'Please review this smoke record', token]);
-  assert.strictEqual(submitted.status, 'PENDING');
-  const pending = await post('getPendingApprovals', [token]);
-  assert.ok(pending.some(function (a) { return a.id === submitted.id; }));
-
-  const selfReview = await post('reviewApproval', [submitted.id, true, 'self review', token]).then(
-    function () { return { unexpected: true }; },
-    function (err) { return { error: err.message }; }
-  );
-  assert.ok(!selfReview.unexpected);
-  assert.match(selfReview.error, /own/);
 });
 
 test('dashboard preferences', async function () {

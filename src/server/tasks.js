@@ -236,10 +236,31 @@ function getMyTasks(token) {
   return getTasks({ assignee: user.email }, token);
 }
 
+/* Returns homepage KPI task counts: tasks still open (not DONE/CANCELLED)
+   and tasks whose due date falls on the current calendar day. */
+function getTaskCounts(token) {
+  auth.requireLogin(token);
+  const rows = db.prepare('SELECT status, due_date FROM tasks').all();
+  const now = new Date();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+  let openTasks = 0;
+  let dueToday = 0;
+  rows.forEach(function (row) {
+    const status = String(row.status || TASK_STATUS.OPEN);
+    if (status === TASK_STATUS.DONE || status === TASK_STATUS.CANCELLED) return;
+    openTasks++;
+    const due = row.due_date ? Number(row.due_date) : 0;
+    if (due >= dayStart && due < dayEnd) dueToday++;
+  });
+  return { openTasks: openTasks, dueToday: dueToday };
+}
+
 module.exports = {
   createTask,
   updateTask,
   getTasks,
   deleteTask,
-  getMyTasks
+  getMyTasks,
+  getTaskCounts
 };

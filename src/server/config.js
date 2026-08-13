@@ -45,9 +45,6 @@ const CONFIG = Object.freeze({
     SHEET_NAME: 'Notifications',
     MAX_PER_USER: 50
   },
-  WORKFLOW: {
-    APPROVALS_SHEET_NAME: 'Approvals'
-  },
   TASKS: {
     SHEET_NAME: 'Tasks'
   },
@@ -177,20 +174,6 @@ const USER_GROUPS = Object.freeze({
 
 const USER_GROUP_KEYS = Object.freeze(Object.keys(USER_GROUPS));
 
-const WORKFLOW_TYPES = Object.freeze({
-  RECORD_REVIEW: {
-    key: 'RECORD_REVIEW',
-    module: MODULES.RECORDS,
-    label: 'Record review'
-  }
-});
-
-const APPROVAL_STATUS = Object.freeze({
-  PENDING: 'PENDING',
-  APPROVED: 'APPROVED',
-  REJECTED: 'REJECTED'
-});
-
 const PROP = Object.freeze({
   APP_NAME: 'APP_NAME',
   SHEET_NAME: 'SHEET_NAME',
@@ -306,25 +289,6 @@ const NOTIFICATION_TYPES = Object.freeze({
 });
 
 const NOTIFICATION_RECENT_LIMIT = 30;
-
-/* ---------- Workflow.gs constants ---------- */
-
-const WORKFLOW_SHEET_HEADERS = ['Id', 'Module', 'Type', 'TargetRow', 'TargetId', 'Summary', 'SubmittedBy', 'SubmittedAt', 'Status', 'ReviewedBy', 'ReviewedAt', 'Comment'];
-
-const WORKFLOW_COL = Object.freeze({
-  ID: 1,
-  MODULE: 2,
-  TYPE: 3,
-  TARGET_ROW: 4,
-  TARGET_ID: 5,
-  SUMMARY: 6,
-  SUBMITTED_BY: 7,
-  SUBMITTED_AT: 8,
-  STATUS: 9,
-  REVIEWED_BY: 10,
-  REVIEWED_AT: 11,
-  COMMENT: 12
-});
 
 /* ---------- Audit.gs constants ---------- */
 
@@ -451,8 +415,6 @@ module.exports = {
   PERMISSIONS,
   USER_GROUPS,
   USER_GROUP_KEYS,
-  WORKFLOW_TYPES,
-  APPROVAL_STATUS,
   PROP,
   DEFAULT_ADMIN_PASSWORD,
   ADMIN_USERS,
@@ -470,8 +432,6 @@ module.exports = {
   NOTIFICATION_COL,
   NOTIFICATION_TYPES,
   NOTIFICATION_RECENT_LIMIT,
-  WORKFLOW_SHEET_HEADERS,
-  WORKFLOW_COL,
   AUDIT_SHEET,
   DOC_SHEET_HEADERS,
   DOC_COL,

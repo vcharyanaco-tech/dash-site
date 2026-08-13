@@ -13,7 +13,6 @@
  *        Tasks         -> data/export/tasks.csv
  *        Submissions   -> data/export/submissions.csv
  *        Notifications -> data/export/notifications.csv
- *        Approvals     -> data/export/approvals.csv
  *        Audit Log     -> data/export/audit.csv
  *        Documents     -> data/export/documents.csv
  *   2. node import-from-gas.js
@@ -282,36 +281,6 @@ function importNotifications() {
   return n;
 }
 
-function importApprovals() {
-  const rows = readCsv('approvals.csv');
-  if (!rows) { console.log('approvals.csv: skipped (not found)'); return 0; }
-  const data = stripHeader(rows, 'id');
-  const stmt = db.prepare(
-    'INSERT OR IGNORE INTO approvals (id, module, type, target_row, target_id, summary, submitted_by, submitted_at, status, reviewed_by, reviewed_at, comment) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  );
-  let n = 0;
-  data.forEach(function (c) {
-    stmt.run(
-      String(c[0] || ''),
-      String(c[1] || 'records'),
-      String(c[2] || 'RECORD_REVIEW'),
-      Number(c[3]) || 0,
-      String(c[4] || ''),
-      String(c[5] || ''),
-      String(c[6] || ''),
-      Number(c[7]) || Date.now(),
-      String(c[8] || 'PENDING').toUpperCase(),
-      String(c[9] || ''),
-      Number(c[10]) || null,
-      String(c[11] || '')
-    );
-    n++;
-  });
-  console.log('approvals: ' + n + ' row(s) processed');
-  return n;
-}
-
 function importAudit() {
   const rows = readCsv('audit.csv');
   if (!rows) { console.log('audit.csv: skipped (not found)'); return 0; }
@@ -366,7 +335,7 @@ function main() {
   if (!fs.existsSync(EXPORT_DIR)) {
     console.log('Export directory not found. Create it and drop the CSV files there.');
     console.log('Expected: records.csv, users.csv, tasks.csv, submissions.csv,');
-    console.log('          notifications.csv, approvals.csv, audit.csv, documents.csv');
+    console.log('          notifications.csv, audit.csv, documents.csv');
     process.exit(1);
   }
   const t0 = Date.now();
@@ -375,7 +344,6 @@ function main() {
   importTasks();
   importSubmissions();
   importNotifications();
-  importApprovals();
   importAudit();
   importDocuments();
   console.log('Import finished in ' + (Date.now() - t0) + 'ms.');
@@ -385,7 +353,6 @@ function main() {
     tasks: db.prepare('SELECT COUNT(*) c FROM tasks').get().c,
     submissions: db.prepare('SELECT COUNT(*) c FROM submissions').get().c,
     notifications: db.prepare('SELECT COUNT(*) c FROM notifications').get().c,
-    approvals: db.prepare('SELECT COUNT(*) c FROM approvals').get().c,
     audit: db.prepare('SELECT COUNT(*) c FROM audit').get().c,
     documents: db.prepare('SELECT COUNT(*) c FROM documents').get().c
   };
