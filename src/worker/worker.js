@@ -32,6 +32,7 @@ const COMMON_HEADERS = {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const path = url.pathname;
 
     if (request.method === 'OPTIONS') {
       return new Response(null, {
@@ -45,9 +46,9 @@ export default {
     // handled locally. ALL other /api/* calls (the dashboard dispatcher + file
     // streaming) are forwarded to the Node/SQLite backend (SERVER_ORIGIN),
     // which replaces the old Google Apps Script backend.
-    if (url.pathname.startsWith('/api/')) {
+    if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
       if (isEnterpriseApiPath(url.pathname)) {
-        return handleEnterpriseRoute(request, env, url);
+        return handleEnterpriseRoute(request, env, url, ctx);
       }
       const serverOrigin = env.SERVER_ORIGIN;
       if (!serverOrigin) {
@@ -398,7 +399,7 @@ async function forwardToServer(request, url, serverOrigin) {
   return new Response(respBody, { status: resp.status, headers: newHeaders });
 }
 
-async function handleEnterpriseRoute(request, env, url) {
+async function handleEnterpriseRoute(request, env, url, ctx) {
   if (url.pathname === '/api/health') {
     return jsonResponse({ ok: true, service: 'dashv1-proxy' });
   }

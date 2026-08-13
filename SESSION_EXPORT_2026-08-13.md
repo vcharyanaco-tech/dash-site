@@ -1,12 +1,14 @@
-# Session export — 2026-08-13 (dash-site / bugs fixed, parity, Pages, cutover prep)
+# Session export — 2026-08-13 (dash-site / bugs fixed, parity, Pages, CUTOVER EXECUTED, worker hardened)
 
 ## Context / goal
 Continue building out `dash-site` (Node/SQLite port of the GAS backend) on the
 Railway staging host. This session: fixed the two reported bugs (duplicate
 users in Manage users; submission badge flash), shipped "Mark all as read",
 mirrored read-based flash into the GAS backend, enabled GitHub Pages, rotated
-the staging admin password, verified everything in a real browser, drafted the
-cutover runbook, and started SMTP configuration.
+the staging admin password, verified everything in a real browser, **executed
+the live cutover** (deployed the repo worker → `dashboardharyana.site` now
+serves the Node backend), set `WORKER_API_TOKEN`, and started SMTP
+configuration.
 
 ## Fixes shipped (all verified + deployed)
 
@@ -88,22 +90,58 @@ cutover runbook, and started SMTP configuration.
   — confirms Pages is a static mirror only.
 - Node 24 native WebSocket drives Chrome DevTools Protocol — no puppeteer.
 
-## Cutover runbook (drafted — NOT executed)
-- Full Phase 0–5 runbook in chat; key findings:
-  - Live worker `dashv1-proxy` **has `SERVER_ORIGIN` set** as a secret
-    binding, but **`WORKER_API_TOKEN` is NOT set**.
-  - **The deployed worker is OLD:** 0 references to `SERVER_ORIGIN` (fetched
-    script vs repo worker.js which has 7). It still proxies `/macros/*`,
-    `/static/*` → `script.google.com` (GAS) and treats `/api/*` as
-    enterprise (hence live `/api/` → `{"error":"unauthorized"}`).
-  - Blocker for cutover: **deploy the repo's `worker.js`** via
-    `node src/worker/deploy-worker-api.js $CLOUDFLARE_API_TOKEN` (or
-    `wrangler deploy`) to flip routing to the Node backend. `SERVER_ORIGIN`
-    secret is already there.
-  - Live `dashboardharyana.site` still GAS-backed: its `app.js` API_URL is the
-    Apps Script `/macros/s/.../exec` endpoint.
-  - Node server config: AI/WhatsApp keys come from the settings table
-    (`spGet_`), not env vars; email needs SMTP (below); uploads live on disk.
+## CUTOVER EXECUTED (this session, live)
+- **Deployed the repo's `worker.js` to the live `dashv1-proxy`** via
+  `node src/worker/deploy-worker-api.js $CLOUDFLARE_API_TOKEN` —
+  `dashboardharyana.site` now routes to the Node/Railway backend, not GAS.
+  Old GAS-proxy worker backed up to `/tmp/dashv1-proxy-live-backup-20260813.js`
+  (0 SERVER_ORIGIN refs / 5 script.google.com refs — verified) for rollback.
+- **Two fixes were needed to the repo worker before deploying** (found during
+  verification — deploying as-is would have broken the live site):
+  1. `const path = url.pathname;` was **missing** (regression in the Phase 2
+     commit `975fdfe`; present in `b4b6e01`) — every static route would have
+     served `index.html`.
+  2. Bare `POST /api` fell through to static (worker only matched `/api/`) —
+     added an exact `/api` match.
+- **Verified live end-to-end after deploy:**
+  - `/api/health` → worker-local `{"ok":true,"service":"dashv1-proxy"}`
+  - bare `POST /api` dispatcher + `POST /macros/s/.../exec` (the live
+    frontend's actual API_URL) → `{"result":<epoch ms>}` from the Node server
+    (x-railway headers present)
+  - **login via the live `/macros` path with `Vish@9194`** →
+    `success:true, role:ADMIN`, token issued (full path: frontend → Worker →
+    Node → SQLite)
+  - static pages `/`, `/app.html`, `/app.js`, `/assets/styles.css`,
+    `/manifest.json` all 200 with correct content-types
+- **No frontend change was needed:** the live `dashv1` bundle's `API_URL` is
+  same-host `https://dashboardharyana.site/macros/s/AKfycbx.../exec`, which the
+  new worker forwards to `SERVER_ORIGIN + '/api'` (the Node dispatcher).
+- `POST /api/preview-check` (dashv1 app.js) is not a Node route → 404, but the
+  frontend handles it gracefully (optional feature).
+- **Runbook context (as previously drafted):** full Phase 0–5 in chat; the
+  remaining phases are: verify in browser on the live domain, keep GAS as
+  fallback during soak, then Phase 5 (stop GAS triggers, archive spreadsheet).
+  Node server config: AI/WhatsApp keys come from the settings table
+  (`spGet_`), not env vars; email needs SMTP (below); uploads live on disk.
+
+## WORKER_API_TOKEN set (live worker hardened)
+- Generated a 40-char token, saved to `/tmp/worker_api_token.txt` (the only
+  place it exists outside Cloudflare — grab it and store in a password
+  manager, then delete the file).
+- Set as a `secret_text` binding on `dashv1-proxy` via the Cloudflare API
+  (same mechanism as `SERVER_ORIGIN`).
+- **Fixed a latent worker bug surfaced by the token:** `handleEnterpriseRoute`
+  called `handleAiInsights(request, env, ctx)` without receiving `ctx` →
+  `error code: 1101` on a valid-token call. Added the `ctx` param. (Unreachable
+  before, because every call was rejected as unauthorized.)
+- **Verified live:**
+  | Route | No token | Wrong token | Correct token |
+  | --- | --- | --- | --- |
+  | `POST /api/ai-insights` | `unauthorized` 401 | `unauthorized` 401 | `AI not configured` (no `GEMINI_API_KEY` secret — expected) |
+  | `POST /api/notify-whatsapp` | `unauthorized` 401 | `unauthorized` 401 | `WhatsApp not configured` (no WA secrets — expected) |
+  | `GET /api/health` | open by design | | |
+- Worker secrets now: `SERVER_ORIGIN`, `WORKER_API_TOKEN` (both secret_text),
+  plus the `AI_INSIGHTS_KV` binding from the deploy script.
 
 ## SMTP configuration (IN PROGRESS)
 - Mailer (`src/server/mailer.js`) sends via nodemailer when `SMTP_HOST`,
@@ -124,25 +162,32 @@ cutover runbook, and started SMTP configuration.
 ## Deployments / infra state
 | Target | Status |
 | --- | --- |
-| GitHub `main` | HEAD `b56e362` (pushed) |
+| GitHub `main` | HEAD `7f11169` (pushed) — session export + nodemailer dep |
 | Railway staging | `dash-site-production-07cc.up.railway.app` — LIVE, all fixes, verified 14/14 in browser |
 | GitHub Pages | `vcharyanaco-tech.github.io/dash-site` — LIVE, workflow success (frontend-only) |
-| Cloudflare Worker `dashv1-proxy` | old build live; `SERVER_ORIGIN` secret set, `WORKER_API_TOKEN` missing; repo worker.js NOT deployed |
-| Live `dashboardharyana.site` | still GAS-backed (unchanged, per MIGRATION.md) |
-| GAS Apps Script | repo updated with ReadAt; not pushed to the project yet |
+| Cloudflare Worker `dashv1-proxy` | **NEW build live** — repo worker.js with path/`/api`/`ctx` fixes; secrets: `SERVER_ORIGIN` + `WORKER_API_TOKEN` |
+| Live `dashboardharyana.site` | **CUT OVER to Node backend** (Worker → Railway). Frontend unchanged (dashv1 bundle); API now hits Node/SQLite |
+| GAS Apps Script | repo updated with ReadAt; **not pushed to the project yet** (now only relevant as fallback) |
 
 ## Current git state (dash-site)
-- HEAD: `b56e362` — feat(gas): mirror read-based submission flash via ReadAt sheet column
-- Uncommitted: `src/server/package.json` + `package-lock.json` (nodemailer
-  dependency, part of the in-progress SMTP work).
-- This file added: `SESSION_EXPORT_2026-08-13.md`.
+- HEAD: `7f11169` — docs: save 2026-08-13 session export + add nodemailer dependency
+- Uncommitted: `src/worker/worker.js` — the three cutover fixes (`path`
+  restore, bare `/api` match, `ctx` param for `handleEnterpriseRoute`).
+  **These are deployed live but NOT yet committed** — commit them so the repo
+  matches the live worker.
 
 ## Resume checklist (next session)
-1. Get the Gmail address + App Password from the owner; set `SMTP_*` vars on
+1. **Commit the pending `src/worker/worker.js` fixes** (deployed live, not in
+   git yet).
+2. Get the Gmail address + App Password from the owner; set `SMTP_*` vars on
    Railway; send a test mail to confirm.
-2. Decide whether to deploy the repo `worker.js` (flips live routing to Node)
-   — needs explicit owner go-ahead (live change).
-3. Optionally set `WORKER_API_TOKEN` on the worker.
-4. Push the updated GAS files (clasp/editor) so the `ReadAt` column goes live.
-5. Decide on the `CNAME` file (Pages may prompt to claim the live domain).
-6. Re-run `tmp-verify-browser.cjs` against the live domain post-cutover.
+3. **Browser-verify the live domain post-cutover** — re-run
+   `tmp-verify-browser.cjs` (login → Manage users → submission flash) against
+   `dashboardharyana.site` now that it serves the Node backend.
+4. Consider setting `GEMINI_API_KEY`/`WHATSAPP_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID`
+   on the worker if the local AI/WhatsApp routes should do real work (currently
+   they are token-gated but unconfigured).
+5. Decide whether to push the updated GAS files (clasp/editor) — only relevant
+   if GAS stays as a fallback during soak.
+6. Decide on the `CNAME` file (Pages may prompt to claim the live domain).
+7. Grab `/tmp/worker_api_token.txt` → password manager → delete the file.
