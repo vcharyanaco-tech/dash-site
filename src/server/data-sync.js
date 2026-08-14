@@ -155,18 +155,57 @@ async function backupData() {
   return out;
 }
 
+/* ── write-triggered backups ────────────────────────────────────────────
+ * The KV snapshot is what Render restores on boot. Waiting up to the full
+ * INTERVAL_MS (default 10 min) after a write means a restart in that window
+ * reverts the change — observed repeatedly with record links (2026-08-14).
+ * So every mutation also schedules a backup within a few seconds. Debounced
+ * so a burst of edits coalesces into one PUT, and serialized so concurrent
+ * timers can't race on the snapshot temp file. */
+let backupTimer = null;
+let backupInFlight = false;
+let backupQueued = false;
+
+async function runBackup_() {
+  if (backupInFlight) {
+    backupQueued = true;
+    return;
+  }
+  backupInFlight = true;
+  try {
+    await backupData();
+  } finally {
+    backupInFlight = false;
+    if (backupQueued) {
+      backupQueued = false;
+      setTimeout(function () { runBackup_(); }, 100);
+    }
+  }
+}
+
+/** Schedule a backup shortly after a write. Safe to call on every mutation
+ *  (cheap when disabled or when nothing changed). */
+function requestBackup() {
+  if (!enabled()) return;
+  if (backupTimer) clearTimeout(backupTimer);
+  backupTimer = setTimeout(function () {
+    backupTimer = null;
+    runBackup_();
+  }, 3000);
+}
+
 /** Fire one backup now, then every INTERVAL_MS. Also flushes a final backup
  *  on SIGTERM/SIGINT before exiting (Render sends SIGTERM on restart). */
 function startAutoSync() {
   if (!enabled()) return;
-  backupData();
-  setInterval(function () { backupData(); }, INTERVAL_MS);
+  runBackup_();
+  setInterval(function () { runBackup_(); }, INTERVAL_MS);
   ['SIGTERM', 'SIGINT'].forEach(function (sig) {
     process.on(sig, function () {
       console.log('[data-sync] ' + sig + ' — final backup before exit');
-      backupData().then(function () { process.exit(0); });
+      runBackup_().then(function () { process.exit(0); });
     });
   });
 }
 
-module.exports = { enabled, restoreData, backupData, startAutoSync };
+module.exports = { enabled, restoreData, backupData, startAutoSync, requestBackup };

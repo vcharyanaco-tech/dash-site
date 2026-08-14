@@ -184,6 +184,7 @@ function addSubmission(cardRow, cardId, text, token) {
     try {
       require('./notifications').notifyStaffLocked_('submission', 'New submission', 'Update submitted on record #' + cardRow + ' by ' + user.email + '.', '', user.email);
     } catch (err) {}
+    try { require('./data-sync').requestBackup(); } catch (err) {}
     return submissionsForCard_(cardRow, user);
   });
 }
@@ -204,6 +205,7 @@ function updateSubmission(submissionId, text, token) {
     db.prepare('UPDATE submissions SET text = ?, updated_at = ? WHERE id = ?').run(content, Date.now(), rec.id);
 
     try { require('./audit').logAudit_(ACTIONS.SUBMISSION_UPDATE, rec.cardRow, { id: submissionId, text: content }, user.email); } catch (err) {}
+    try { require('./data-sync').requestBackup(); } catch (err) {}
     return submissionsForCard_(rec.cardRow, user);
   });
 }
@@ -252,6 +254,7 @@ function deleteSubmission(submissionId, token) {
     db.prepare('DELETE FROM submissions WHERE id = ?').run(rec.id);
 
     try { require('./audit').logAudit_(ACTIONS.SUBMISSION_DELETE, rec.cardRow, { id: submissionId, text: rec.text }, admin.email); } catch (err) {}
+    try { require('./data-sync').requestBackup(); } catch (err) {}
     return submissionsForCard_(rec.cardRow, admin);
   });
 }
@@ -262,6 +265,7 @@ function markAllSubmissionsRead(token) {
   db.prepare('UPDATE submissions SET read_at = ? WHERE read_at = 0').run(Date.now());
 
   try { require('./audit').logAudit_(ACTIONS.SUBMISSION_READ_ALL, '', 'Marked all submissions as read', admin.email); } catch (err) {}
+  try { require('./data-sync').requestBackup(); } catch (err) {}
   return getSubmissionOverview_();
 }
 
@@ -289,5 +293,9 @@ module.exports = {
   unlockSubmission,
   deleteSubmission,
   markAllSubmissionsRead,
-  toggleSubmissionDisplay
+  toggleSubmissionDisplay,
+  // Persist promptly (see records.js bumpDataGeneration_): the KV snapshot is
+  // what Render restores on boot, so submission writes must reach it within
+  // seconds, not up to the auto-sync interval.
+  requestBackup: function () { try { require('./data-sync').requestBackup(); } catch (e) {} }
 };

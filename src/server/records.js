@@ -29,6 +29,10 @@ let dataCache = null;
 
 function bumpDataGeneration_() {
   dataCache = null;
+  // Persist promptly: the KV bridge snapshot is what Render restores on the
+  // next boot, so a write (new record, edit, link, delete) must reach KV
+  // within seconds, not up to the 10-min auto-sync interval.
+  try { require('./data-sync').requestBackup(); } catch (e) {}
 }
 
 /* ============================================================
