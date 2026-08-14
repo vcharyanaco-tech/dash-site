@@ -35,15 +35,30 @@ function authHeaders() {
   return { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/octet-stream' };
 }
 
+// All bridge calls get a hard timeout: a hung PUT must not leave the write-
+// triggered backup chain stuck (backupInFlight stays true forever otherwise,
+// queueing every later write behind it).
+const FETCH_TIMEOUT_MS = 20000;
+
+async function fetchWithTimeout_(url, opts) {
+  const ctrl = new AbortController();
+  const t = setTimeout(function () { ctrl.abort(); }, FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, Object.assign({}, opts, { signal: ctrl.signal }));
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function fetchBuf(url, opts) {
-  const resp = await fetch(url, opts);
+  const resp = await fetchWithTimeout_(url, opts);
   if (resp.status === 404) return null;
   if (!resp.ok) throw new Error('backup bridge ' + resp.status + ' for ' + url);
   return Buffer.from(await resp.arrayBuffer());
 }
 
 async function putBuf(url, buf) {
-  const resp = await fetch(url, { method: 'PUT', headers: authHeaders(), body: buf });
+  const resp = await fetchWithTimeout_(url, { method: 'PUT', headers: authHeaders(), body: buf });
   if (!resp.ok) throw new Error('backup bridge PUT ' + resp.status + ' for ' + url);
   return resp;
 }
