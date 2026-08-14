@@ -206,7 +206,7 @@ function requestBackup() {
   backupTimer = setTimeout(function () {
     backupTimer = null;
     runBackup_();
-  }, 3000);
+  }, 1000);
 }
 
 /** Fire one backup now, then every INTERVAL_MS. Also flushes a final backup
