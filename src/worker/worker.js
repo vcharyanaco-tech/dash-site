@@ -2,12 +2,13 @@
  * Cloudflare Worker — Split-routing proxy
  *
  * Routing:
- *   dashboardharyana.site/app.html  → GAS exec URL (banner-stripped via processHtml)
- *   dashboardharyana.site/*         → GitHub Pages static bundle (docs/ via raw CDN)
+ *   /api, /macros/*, /static/*  → Node/SQLite backend (SERVER_ORIGIN)
+ *   dashboardharyana.site/*      → current frontend bundle (dash-site repo root
+ *                                  via raw CDN, same files GitHub Pages serves)
  *
- * Why raw CDN for GitHub Pages:
- *   vcharyanaco-tech.github.io/dashv1/* 301-redirects to the custom domain,
- *   which Cloudflare forwards back to this Worker — an infinite loop.
+ * Why raw CDN instead of GitHub Pages:
+ *   vcharyanaco-tech.github.io/* 301-redirects to the custom domain, which
+ *   Cloudflare forwards back to this Worker — an infinite loop.
  *   raw.githubusercontent.com serves the same files with correct Content-Type
  *   and no redirect.
  *
@@ -19,7 +20,7 @@
 
 import { isEnterprisePath, enterpriseHeadersForPath } from './worker-enterprise-routes.js';
 
-const GITHUB_RAW = 'https://raw.githubusercontent.com/vcharyanaco-tech/dashv1/main/docs';
+const GITHUB_RAW = 'https://raw.githubusercontent.com/vcharyanaco-tech/dash-site/main';
 
 const COMMON_HEADERS = {
   'X-Frame-Options': 'ALLOWALL',
