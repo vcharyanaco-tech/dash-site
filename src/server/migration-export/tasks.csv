@@ -1,2 +1,1 @@
-A,B,C,D,E,F,G,H,I,J,K,L,M,N,O
-Id,RecordRow,RecordId,Title,Description,Assignee,Status,Priority,DueDate,CreatedBy,CreatedAt,UpdatedAt,CompletedAt,RowVersion,UpdatedBy
+id,record_row,record_id,title,description,assignee,status,priority,due_date,created_by,created_at,updated_at,completed_at
