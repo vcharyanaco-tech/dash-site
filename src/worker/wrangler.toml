@@ -20,3 +20,8 @@ GAS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxPwINC2LOPQ-II6vhMXuE
 [[kv_namespaces]]
 binding = "AI_INSIGHTS_KV"
 id = "3aed6a4c7ad842c7b5fba1558a68ab06"
+
+# Keep-alive: Render free services spin down after 15 min of inactivity;
+# this cron pings the backend /api/health every 10 min to keep it warm.
+[triggers]
+crons = ["*/10 * * * *"]

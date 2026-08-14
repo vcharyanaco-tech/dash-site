@@ -1,0 +1,42 @@
+# Render Blueprint — India Post Dashboard (Node/SQLite)
+#
+# Deploy: push to GitHub (vcharyanaco-tech/dash-site) and use
+#   New + > Blueprint  (or: connect the repo and Render picks up render.yaml)
+#
+# NOTE (free tier):
+#   - The filesystem is EPHEMERAL: the SQLite DB + uploads are re-seeded on
+#     every boot from src/server/migration-export/*.csv baked into the image,
+#     so fresh deploys/restarts restore the snapshot, not the live delta.
+#   - Outbound SMTP (ports 25/465/587) is blocked on free instances, so
+#     password-reset/report emails silently degrade. They work again on a
+#     paid (Starter+) instance.
+#   - The service spins down after 15 min without traffic; the dashv1-proxy
+#     Cloudflare Worker cron ("*/10 * * * *") pings /api/health to keep it warm.
+services:
+  - type: web
+    name: dash-site
+    runtime: docker
+    repo: https://github.com/vcharyanaco-tech/dash-site
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DASH_DATA_DIR
+        value: /app/data
+      - key: DASH_STATIC_ROOT
+        value: /app/www
+      # SMTP (Gmail). Port 587 is blocked on free instances — harmless here,
+      # functional once the service is on a paid plan.
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        value: vcharyanaco@gmail.com
+      - key: SMTP_FROM
+        value: vcharyanaco@gmail.com
+      - key: SMTP_PASS
+        sync: false

@@ -75,6 +75,7 @@ const req = https.request(options, (res) => {
     const result = JSON.parse(data);
     if (result.success) {
       console.log('Worker uploaded successfully.');
+      setCronTriggers();
       addRoutes();
     } else {
       console.error('Upload failed:', JSON.stringify(result.errors, null, 2));
@@ -85,6 +86,39 @@ const req = https.request(options, (res) => {
 req.on('error', e => { console.error(e); process.exit(1); });
 req.write(bodyBuf);
 req.end();
+
+// Keep-alive cron: Render free web services spin down after 15 min without
+// traffic; a */10 min trigger keeps the backend warm. Mirrors wrangler.toml.
+const CRONS = ['*/10 * * * *'];
+
+function setCronTriggers() {
+  const payload = JSON.stringify(CRONS.map(function (c) { return { cron: c }; }));
+  const opts = {
+    hostname: 'api.cloudflare.com',
+    path: `/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/schedules`,
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${TOKEN}`,
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payload)
+    }
+  };
+  const req = https.request(opts, (res) => {
+    let data = '';
+    res.on('data', c => data += c);
+    res.on('end', () => {
+      const r = JSON.parse(data);
+      if (r.success) {
+        console.log('Cron triggers set:', CRONS.join(', '));
+      } else {
+        console.log('Cron note:', JSON.stringify(r.errors));
+      }
+    });
+  });
+  req.on('error', e => console.error('Cron error:', e.message));
+  req.write(payload);
+  req.end();
+}
 
 function addRoutes() {
   // Get zone ID for dashboardharyana.site

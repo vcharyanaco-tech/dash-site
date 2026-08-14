@@ -103,6 +103,25 @@ export default {
 
     return fetchFromPages(path, url.search);
   },
+
+  // ── Keep-alive cron ───────────────────────────────────────────────────────
+  // Render free web services spin down after 15 min without traffic (~1 min
+  // cold start). The scheduled trigger (wrangler `[triggers]` / schedules API,
+  // "*/10 * * * *") pings the Node backend's own /api/health directly so the
+  // instance never idles out. Hitting SERVER_ORIGIN (not this worker's
+  // /api/health, which is served locally) is intentional.
+  async scheduled(event, env, ctx) {
+    const origin = env.SERVER_ORIGIN;
+    if (!origin) return;
+    try {
+      await fetch(origin.replace(/\/+$/, '') + '/api/health', {
+        method: 'GET',
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; dashv1-keepalive)' },
+      });
+    } catch (err) {
+      // Transient failure — the next tick retries.
+    }
+  },
 };
 
 // ── GitHub Pages static bundle fetcher ──────────────────────────────────────
