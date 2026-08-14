@@ -3,15 +3,17 @@
 # Deploy: push to GitHub (vcharyanaco-tech/dash-site) and use
 #   New + > Blueprint  (or: connect the repo and Render picks up render.yaml)
 #
-# NOTE (free tier):
-#   - The filesystem is EPHEMERAL: the SQLite DB + uploads are re-seeded on
-#     every boot from src/server/migration-export/*.csv baked into the image,
-#     so fresh deploys/restarts restore the snapshot, not the live delta.
-#   - Outbound SMTP (ports 25/465/587) is blocked on free instances, so
-#     password-reset/report emails silently degrade. They work again on a
-#     paid (Starter+) instance.
-#   - The service spins down after 15 min without traffic; the dashv1-proxy
-#     Cloudflare Worker cron ("*/10 * * * *") pings /api/health to keep it warm.
+# Free-tier constraints are worked around via the Cloudflare Worker
+# (dashv1-proxy, already fronting dashboardharyana.site):
+#   - Ephemeral filesystem  → start.js restores dashboard.db + uploads from
+#     the worker's DATA_BACKUP_KV bridge on boot (src/server/data-sync.js),
+#     and pushes a fresh snapshot every 10 min + on SIGTERM, so redeploys
+#     lose at most a few minutes of deltas instead of everything.
+#   - SMTP ports blocked    → MAIL_TRANSPORT=http posts messages over HTTPS
+#     to the worker's /api/send-email relay, which speaks SMTP to Gmail via
+#     the TCP connect() API (Worker secrets SMTP_USER/SMTP_PASS).
+#   - 15-min spin-down      → the worker's "*/10 * * * *" cron pings
+#     /api/health so the instance never idles out.
 services:
   - type: web
     name: dash-site
@@ -26,8 +28,17 @@ services:
         value: /app/data
       - key: DASH_STATIC_ROOT
         value: /app/www
-      # SMTP (Gmail). Port 587 is blocked on free instances — harmless here,
-      # functional once the service is on a paid plan.
+      # Persistent-disk bridge (KV-backed, via the Cloudflare Worker)
+      - key: DATA_SYNC_URL
+        value: https://dashboardharyana.site/api/backup
+      - key: WORKER_API_TOKEN
+        sync: false
+      # Email via the worker SMTP relay (SMTP ports are blocked on free)
+      - key: MAIL_TRANSPORT
+        value: http
+      - key: MAIL_HTTP_URL
+        value: https://dashboardharyana.site/api/send-email
+      # SMTP kept for reference/paid-plan fallback (blocked on free tier)
       - key: SMTP_HOST
         value: smtp.gmail.com
       - key: SMTP_PORT

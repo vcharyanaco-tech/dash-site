@@ -26,6 +26,58 @@ function smtpConfigured() {
   return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
+// HTTP transport: post the message over HTTPS (port 443 — allowed on hosts
+// that block SMTP ports, e.g. Render free) to the Worker's /api/send-email
+// relay, which speaks SMTP to the provider via the TCP connect() API.
+function httpTransportConfigured() {
+  return String(process.env.MAIL_TRANSPORT || '').toLowerCase() === 'http' &&
+    !!(process.env.MAIL_HTTP_URL && process.env.WORKER_API_TOKEN);
+}
+
+const MIME_BY_EXT = {
+  '.pdf': 'application/pdf',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.txt': 'text/plain',
+  '.csv': 'text/csv',
+  '.html': 'text/html'
+};
+
+function guessMime_(filename) {
+  const ext = String(filename || '').toLowerCase().replace(/^.*(\.[a-z0-9]+)$/, '$1');
+  return MIME_BY_EXT[ext] || 'application/octet-stream';
+}
+
+function sendViaHttp_(to, subject, body, attachments) {
+  const payload = {
+    to: to,
+    subject: String(subject),
+    text: String(body || '')
+  };
+  if (Array.isArray(attachments) && attachments.length) {
+    payload.attachments = attachments.map(function (a) {
+      return {
+        filename: a.filename,
+        contentType: a.contentType || guessMime_(a.filename),
+        contentBase64: Buffer.isBuffer(a.content) ? a.content.toString('base64') : String(a.content || '')
+      };
+    });
+  }
+  fetch(process.env.MAIL_HTTP_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + process.env.WORKER_API_TOKEN },
+    body: JSON.stringify(payload)
+  }).then(function (resp) {
+    if (!resp.ok) {
+      console.error('sendMail_ http transport failed: HTTP ' + resp.status);
+    }
+  }, function (err) {
+    console.error('sendMail_ http transport failed: ' + err.message);
+  });
+}
+
 function sendMail_(to, subject, body, attachments) {
   const recipient = primaryEmail_(to);
   if (!recipient || !isValidEmail_(recipient)) return false;
@@ -40,7 +92,9 @@ function sendMail_(to, subject, body, attachments) {
     });
     try { fs.appendFileSync(OUTBOX, entry + '\n'); } catch (err) {}
 
-    if (smtpConfigured() && nodemailer) {
+    if (httpTransportConfigured()) {
+      sendViaHttp_(recipient, subject, body, attachments);
+    } else if (smtpConfigured() && nodemailer) {
       const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST,
         port: Number(process.env.SMTP_PORT || 587),
@@ -69,4 +123,4 @@ function sendMail_(to, subject, body, attachments) {
   }
 }
 
-module.exports = { sendMail_, smtpConfigured };
+module.exports = { sendMail_, smtpConfigured, httpTransportConfigured };

@@ -19,6 +19,7 @@
  */
 
 import { isEnterprisePath, enterpriseHeadersForPath } from './worker-enterprise-routes.js';
+import { connect } from 'cloudflare:sockets';
 
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vcharyanaco-tech/dash-site/main';
 
@@ -388,7 +389,9 @@ function bearerToken(request) {
 function isEnterpriseApiPath(pathname) {
   return pathname === '/api/health' ||
     pathname === '/api/ai-insights' ||
-    pathname === '/api/notify-whatsapp';
+    pathname === '/api/notify-whatsapp' ||
+    pathname === '/api/send-email' ||
+    pathname.startsWith('/api/backup');
 }
 
 /** Forwards a request to the Node/SQLite backend, preserving method, headers
@@ -434,6 +437,12 @@ async function handleEnterpriseRoute(request, env, url, ctx) {
   }
   if (url.pathname === '/api/notify-whatsapp' && request.method === 'POST') {
     return handleWhatsApp(request, env);
+  }
+  if (url.pathname === '/api/send-email' && request.method === 'POST') {
+    return handleSendEmail(request, env);
+  }
+  if (url.pathname.startsWith('/api/backup')) {
+    return handleBackup(request, env, url);
   }
   return jsonResponse({ error: 'not found' }, 404);
 }
@@ -506,6 +515,239 @@ function hashText(str) {
     h2 = Math.imul(h2 ^ c, 0x01000193) >>> 0;
   }
   return (h1 >>> 0).toString(16) + (h2 >>> 0).toString(16);
+}
+
+/* ============================================================
+ * Persistent-data bridge (KV-backed)
+ *
+ * Render free web services have an ephemeral filesystem — every
+ * redeploy/restart wipes the SQLite DB + uploads. The Node server
+ * (data-sync.js) restores from this bridge on boot and pushes fresh
+ * snapshots on an interval, so the KV namespace acts as a poor-man's
+ * persistent disk. KV value limit is 25 MiB per key; the dashboard DB
+ * is well under that (text rows only). Keys are namespaced backup:...
+ * inside the same KV namespace as AI insights (no collision).
+ * ============================================================ */
+
+const BACKUP_DB_KEY = 'backup:db.sqlite';
+const BACKUP_UPLOAD_PREFIX = 'backup:uploads/';
+
+async function handleBackup(request, env, url) {
+  const kv = env.DATA_BACKUP_KV;
+  if (!kv) return jsonResponse({ error: 'backup storage not bound' }, 500);
+
+  const rest = url.pathname.slice('/api/backup'.length);
+
+  // GET /api/backup/db | PUT /api/backup/db | DELETE /api/backup/db
+  if (rest === '/db') {
+    if (request.method === 'GET') {
+      const v = await kv.get(BACKUP_DB_KEY, 'arrayBuffer');
+      if (v === null) return jsonResponse({ error: 'no backup yet' }, 404);
+      return new Response(v, { headers: { ...COMMON_HEADERS, 'Content-Type': 'application/octet-stream' } });
+    }
+    if (request.method === 'PUT') {
+      const buf = await request.arrayBuffer();
+      await kv.put(BACKUP_DB_KEY, buf);
+      return jsonResponse({ ok: true, bytes: buf.byteLength });
+    }
+    if (request.method === 'DELETE') {
+      await kv.delete(BACKUP_DB_KEY);
+      return jsonResponse({ ok: true });
+    }
+    return jsonResponse({ error: 'method not allowed' }, 405);
+  }
+
+  // GET /api/backup/uploads  → { files: [...] }
+  if (rest === '/uploads') {
+    if (request.method === 'GET') {
+      const list = await kv.list({ prefix: BACKUP_UPLOAD_PREFIX });
+      const files = list.keys.map((k) => k.name.slice(BACKUP_UPLOAD_PREFIX.length));
+      return jsonResponse({ ok: true, files: files });
+    }
+    return jsonResponse({ error: 'method not allowed' }, 405);
+  }
+
+  // GET/PUT/DELETE /api/backup/uploads/<name>
+  const m = rest.match(/^\/uploads\/([A-Za-z0-9._-]{1,200})$/);
+  if (m) {
+    const key = BACKUP_UPLOAD_PREFIX + m[1];
+    if (request.method === 'GET') {
+      const v = await kv.get(key, 'arrayBuffer');
+      if (v === null) return jsonResponse({ error: 'not found' }, 404);
+      return new Response(v, { headers: { ...COMMON_HEADERS, 'Content-Type': 'application/octet-stream' } });
+    }
+    if (request.method === 'PUT') {
+      const buf = await request.arrayBuffer();
+      await kv.put(key, buf);
+      return jsonResponse({ ok: true, bytes: buf.byteLength });
+    }
+    if (request.method === 'DELETE') {
+      await kv.delete(key);
+      return jsonResponse({ ok: true });
+    }
+    return jsonResponse({ error: 'method not allowed' }, 405);
+  }
+
+  return jsonResponse({ error: 'not found' }, 404);
+}
+
+/* ============================================================
+ * Email relay (SMTP over TCP connect())
+ *
+ * Render free blocks outbound SMTP ports (25/465/587), so the Node
+ * mailer posts the message here over HTTPS (port 443, allowed) and
+ * this Worker speaks SMTP to the provider (Gmail) using the TCP
+ * sockets connect() API — available on the Workers Free plan.
+ * Credentials live in Worker secrets SMTP_USER / SMTP_PASS.
+ * ============================================================ */
+
+function rfc2047Subject(subject) {
+  const s = String(subject || '');
+  if (/^[\x20-\x7e]*$/.test(s)) return s;
+  const bytes = new TextEncoder().encode(s);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return '=?UTF-8?B?' + btoa(bin) + '?=';
+}
+
+function buildMailMessage(mail) {
+  const from = mail.fromName && /^[\x20-\x7e]+$/.test(mail.fromName)
+    ? mail.fromName + ' <' + mail.from + '>'
+    : '<' + mail.from + '>';
+  const to = '<' + mail.to + '>';
+  const subject = rfc2047Subject(mail.subject);
+  const date = new Date().toUTCString();
+  const body = String(mail.text || '').replace(/\r?\n/g, '\r\n');
+
+  const atts = Array.isArray(mail.attachments) ? mail.attachments : [];
+  const boundary = '----=_dashv1_' + Math.random().toString(36).slice(2, 12);
+
+  let msg = 'From: ' + from + '\r\n' +
+    'To: ' + to + '\r\n' +
+    'Subject: ' + subject + '\r\n' +
+    'Date: ' + date + '\r\n' +
+    'MIME-Version: 1.0\r\n';
+
+  if (!atts.length) {
+    msg += 'Content-Type: text/plain; charset=\"utf-8\"\r\n' +
+      'Content-Transfer-Encoding: 8bit\r\n\r\n' +
+      body + '\r\n';
+  } else {
+    msg += 'Content-Type: multipart/mixed; boundary=\"' + boundary + '\"\r\n\r\n' +
+      '--' + boundary + '\r\n' +
+      'Content-Type: text/plain; charset=\"utf-8\"\r\n' +
+      'Content-Transfer-Encoding: 8bit\r\n\r\n' +
+      body + '\r\n';
+    atts.forEach(function (a) {
+      const filename = String(a.filename || 'attachment').replace(/[\r\n"]/g, '_');
+      const contentType = String(a.contentType || 'application/octet-stream').replace(/[\r\n]/g, '');
+      let b64 = String(a.contentBase64 || '').replace(/\s+/g, '');
+      b64 = b64.replace(/(.{76})/g, '$1\r\n');
+      msg += '--' + boundary + '\r\n' +
+        'Content-Type: ' + contentType + '\r\n' +
+        'Content-Transfer-Encoding: base64\r\n' +
+        'Content-Disposition: attachment; filename=\"' + filename + '\"\r\n\r\n' +
+        b64 + '\r\n';
+    });
+    msg += '--' + boundary + '--\r\n';
+  }
+
+  // SMTP DATA dot-stuffing + trailing CRLF
+  const stuffed = msg.replace(/^\\./gm, '..');
+  return stuffed.replace(/\r?\n/g, '\r\n') + '\r\n.' + '\r\n';
+}
+
+async function smtpSend(env, mail) {
+  const host = env.SMTP_HOST || 'smtp.gmail.com';
+  const port = Number(env.SMTP_PORT || 465);
+  const user = env.SMTP_USER;
+  const pass = env.SMTP_PASS;
+  if (!user || !pass) throw new Error('SMTP not configured on worker');
+
+  const socket = connect({ hostname: host, port: port }, { secureTransport: 'on' });
+  await socket.opened;
+
+  const writer = socket.writable.getWriter();
+  const reader = socket.readable.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+
+  function timeout() {
+    return new Promise(function (_, reject) {
+      setTimeout(function () { reject(new Error('SMTP timeout')); }, 20000);
+    });
+  }
+
+  async function readLine() {
+    while (true) {
+      const idx = buf.indexOf('\n');
+      if (idx >= 0) {
+        const line = buf.slice(0, idx).replace(/\r$/, '');
+        buf = buf.slice(idx + 1);
+        return line;
+      }
+      const chunk = await Promise.race([reader.read(), timeout()]);
+      if (chunk.done) throw new Error('SMTP connection closed by server');
+      buf += decoder.decode(chunk.value, { stream: true });
+    }
+  }
+
+  async function readReply() {
+    const first = await readLine();
+    let last = first;
+    while (last.length >= 4 && last[3] === '-') last = await readLine();
+    return { code: first.slice(0, 3), first: first };
+  }
+
+  async function command(line, okCodes) {
+    await writer.write(new TextEncoder().encode(line + '\r\n'));
+    const reply = await readReply();
+    if (okCodes.indexOf(reply.code) === -1) {
+      throw new Error('SMTP ' + line.split(' ')[0] + ' failed: ' + reply.first);
+    }
+    return reply;
+  }
+
+  try {
+    const greet = await readReply();
+    if (greet.code !== '220') throw new Error('SMTP greeting failed: ' + greet.first);
+    await command('EHLO dashv1-proxy', ['250']);
+    const auth = btoa('\x00' + user + '\x00' + pass);
+    await command('AUTH PLAIN ' + auth, ['235']);
+    await command('MAIL FROM:<' + user + '>', ['250']);
+    await command('RCPT TO:<' + mail.to + '>', ['250', '251']);
+    await command('DATA', ['354']);
+    await writer.write(new TextEncoder().encode(buildMailMessage(mail)));
+    const done = await readReply();
+    if (done.code !== '250') throw new Error('SMTP DATA failed: ' + done.first);
+    await command('QUIT', ['221']);
+  } finally {
+    try { await socket.close(); } catch (e) {}
+  }
+}
+
+async function handleSendEmail(request, env) {
+  let payload;
+  try { payload = await request.json(); } catch (e) { return jsonResponse({ error: 'invalid json' }, 400); }
+  const to = String(payload.to || '').trim();
+  const subject = String(payload.subject || '').trim();
+  if (!to || !subject) return jsonResponse({ error: 'to and subject required' }, 400);
+  if (/[\r\n]/.test(to) || /[\r\n]/.test(subject)) return jsonResponse({ error: 'invalid header' }, 400);
+  const from = env.SMTP_FROM || env.SMTP_USER;
+  if (!from) return jsonResponse({ error: 'sender not configured' }, 500);
+  try {
+    await smtpSend(env, {
+      from: from,
+      fromName: payload.fromName,
+      to: to,
+      subject: subject,
+      text: payload.text || payload.html || '',
+      attachments: payload.attachments || []
+    });
+    return jsonResponse({ ok: true });
+  } catch (err) {
+    return jsonResponse({ ok: false, error: (err && err.message) || String(err) }, 502);
+  }
 }
 
 async function handleWhatsApp(request, env) {

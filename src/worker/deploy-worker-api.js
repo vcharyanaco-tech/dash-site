@@ -30,7 +30,10 @@ const meta = JSON.stringify({
   main_module: 'worker.js',
   compatibility_date: '2026-08-04',
   bindings: [
-    { name: 'AI_INSIGHTS_KV', type: 'kv_namespace', namespace_id: '3aed6a4c7ad842c7b5fba1558a68ab06' }
+    { name: 'AI_INSIGHTS_KV', type: 'kv_namespace', namespace_id: '3aed6a4c7ad842c7b5fba1558a68ab06' },
+    // Same namespace, second binding name — holds the backup:... keys used
+    // by the Node data-sync bridge (persistent-disk stand-in on Render free).
+    { name: 'DATA_BACKUP_KV', type: 'kv_namespace', namespace_id: '3aed6a4c7ad842c7b5fba1558a68ab06' }
   ]
 });
 
@@ -75,6 +78,7 @@ const req = https.request(options, (res) => {
     const result = JSON.parse(data);
     if (result.success) {
       console.log('Worker uploaded successfully.');
+      setSecrets();
       setCronTriggers();
       addRoutes();
     } else {
@@ -86,6 +90,49 @@ const req = https.request(options, (res) => {
 req.on('error', e => { console.error(e); process.exit(1); });
 req.write(bodyBuf);
 req.end();
+
+// SMTP relay credentials live as Worker secrets (never committed). Pass them
+// at deploy time via env vars: SMTP_USER / SMTP_PASS / SMTP_FROM.
+function setSecrets() {
+  const secrets = [
+    ['SMTP_USER', process.env.SMTP_USER],
+    ['SMTP_PASS', process.env.SMTP_PASS],
+    ['SMTP_FROM', process.env.SMTP_FROM]
+  ].filter(function (s) { return s[1]; });
+  if (!secrets.length) {
+    console.log('Secrets: none provided (set SMTP_USER/SMTP_PASS env at deploy for the email relay)');
+    return;
+  }
+  let pending = secrets.length;
+  secrets.forEach(function (s) {
+    const payload = JSON.stringify({ name: s[0], text: s[1], type: 'secret_text' });
+    const opts = {
+      hostname: 'api.cloudflare.com',
+      path: `/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/secrets`,
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${TOKEN}`,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload)
+      }
+    };
+    const req = https.request(opts, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        const r = JSON.parse(data);
+        console.log(`Secret ${s[0]}: ${r.success ? 'set' : 'failed ' + JSON.stringify(r.errors)}`);
+        if (--pending === 0) {
+          // secrets only take effect after the next script upload
+          console.log('Secrets will apply on the next worker upload.');
+        }
+      });
+    });
+    req.on('error', e => console.error('Secret error:', e.message));
+    req.write(payload);
+    req.end();
+  });
+}
 
 // Keep-alive cron: Render free web services spin down after 15 min without
 // traffic; a */10 min trigger keeps the backend warm. Mirrors wrangler.toml.
