@@ -1,44 +1,43 @@
-# Migration Plan — GAS web app stays live; build & test `dash-site` on a separate host first
+# Migration Plan — GAS web app → Node/SQLite port (`dash-site`)
 
-**Goal:** Stand up `dash-site` (the Node/SQLite port of the GAS backend plus the
-website) on its **own separate host** — Railway by default, or another gateway —
-so it can be built, tested and iterated in isolation, **without touching the
-live deployment in any way**.
+**Goal:** Replace the GAS backend at `dashboardharyana.site` with `dash-site`
+(the Node/SQLite port of the GAS backend plus the website) — built and tested on
+a separate Railway host first, then cut over once finalized, keeping GAS as a
+fallback during the soak period.
 
-**Hard constraint (do not violate):** The GAS web app at `dashboardharyana.site`
-**stays live and unchanged** until this project is **fully finalized** by the
-owner. Until then:
-- No cutover of traffic.
-- No re-pointing of the Cloudflare Worker (`dashv1-proxy`) to a new backend.
-- No DNS / zone changes.
-- Do **not** enable GitHub Pages on the live custom domain while GAS owns it.
+**Current status (2026-08-14): ✅ CUT OVER.** `dashboardharyana.site` is now
+served by the Node/SQLite backend through the Cloudflare Worker `dashv1-proxy`
+(SERVER_ORIGIN → Railway). The current dash-site frontend is served through the
+Worker too. GAS remains deployed but is only a manual fallback during the soak
+phase (Phase 5 pending).
 
-**Decision (2026-08-12):** Parallel-deploy `dash-site` to a **staging**
-environment on Railway (free tier by default; Render / Fly.io / plain Docker are
-drop-in alternatives). `dashv1` (GAS) remains the only thing serving the public
-domain. The staging host is a throwaway sandbox: break it, wipe it, re-deploy it
-as often as needed while testing.
+**Hard constraint (current):** No regressions on the live domain. During the
+soak phase the GAS Apps Script project stays untouched as a fallback; no DNS /
+zone changes; no enabling of a custom domain on GitHub Pages (the repo `CNAME`
+is kept per owner decision, but Pages stays pinned to the `*.github.io` URL).
 
 ---
 
 ## Current state (what works today)
 
-| Layer | Live today (GAS, untouched) | Staging (`dash-site` on separate host) | Status |
+| Layer | Live today (Node via Worker) | Staging / backend (`dash-site`) | Status |
 | --- | --- | --- | --- |
-| Records read | `getData()` from sheet | `records.getData()` from SQLite | ✅ Parity |
-| Records CRUD | `RecordService` sheet writes | `records.js` SQL | ✅ Parity |
-| Auth / sessions | Users sheet + CacheService | `auth.js` + `sessions` table | ✅ Parity |
-| Tasks / approvals | hidden sheets | `tasks.js` / `workflow.js` | ✅ Parity |
-| Audit / docs / notifications | hidden sheets | `audit.js` / `documents.js` / `notifications.js` | ✅ Parity |
-| AI insights / WhatsApp | Worker → GAS | Worker `/api/*` (DB-free) | ✅ Parity |
-| Frontend | `app.js` → Worker → GAS | `app.js` → staging host `/api` | ✅ Wired (staging) |
-| Production routing | Worker → GAS | **GAS — unchanged** | 🔒 **Deferred until finalization** |
+| Records read | `records.getData()` from SQLite | same | ✅ Parity |
+| Records CRUD | `records.js` SQL | same | ✅ Parity |
+| Auth / sessions | `auth.js` + `sessions` table | same | ✅ Parity |
+| Tasks / approvals | `tasks.js` / `workflow.js` | same | ✅ Parity |
+| Audit / docs / notifications | `audit.js` / `documents.js` / `notifications.js` | same | ✅ Parity |
+| AI insights / WhatsApp | Worker `/api/*` (token-gated; unconfigured) | same | ⏸ Gated |
+| Frontend | Worker → dash-site repo root (raw CDN) | same files | ✅ Live |
+| Production routing | Worker → Node (SERVER_ORIGIN) | — | ✅ **Cut over** |
+| Email (SMTP) | `mailer.js` → Gmail App Password | same | ✅ Verified |
+| GAS fallback | deployed @243, **not serving traffic** | — | 🔒 Fallback only |
 
 ---
 
 ## Phases
 
-### Phase 0 — Verify parity locally (no code change, no deployment)
+### Phase 0 — Verify parity locally (no code change, no deployment) ✅ DONE
 1. Start the Node server: `cd src/server && npm start` (listens on `:8787`).
 2. Run `node --test tests/smoke.test.js` and `node --test src/tests`.
 3. Open `app.html` with `API_URL` pointed at `:8787/api`; confirm records,
@@ -46,64 +45,72 @@ as often as needed while testing.
 4. Document any feature gaps found (none expected from code review).
 
 ### Phase 1 — Stand up a separate staging host for `dash-site` (Railway) ✅ DONE
-> This is the **first** step now. It does **not** affect the live domain/GAS.
-1. Containerise once: `src/server/Dockerfile` + `.dockerignore` (compiles
-   `better-sqlite3` at build), `railway.json` for the free-tier deploy
-   (DOCKERFILE builder, port `8787`, healthcheck `/api/health`).
-2. Create a **Railway project** (or Render/Fly.io) from the `dash-site` repo's
-   `railway.json`. Do **not** connect any custom domain yet — use Railway's
-   auto-assigned `*.up.railway.app` URL for staging.
-3. Set the runtime env: `PORT=8787`, and persist `data/` (SQLite + uploads) on a
-   mounted volume so the DB survives restarts.
-4. Verify the staging host is healthy:
-   `GET https://<staging>.up.railway.app/api/health` returns `ok`.
-5. Confirm the app boots and the full website is reachable at the staging URL.
+> Staging is live at `https://dash-site-production-07cc.up.railway.app` and
+> serves the full site: `/api/health` ok, `/` landing page, `/app.html`
+> dashboard, and `assets/styles.css` + `assets/site.css` all 200. The
+> Dockerfile bundles the repo-root frontend into the image
+> (`DASH_STATIC_ROOT=/app/www`) so one Railway container serves both API and
+> website. Data (`data/`, SQLite + uploads) persists on a mounted volume.
 
-> **Status (2026-08-12): ✅ Complete.** Staging is live at
-> `https://dash-site-production-07cc.up.railway.app` and serves the full site:
-> `/api/health` ok, `/` landing page, `/app.html` dashboard, and the recovered
-> `assets/styles.css` + `assets/site.css` all 200. The Dockerfile now bundles
-> the repo-root frontend into the image (`DASH_STATIC_ROOT=/app/www`) so one
-> Railway container serves both the API and the website.
+### Phase 2 — Test & build on the staging host (iterate freely) ✅ DONE
+> Completed on 2026-08-13/14. Parity exercised via the API dispatcher and a
+> real-browser flow (headless Chrome over CDP — `verify-browser.cjs`):
+> 14/14 PASS on staging, then **8/8 PASS on the live domain post-cutover**
+> (login → ADMIN, no duplicate users, add update → badge flashes, admin read
+> clears flash with count preserved, server `read_at` persists across reload,
+> cleanup). Notable fixes shipped during this phase:
+> - Dedupe users on boot (UNIQUE index on `lower(trim(email))`).
+> - Submission badges flash until read by an admin (read-based, not 24h).
+> - "Mark all as read" action (admin-only).
+> - ReadAt parity mirrored into the GAS `Submissions.js` (repo copy only).
+> - `nodemailer` dependency added for SMTP (email previously never sent).
 
-### Phase 2 — Test & build on the staging host (iterate freely) 🔄 IN PROGRESS
-1. Import a copy of the live data once on first run: copy the exported CSVs into
-   the host's `data/export/` and run `npm run import` (or bake a seeded DB into
-   the image for a fresh start). This is a **copy** — the live spreadsheet is
-   never modified.
-2. Exercise full parity against the staging URL: CRUD, auth/login, tasks,
-   approvals, reports, notifications, PWA / service worker / offline queue,
-   AI insights, WhatsApp notify.
-3. Harden as needed: `node:22` base for `better-sqlite3@13`, PORT injection,
-   root `Dockerfile` build context, `.railwayignore` to avoid the 413
-   "payload too large" upload error.
-4. Iterate as much as needed — the staging host is disposable.
+### Phase 3 — Finalize (owner sign-off) ✅ DONE
+> Owner reviewed the staging build and authorized the cutover on 2026-08-13.
+> (No separate test domain was needed — the live domain itself is now used for
+> verification during soak.)
 
-### Phase 3 — Finalize (owner sign-off)
-1. Owner reviews the staging build and confirms feature parity + stability.
-2. Optional: point a **separate** test domain/subdomain at the staging host if
-   needed for real-browser/device testing — never the live `dashboardharyana.site`.
-3. Unblock the cutover only when the owner says the project is **fully finalized**.
+### Phase 4 — Cutover ✅ EXECUTED (2026-08-13) — **was** 🔒 DEFERRED
+1. Set `SERVER_ORIGIN` (Worker secret) to the final hosted server URL
+   (`https://dash-site-production-07cc.up.railway.app`).
+2. Re-pointed the Cloudflare Worker `dashv1-proxy` — routes `/api*`,
+   `/macros/*`, `/static/*` now forward to the Node server via
+   `env.SERVER_ORIGIN`; enterprise routes (`/api/ai-insights`,
+   `/api/notify-whatsapp`, `/api/health`) stay local.
+3. Deployed via `node src/worker/deploy-worker-api.js $CLOUDFLARE_API_TOKEN`,
+   with three fixes required before deploy: restored the missing
+   `const path = url.pathname;`, added a bare `POST /api` match, and passed
+   `ctx` to `handleEnterpriseRoute`. Old GAS-proxy worker backed up to
+   `/tmp/dashv1-proxy-live-backup-20260813.js` for rollback.
+4. Verified live end-to-end: `/api/health` ok (worker-local), `POST /api` and
+   `POST /macros/s/.../exec` reach the Node server, login via the live
+   `/macros` path issues a token, and all static routes return 200 with
+   correct content types.
+5. GAS kept untouched as a fallback/reference.
 
-### Phase 4 — Cutover (🔒 DEFERRED — only after finalization, not now)
-1. Set `SERVER_ORIGIN` (Worker env var / secret) to the final hosted server URL.
-2. Re-point the Cloudflare Worker `dashv1-proxy` (routes `/api/*`, `/macros/*`,
-   `/static/*` to the Node server via `env.SERVER_ORIGIN`; enterprise routes
-   `/api/ai-insights`, `/api/notify-whatsapp`, `/api/health` stay local).
-3. Deploy the Worker: `node src/worker/deploy-worker-api.js $CLOUDFLARE_API_TOKEN`
-   (or `wrangler deploy` in `src/worker`).
-4. Verify: `GET <server>/api/health` returns ok, and
-   `POST <worker>/api {function:'getData'}` returns the live records.
-5. Keep `dashv1` (GAS) untouched as a fallback/reference.
+> **Post-cutover follow-up (2026-08-14):** the Worker's static source
+> (`GITHUB_RAW`) was repointed from the frozen `dashv1` repo bundle to the
+> **dash-site repo root**, so the live domain now serves the current frontend
+> (read-based flash UX + "Mark all as read"). `WORKER_API_TOKEN` secret set;
+> `/api/ai-insights` and `/api/notify-whatsapp` are token-gated but
+> unconfigured (no `GEMINI_API_KEY` / WhatsApp secrets yet).
 
-### Phase 5 — Decommission GAS (only after soak, optional)
-1. Stop the time-driven GAS triggers once the Node server runs the equivalent
-   jobs (reminders, AI cache).
-2. Archive the spreadsheet; revoke the Apps Script OAuth scopes if no longer
+### Phase 5 — Decommission GAS 🔄 PENDING SOAK (current phase)
+> GAS is the manual fallback while the Node backend soaks. It is deployed at
+> version **@243** (`AKfycbxPwINC…` — the URL the old dashv1 bundle called)
+> and **has not been modified** (the repo `src/gas/` mirror is stale relative
+> to the live project, so no push was made).
+1. Soak: keep GAS as fallback while the Node server runs the equivalent jobs
+   (reminders, AI cache). Re-run `verify-browser.cjs` against the live domain
+   after any change.
+2. When the owner declares the soak complete, stop the time-driven GAS
+   triggers (reminders, reports).
+3. Archive the spreadsheet; revoke the Apps Script OAuth scopes if no longer
    needed.
 
-> Note: file uploads live on disk under `data/uploads/`. On serverless hosts,
-> move them to R2 / object storage and update `documents.resolveDocumentFile`.
+> Note: file uploads live on disk under `data/uploads/` on the Railway volume.
+> On serverless hosts, move them to R2 / object storage and update
+> `documents.resolveDocumentFile`.
 
 ---
 
@@ -116,11 +123,14 @@ as often as needed while testing.
   a dispatcher entry, so no feature changes.
 
 ## Risks / notes
-- **Live availability is the priority:** none of the staging work may touch
-  `dashboardharyana.site`, the Cloudflare Worker routing, or the GAS script.
+- **Live availability is the priority:** the soak phase must not regress
+  `dashboardharyana.site`. Roll back the Worker (backup at
+  `/tmp/dashv1-proxy-live-backup-20260813.js`) if the Node backend degrades.
 - File uploads currently live on disk under `data/uploads/`; on serverless
   hosts move them to R2 / object storage.
-- Secrets (API keys) already live in Worker env / Script Properties — keep them
-  out of the repo per `AGENTS.md`.
+- Secrets (`SERVER_ORIGIN`, `WORKER_API_TOKEN`) live in Worker env / secrets —
+  keep them out of the repo per `AGENTS.md`.
 - The spreadsheet's "review date background colour" is preserved as the
   `review_bg` column, so review-status logic is byte-for-byte equivalent.
+- The `SESSION_EXPORT_*.md` files record each session's work and the runbook
+  details (Railway project/env/service IDs, token refresh, SMTP vars).
