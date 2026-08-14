@@ -50,9 +50,16 @@ async function putBuf(url, buf) {
 
 /** Download the latest DB + uploads from the KV bridge into DATA_DIR.
  *  Call BEFORE the server opens the SQLite file. No-op when disabled or
- *  when the bridge has no snapshot yet. */
+ *  when the bridge has no snapshot yet.
+ *
+ *  IMPORTANT: only restores when the local DB file is ABSENT (ephemeral
+ *  disk, e.g. Render free after a redeploy). NEVER overwrite an existing
+ *  DB: hosts with a persistent volume (Railway) run rolling deploys where
+ *  the previous instance still has the file open in WAL mode — writing
+ *  over it corrupts the database (observed 2026-08-14). */
 async function restoreData() {
   if (!enabled()) return { restored: false, reason: 'disabled' };
+  if (fs.existsSync(DB_PATH)) return { restored: false, reason: 'local db exists' };
   const out = { restored: false, db: false, uploads: 0 };
   try {
     const dbBuf = await fetchBuf(BASE + '/db', { headers: authHeaders() });
@@ -87,8 +94,9 @@ async function restoreData() {
   return out;
 }
 
-/** Consistent snapshot of the live DB (better-sqlite3 backup API, safe with
- *  WAL) + every file in the uploads dir, pushed to the KV bridge. */
+/** Consistent snapshot of the live DB (VACUUM INTO — a fresh standalone copy,
+ *  safe with WAL and live traffic; falls back to the backup API on older
+ *  SQLite) + every file in the uploads dir, pushed to the KV bridge. */
 async function backupData() {
   if (!enabled()) return { backedUp: false, reason: 'disabled' };
   const out = { backedUp: true, dbBytes: 0, uploads: 0 };
@@ -96,7 +104,11 @@ async function backupData() {
     const { db } = require('./db');
     const tmp = path.join(DATA_DIR, '.dashboard.backup-tmp.db');
     try { fs.unlinkSync(tmp); } catch (e) {}
-    await db.backup(tmp);
+    try {
+      db.exec('VACUUM INTO ' + JSON.stringify(tmp.replace(/\\/g, '/')));
+    } catch (vacErr) {
+      await db.backup(tmp);
+    }
     const buf = fs.readFileSync(tmp);
     try { fs.unlinkSync(tmp); } catch (e) {}
     await putBuf(BASE + '/db', buf);
