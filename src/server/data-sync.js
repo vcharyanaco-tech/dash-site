@@ -66,6 +66,11 @@ async function restoreData() {
     if (dbBuf) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
       fs.writeFileSync(DB_PATH, dbBuf);
+      // A restored snapshot must not be replayed against any stale WAL left
+      // by an earlier boot on the same disk (WAL mode + external restore =
+      // corruption). Drop leftover side files so SQLite opens the copy clean.
+      try { fs.rmSync(DB_PATH + '-wal', { force: true }); } catch (e) {}
+      try { fs.rmSync(DB_PATH + '-shm', { force: true }); } catch (e) {}
       out.db = true;
       out.restored = true;
       console.log('[data-sync] restored dashboard.db (' + dbBuf.length + ' bytes)');
