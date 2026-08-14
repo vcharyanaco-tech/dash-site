@@ -155,6 +155,17 @@ function importRecords() {
   data.forEach(function (cols, i) {
     const row = startRow + i;
     const reviewBg = String(cols[6] || '').trim() === '' ? CONFIG.COLORS.NORMAL : CONFIG.COLORS.NORMAL;
+    // Optional 8th CSV column carries the links JSON (see refresh-snapshot
+    // / export tooling). Kept permissive: older CSVs without the column or
+    // with empty/{} values import cleanly as no-links records.
+    const rawLinks = String(cols[7] || '').trim();
+    let links = '{}';
+    if (rawLinks && rawLinks !== '{}') {
+      try {
+        const parsed = JSON.parse(rawLinks);
+        if (parsed && typeof parsed === 'object') links = rawLinks;
+      } catch (e) { /* not JSON — ignore, keep '{}' */ }
+    }
     stmt.run(
       row,
       String(cols[1] || '').trim(),
@@ -163,7 +174,7 @@ function importRecords() {
       String(cols[4] || '').trim(),
       String(cols[5] || '').trim(),
       String(cols[6] || '').trim(),
-      '{}',
+      links,
       reviewBg,
       Date.now(),
       Date.now()
