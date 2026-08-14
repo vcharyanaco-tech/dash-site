@@ -108,3 +108,82 @@ push (skipped by owner decision).
    enterprise routes should do real work.
 4. Optional: revisit GAS ReadAt parity only if GAS stays as a live fallback
    (would require editing the LIVE project files directly, not repo push).
+
+---
+
+# Session export — 2026-08-14 (cont.): Render migration + link-loss fix (write-triggered sync)
+
+## Context / goal
+Continued from the same day: migrated the whole project from Railway to Render
+(service `srv-d9uqprijobas73bh8ie0`, live at `dashboardharyana.site` via the
+Cloudflare worker bridge), nullified Render's 15-min inactivity sleep via a
+health pinger, worked around the lack of a persistent disk (SQLite lives in
+`/app/data`, synced to Cloudflare KV every 10 min + on shutdown), and fixed a
+recurring "links created in the DB are lost" bug.
+
+## Root cause of the recurring link loss
+- Railway's DB became **corrupt** during migration (290KB file, unreadable
+  records) — it can no longer be a data source. Render's live SQLite DB is the
+  single source of truth.
+- The KV snapshot (what Render restores on boot) lagged the live DB by up to
+  **10 minutes** — backups only ran on the interval and at shutdown. Any link
+  added inside that window vanished on the next Render restart. This was the
+  "links lost again" loop the user kept hitting.
+
+## Fixes shipped (committed + pushed, live on Render)
+1. **Write-triggered backups** (`src/server/data-sync.js` `requestBackup()`):
+   every records/submissions mutation now schedules a KV push shortly after the
+   write (debounced + serialized via `backupInFlight`), so the snapshot tracks
+   the live DB in seconds instead of minutes. Wired into `records.js`
+   `bumpDataGeneration_()` and the `submissions.js` mutations.
+2. **Debounce 3s → 1s** (commit `ec22f8a`): even faster crash recovery — the
+   snapshot updates within ~1s of the last write.
+3. **20s hard timeout on all bridge calls** (`fetchBuf`/`putBuf`): a hung PUT
+   can no longer leave `backupInFlight` stuck forever and stall every later
+   write-backup.
+4. **Links baked into the fresh-boot CSV** (`migration-export/records.csv` +
+   `import-from-gas.js`): the CSV now has an 8th links-JSON column and the
+   importer parses it, so even a boot with an empty KV keeps all links.
+5. **`no-store` on worker backup responses** (`src/worker/worker.js`): the CDN
+   can never serve a stale/corrupt snapshot to the restore path (was biting us
+   all day — stale 401s and a stale 290KB corrupt response got cached).
+
+## Verified end-to-end on the live site
+- Login works (`vcharyanaco@gmail.com` / `Admin@123`, salted pbkdf2 hashes).
+- API shape: `POST /api` `{function, args}`; `login(identifier, password)`
+  with **email** as identifier; `addItem(item, token)` / `deleteItem(row,
+  token)` take the **raw DB row** (row = id + 3, START_ROW=4); KV endpoints use
+  a **Bearer** header (not `?token=`).
+- KV snapshot in sync with live; integrity ok; 0 junk.
+- Write-triggered sync confirmed both directions (add + delete reach KV through
+  the debounce; bursts coalesce into one push 1-3s after the last write).
+
+## Environment notes
+- Render API key: `rnd_zOQwv3O76ZIg7af1MU1xCuzOk9Zv` (used for deploy polling,
+  env var checks, log checks — logs endpoint path was fiddly).
+- Worker token file: `/tmp/worker_api_token.txt` (matches `WORKER_API_TOKEN`
+  secret; CDN cached 401s for ~1h after a secret change — use `?t=` cache
+  busting when probing).
+- Worker domain: `dashboardharyana.site`; backup endpoints:
+  `GET/PUT /api/backup/db` and `/api/backup/uploads`.
+- `data/` is gitignored; the scratch `data/dashboard.db` on this machine is a
+  local dev copy, not the live DB.
+
+## Current git state (dash-site)
+- HEAD: `ec22f8a perf(data-sync): shorten write-backup debounce from 3s to 1s`
+  — pushed, all deploys live, working tree clean.
+- Earlier commits this day: `031bdc4` (20s timeout), `670ec47` (links baked
+  into CSV), plus the worker `no-store` fix.
+
+## Resume checklist (next session)
+1. **Verify the 1s debounce on live** (started but interrupted): write a test
+   record, confirm KV hash changes within ~5s, then delete it by its **raw DB
+   row** (probe scripts were deleted; recreate `tmp-debounce-probe.cjs` from
+   this note). Note: a row-mismatched delete during the interrupted probe
+   removed 2 legit records from live (PMEGP row shifted); the authoritative
+   21-record set is in `migration-export/records.csv` — re-add any missing
+   records by their CSV row if live still shows 19.
+2. Confirm Render keeps the site warm (health pinger still active) and KV
+   stays in sync after the 1s debounce change.
+3. Optional: refresh `migration-export/records.csv` from the live DB again so
+   the baked snapshot carries the newest links.
