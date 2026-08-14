@@ -114,8 +114,24 @@ async function backupData() {
     } catch (vacErr) {
       await db.backup(tmp);
     }
+    // Never let a corrupt snapshot overwrite the good one in KV: verify the
+    // copy is a readable SQLite DB before uploading.
+    let ok = false;
+    try {
+      const check = require('better-sqlite3');
+      const c = new check(tmp, { readonly: true });
+      const integrity = c.prepare('PRAGMA integrity_check').get().integrity_check;
+      const recs = c.prepare('SELECT COUNT(*) c FROM records').get().c;
+      const users = c.prepare('SELECT COUNT(*) c FROM users').get().c;
+      c.close();
+      ok = integrity === 'ok' && recs >= 0 && users >= 0;
+      if (!ok) console.error('[data-sync] snapshot failed integrity check (' + integrity + ') — not pushed');
+    } catch (e) {
+      console.error('[data-sync] snapshot unreadable — not pushed: ' + e.message);
+    }
     const buf = fs.readFileSync(tmp);
     try { fs.unlinkSync(tmp); } catch (e) {}
+    if (!ok) { out.backedUp = false; out.error = 'snapshot failed integrity check'; return out; }
     await putBuf(BASE + '/db', buf);
     out.dbBytes = buf.length;
 
