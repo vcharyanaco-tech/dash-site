@@ -374,7 +374,15 @@ const AI_INSIGHTS_TTL = 3600; // seconds; 1h keeps insights fresh-ish
 function jsonResponse(obj, status, extraHeaders) {
   return new Response(JSON.stringify(obj), {
     status: status || 200,
-    headers: { ...COMMON_HEADERS, 'Content-Type': 'application/json', ...(extraHeaders || {}) },
+    headers: {
+      ...COMMON_HEADERS,
+      'Content-Type': 'application/json',
+      // All /api/* responses are dynamic (secrets, backup snapshots, AI
+      // insights); never let the CDN cache them (a stale 401 was observed
+      // serving in place of the real response on 2026-08-14).
+      'Cache-Control': 'no-store',
+      ...(extraHeaders || {})
+    },
   });
 }
 
@@ -543,7 +551,9 @@ async function handleBackup(request, env, url) {
     if (request.method === 'GET') {
       const v = await kv.get(BACKUP_DB_KEY, 'arrayBuffer');
       if (v === null) return jsonResponse({ error: 'no backup yet' }, 404);
-      return new Response(v, { headers: { ...COMMON_HEADERS, 'Content-Type': 'application/octet-stream' } });
+      // no-store: the restore path must always get the CURRENT snapshot,
+      // never a CDN-cached copy (a stale corrupt DB was observed 2026-08-14).
+      return new Response(v, { headers: { ...COMMON_HEADERS, 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' } });
     }
     if (request.method === 'PUT') {
       const buf = await request.arrayBuffer();
@@ -574,7 +584,8 @@ async function handleBackup(request, env, url) {
     if (request.method === 'GET') {
       const v = await kv.get(key, 'arrayBuffer');
       if (v === null) return jsonResponse({ error: 'not found' }, 404);
-      return new Response(v, { headers: { ...COMMON_HEADERS, 'Content-Type': 'application/octet-stream' } });
+      // no-store: same reasoning as /api/backup/db.
+      return new Response(v, { headers: { ...COMMON_HEADERS, 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' } });
     }
     if (request.method === 'PUT') {
       const buf = await request.arrayBuffer();
