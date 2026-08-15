@@ -1519,6 +1519,67 @@ function itemHasLink_(item) {
   return Object.keys(links).some(function (k) { return !!links[k]; });
 }
 
+/* Draggable column resize for the link-analysis preview table. A handle is
+   appended to each header cell; dragging sets an explicit pixel width on the
+   whole column (header + every body cell). The first drag snapshots the
+   content-sized widths and switches the table to fixed layout so widths stick. */
+function makeTableResizable_(table) {
+  if (!table || table.getAttribute('data-resizable')) return;
+  table.setAttribute('data-resizable', '1');
+  const ths = Array.prototype.slice.call(table.querySelectorAll('thead th'));
+  if (!ths.length) return;
+
+  ths.forEach(function (th, idx) {
+    if (th.querySelector('.col-resizer')) return;
+    const grip = document.createElement('div');
+    grip.className = 'col-resizer';
+    grip.title = 'Drag to resize column';
+    th.appendChild(grip);
+
+    let startX = 0;
+    let startW = 0;
+    grip.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      startX = e.clientX;
+      startW = th.getBoundingClientRect().width;
+      // First drag: freeze current content-sized widths, then use fixed layout.
+      if (table.style.tableLayout !== 'fixed') {
+        ths.forEach(function (t, i) {
+          const w = t.getBoundingClientRect().width;
+          t.style.width = w + 'px';
+          const rows = table.querySelectorAll('tbody tr');
+          for (let r = 0; r < rows.length; r++) {
+            const cell = rows[r].children[i];
+            if (cell) cell.style.width = w + 'px';
+          }
+        });
+        table.style.tableLayout = 'fixed';
+      }
+      grip.classList.add('active');
+      document.body.classList.add('col-resizing');
+
+      function onMove(ev) {
+        const w = Math.max(64, startW + (ev.clientX - startX));
+        th.style.width = w + 'px';
+        const rows = table.querySelectorAll('tbody tr');
+        for (let r = 0; r < rows.length; r++) {
+          const cell = rows[r].children[idx];
+          if (cell) cell.style.width = w + 'px';
+        }
+      }
+      function onUp() {
+        grip.classList.remove('active');
+        document.body.classList.remove('col-resizing');
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  });
+}
+
 function loadCardLink(panel, row) {
   const body = panel.querySelector('.card-ai-body');
   if (!body) return;
@@ -1530,6 +1591,7 @@ function loadCardLink(panel, row) {
       return;
     }
     body.innerHTML = linkAiResultHtml_(data);
+    makeTableResizable_(body.querySelector('.card-ai-table'));
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
     const msg = err && err.message ? err.message : String(err || 'Unknown error');
