@@ -111,7 +111,20 @@ const dispatch = {
   setupEnterpriseAddons: function (args) { return enterprise.setupEnterpriseAddons(); },
   installEnterpriseTriggers: function (args) { return enterprise.installEnterpriseTriggers(); },
   validateEnterpriseConfiguration: function (args) { return enterprise.validateEnterpriseConfiguration(); },
-  getEnterpriseHealth: function (args) { return enterprise.getEnterpriseHealth(); }
+  getEnterpriseHealth: function (args) { return enterprise.getEnterpriseHealth(); },
+
+  // Google Sheet sync (origin spreadsheet <-> SQLite). Admin only.
+  adminSyncFromSheet: function (args) {
+    auth.requireAdmin(A(args, 0));
+    const sync = require('./sync-sheet');
+    return sync.pullFromSheet().then(function (pulled) {
+      return sync.pushToSheet().then(function (pushed) {
+        return { pull: pulled, push: pushed };
+      }).catch(function (pushErr) {
+        return { pull: pulled, push: { pushed: false, ok: false, reason: (pushErr && pushErr.message) || String(pushErr) } };
+      });
+    });
+  }
 };
 
 module.exports = dispatch;

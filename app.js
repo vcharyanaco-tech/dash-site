@@ -94,6 +94,7 @@ const ApiService = {
   adminDeleteUser: function (email) { return apiCall_('adminDeleteUser', email, getAuthToken()); },
   adminResetPassword: function (email, newPassword) { return apiCall_('adminResetPassword', email, newPassword, getAuthToken()); },
   adminEmailAllUsers: function (subject, body) { return apiCall_('adminEmailAllUsers', subject, body, getAuthToken()); },
+  adminSyncFromSheet: function () { return apiCall_('adminSyncFromSheet', getAuthToken()); },
   getMyNotifications: function () { return apiCall_('getMyNotifications', getAuthToken()); },
   generateReviewNotifications: function () { return apiCall_('generateReviewNotifications', getAuthToken()); },
   markNotificationsRead: function (ids) { return apiCall_('markNotificationsRead', ids, getAuthToken()); },
@@ -915,7 +916,7 @@ function renderFathomMeetingList(items) {
   if (status) status.textContent = items.length + ' meeting(s) found \u2014 pick one to pull its notes.';
   let html = '<div class="fathom-meeting-list">';
   items.forEach(function (m, i) {
-    const date = m.createdAt ? new Date(m.createdAt).toLocaleString() : '';
+    const date = m.createdAt ? formatTimestamp(m.createdAt) : '';
     const actionCount = (m.actionItems && m.actionItems.length) || 0;
     html += '<div class="fathom-meeting-item" role="button" tabindex="0" onclick="viewFathomMeeting(' + i + ')">' +
       '<div class="fathom-meeting-title">' + escapeHtml(m.title) + '</div>' +
@@ -1685,7 +1686,20 @@ function formatNotifTime(ts) {
   if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
   if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
   if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
-  return new Date(Number(ts)).toLocaleDateString();
+  return formatTimestamp(ts);
+}
+
+// Formats an epoch-ms timestamp as dd.MM.yyyy HH:mm (matches the project's
+// dd.MM.yyyy date style used for record dates). Returns '' for invalid input.
+function formatTimestamp(ts) {
+  if (!ts) return '';
+  const n = Number(ts);
+  if (!isFinite(n) || n <= 0) return String(ts);
+  const d = new Date(n);
+  if (isNaN(d.getTime())) return String(ts);
+  const pad = function (v) { return String(v).padStart(2, '0'); };
+  return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear() +
+    ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
 }
 
 function toggleNotifications() {
@@ -2159,7 +2173,7 @@ function buildCardHtml(item) {
     .map(function (s) {
       return `
         <div class="card-field submission-display">
-          <span class="field-label submission-display-label">Update by ${escapeHtml(s.email)} <span class="submission-display-time">${escapeHtml(s.createdAt || '')}</span></span>
+          <span class="field-label submission-display-label">Update by ${escapeHtml(s.email)} <span class="submission-display-time">${escapeHtml(formatTimestamp(s.createdAt))}</span></span>
           <div class="field-value preserve-whitespace">${escapeHtml(s.text || '')}</div>
         </div>`;
     }).join('');
@@ -2588,7 +2602,7 @@ function renderAudit() {
     return `
       <tr>
         <td class="audit-check-col">${checkbox}</td>
-        <td class="preserve-whitespace">${escapeHtml(row.timestamp)}</td>
+        <td class="preserve-whitespace">${escapeHtml(formatTimestamp(row.timestampMs != null ? row.timestampMs : row.timestamp))}</td>
         <td class="preserve-whitespace">${escapeHtml(row.user)}</td>
         <td class="preserve-whitespace">${renderLinkableText(row.action)}</td>
         <td class="preserve-whitespace">${renderLinkableText(row.recordId)}</td>
@@ -2737,7 +2751,7 @@ function fallbackCopy(text) {
 
 function auditAsText() {
   return appState.audit.map(function (row) {
-    return [row.timestamp, row.user, row.action, row.recordId, row.details].join('\t');
+    return [formatTimestamp(row.timestampMs != null ? row.timestampMs : row.timestamp), row.user, row.action, row.recordId, row.details].join('\t');
   }).join('\n');
 }
 
@@ -2772,7 +2786,7 @@ function downloadTextFile(filename, text, mimeType) {
 function downloadAuditCsv() {
   const headers = ['Time', 'User', 'Action', 'Record', 'Details'];
   const rows = appState.audit.map(function (row) {
-    return [row.timestamp, row.user, row.action, row.recordId, row.details];
+    return [formatTimestamp(row.timestampMs != null ? row.timestampMs : row.timestamp), row.user, row.action, row.recordId, row.details];
   });
   downloadTextFile('IndiaPostDashboard_Audit_' + new Date().toISOString().slice(0, 10) + '.csv', toCsv([headers].concat(rows)), 'text/csv;charset=utf-8');
   showToast('Audit CSV downloaded', 'success');
@@ -2783,7 +2797,7 @@ function printAudit() {
   const rowsHtml = entries.length ? entries.map(function (row) {
     return `
       <tr>
-        <td class="preserve-whitespace">${escapeHtml(row.timestamp)}</td>
+        <td class="preserve-whitespace">${escapeHtml(formatTimestamp(row.timestampMs != null ? row.timestampMs : row.timestamp))}</td>
         <td>${escapeHtml(row.user)}</td>
         <td>${escapeHtml(row.action)}</td>
         <td>${escapeHtml(row.recordId)}</td>
@@ -2965,8 +2979,7 @@ function printCard(row, includeSubmissions) {
       <div class="sub-block">
         ${subs.map(function (s) {
           return `
-          <div class="sub-item">
-            <div class="sub-meta">${escapeHtml(s.email)} &middot; ${escapeHtml(s.createdAt || '')}</div>
+          <div class="sub-item">              <div class="sub-meta">${escapeHtml(s.email)} &middot; ${escapeHtml(formatTimestamp(s.createdAt))}</div>
             <div class="preserve-whitespace">${escapeHtml(s.text || '')}</div>
           </div>`;
         }).join('')}
@@ -3009,7 +3022,7 @@ function printReport(includeSubmissions) {
           ${subs.map(function (s) {
             return `
             <div class="sub-item">
-              <div class="sub-meta">${escapeHtml(s.email)} &middot; ${escapeHtml(s.createdAt || '')}</div>
+              <div class="sub-meta">${escapeHtml(s.email)} &middot; ${escapeHtml(formatTimestamp(s.createdAt))}</div>
               <div class="preserve-whitespace">${escapeHtml(s.text || '')}</div>
             </div>`;
           }).join('')}
@@ -3207,6 +3220,10 @@ function sendEmailAllUsers() {
 function renderSettings() {
   getEl('mustChangeBanner').classList.toggle('hidden', !appState.mustChange);
 
+  // Google Sheet sync — admin only.
+  const sheetSyncCard = getEl('sheetSyncCard');
+  if (sheetSyncCard) sheetSyncCard.classList.toggle('hidden', !appState.isAdmin);
+
   const usersAdmin = getEl('usersAdmin');
   const userActivityCard = getEl('userActivityCard');
   if (appState.isAdmin && can('users', 'view')) {
@@ -3229,6 +3246,45 @@ function loadUsers() {
   });
 }
 
+/* Pull the latest records + hyperlinks from the origin Google Sheet, then
+   push project changes back (when a write credential is configured). */
+function syncFromSheet() {
+  if (!appState.isAdmin) { showToast('Admin access required', 'warning'); return; }
+  const btn = getEl('syncSheetBtn');
+  const status = getEl('syncSheetStatus');
+  if (!btn || !status) return;
+  btn.disabled = true;
+  status.textContent = 'Syncing with Google Sheet…';
+  status.className = 'form-status';
+  ApiService.adminSyncFromSheet().then(function (data) {
+    const pull = (data && data.pull) || {};
+    const push = (data && data.push) || {};
+    const lines = [];
+    if (pull.pulled) {
+      lines.push('Pull: ' + pull.sheetRows + ' rows from sheet (' + pull.inserted + ' inserted, ' + pull.updated + ' updated).');
+      if (pull.linksRead) lines.push('Hyperlinks read from sheet: ' + pull.linksRead + '.');
+      else lines.push('Hyperlinks: ' + pull.linksSource + '.');
+    } else {
+      lines.push('Pull failed: ' + ((pull && pull.reason) || 'unknown error'));
+    }
+    if (push.pushed) {
+      lines.push('Push: ' + push.rows + ' records written back to sheet' + (push.linkedCells ? ' (' + push.linkedCells + ' linked cells).' : '.'));
+    } else {
+      lines.push('Push: ' + (push.reason || 'not configured') + '.');
+    }
+    status.textContent = lines.join(' ');
+    status.className = 'form-status ' + (pull.pulled && (push.ok || !push.pushed) ? 'success' : 'error');
+    showToast('Sync complete', 'success');
+    refreshData();
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+    status.textContent = 'Sync failed: ' + (err.message || err);
+    status.className = 'form-status error';
+  }).finally(function () {
+    btn.disabled = false;
+  });
+}
+
 function renderUsersTable(users) {
   const tbody = getEl('usersTable').querySelector('tbody');
   tbody.dataset.users = JSON.stringify(users);
@@ -3237,7 +3293,7 @@ function renderUsersTable(users) {
     const office = escapeHtml(u.office || '');
     const resetPending = !!(u.resetRequested && String(u.resetRequested).trim());
     const resetBadge = resetPending
-      ? ' <span class="badge" data-tone="warning" title="Requested at ' + escapeHtml(String(u.resetRequested)) + '">Reset request received</span>'
+      ? ' <span class="badge" data-tone="warning" title="Requested at ' + escapeHtml(formatTimestamp(u.resetRequested)) + '">Reset request received</span>'
       : '';
     return `
       <tr${resetPending ? ' class="row-reset-requested"' : ''}>
@@ -3245,7 +3301,7 @@ function renderUsersTable(users) {
         <td class="preserve-whitespace">${username || '<span class="badge" data-tone="muted">—</span>'}</td>
         <td>${escapeHtml(u.role)}</td>
         <td class="preserve-whitespace">${office || '<span class="badge" data-tone="muted">—</span>'}</td>
-        <td class="preserve-whitespace">${escapeHtml(u.createdAt || '')}</td>
+        <td class="preserve-whitespace">${escapeHtml(formatTimestamp(u.createdAt))}</td>
         <td><button class="btn btn-secondary btn-small" type="button" data-action="reset" data-index="${i}">Reset password</button></td>
         <td><button class="btn btn-secondary btn-small" type="button" data-action="edit" data-index="${i}">Edit</button></td>
         <td><button class="btn btn-danger btn-small" type="button" data-action="delete" data-index="${i}">Delete</button></td>
@@ -3290,7 +3346,7 @@ function renderUserActivity(activity) {
         <li class="activity-recent-item">
           <span class="badge" data-tone="muted">${escapeHtml(row.action)}</span>
           <span class="preserve-whitespace">${escapeHtml(row.user)}</span>
-          <span class="preserve-whitespace activity-recent-time">${escapeHtml(row.timestamp)}</span>
+          <span class="preserve-whitespace activity-recent-time">${escapeHtml(formatTimestamp(row.timestampMs != null ? row.timestampMs : row.timestamp))}</span>
         </li>`;
     }).join('') || '<li class="activity-recent-item">No recent activity.</li>';
   }
@@ -4337,10 +4393,11 @@ const linkFields_ = {
 function updateFieldLinkButton(fieldKey) {
   const btn = document.querySelector('.field-link-btn[data-link-field="' + fieldKey + '"]');
   if (!btn) return;
-  const hasLink = !!(appState.fieldLinks && appState.fieldLinks[fieldKey]);
-  btn.classList.toggle('is-linked', hasLink);
-  btn.textContent = hasLink ? 'Edit link' : 'Link';
-  btn.setAttribute('aria-label', (hasLink ? 'Edit hyperlink for ' : 'Add hyperlink to ') + fieldKey);
+  const list = (appState.fieldLinks && appState.fieldLinks[fieldKey]) || [];
+  const count = Array.isArray(list) ? list.filter(function (l) { return l && l.url; }).length : (list && list.url ? 1 : 0);
+  btn.classList.toggle('is-linked', count > 0);
+  btn.textContent = count > 0 ? 'Edit links (' + count + ')' : 'Link';
+  btn.setAttribute('aria-label', (count > 0 ? 'Edit hyperlinks for ' : 'Add hyperlinks to ') + fieldKey);
 }
 
 function openLinkModal(fieldKey) {
@@ -4348,19 +4405,59 @@ function openLinkModal(fieldKey) {
   const inputId = linkFields_[fieldKey];
   if (!inputId) return;
   appState.linkField = fieldKey;
-  const existing = (appState.fieldLinks && appState.fieldLinks[fieldKey]) || null;
+  const raw = (appState.fieldLinks && appState.fieldLinks[fieldKey]) || [];
+  const existing = Array.isArray(raw) ? raw : (raw && raw.url ? [raw] : []);
   getEl('linkField').value = fieldKey;
-  getEl('linkText').value = existing ? existing.text : '';
-  getEl('linkUrl').value = existing ? existing.url : '';
+  getEl('linkList').innerHTML = '';
+  (existing.length ? existing : [{}]).forEach(function (link) {
+    appendLinkRow_(link || {});
+  });
   const status = getEl('linkStatus');
   if (status) { status.textContent = ''; status.classList.remove('success', 'error'); }
-  setFieldInvalid(getEl('linkText'), '');
-  setFieldInvalid(getEl('linkUrl'), '');
-  const removeBtn = getEl('removeLinkBtn');
-  if (removeBtn) removeBtn.style.display = existing ? '' : 'none';
   openDialog('linkModal');
-  const firstInput = getEl('linkText');
+  const firstInput = getEl('linkList').querySelector('input');
   if (firstInput) firstInput.focus();
+}
+
+function appendLinkRow_(link) {
+  const list = getEl('linkList');
+  if (!list) return;
+  const index = list.children.length;
+  const row = document.createElement('div');
+  row.className = 'link-row';
+  row.innerHTML =
+    '<div class="link-row-head"><span class="link-row-label">Link ' + (index + 1) + '</span>' +
+    (index > 0 ? '<button type="button" class="btn btn-danger btn-small" onclick="removeLinkRow(this)" aria-label="Remove this link">Remove</button>' : '') +
+    '</div>' +
+    '<div class="field">' +
+    '  <label>Display text</label>' +
+    '  <input type="text" class="input link-row-text" placeholder="Link text shown in the field" value="' + escAttr(String(link.text || '')) + '">' +
+    '  <span class="field-error"></span>' +
+    '</div>' +
+    '<div class="field">' +
+    '  <label>Link URL</label>' +
+    '  <input type="text" class="input link-row-url" placeholder="https://example.com" value="' + escAttr(String(link.url || '')) + '">' +
+    '  <span class="field-error"></span>' +
+    '</div>';
+  list.appendChild(row);
+}
+
+function addLinkRow() {
+  appendLinkRow_({});
+}
+
+function removeLinkRow(btn) {
+  const row = btn && btn.closest('.link-row');
+  if (!row) return;
+  const list = getEl('linkList');
+  row.remove();
+  // re-number the remaining rows
+  Array.prototype.forEach.call(list.children, function (child, i) {
+    const label = child.querySelector('.link-row-label');
+    if (label) label.textContent = 'Link ' + (i + 1);
+    const removeBtn = child.querySelector('[onclick^="removeLinkRow"]');
+    if (removeBtn) removeBtn.style.visibility = i === 0 ? 'hidden' : '';
+  });
 }
 
 function closeLinkModal() {
@@ -4379,31 +4476,33 @@ function saveLinkModal(e) {
   e.preventDefault();
   if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
   const fieldKey = getEl('linkField').value;
-  const textEl = getEl('linkText');
-  const urlEl = getEl('linkUrl');
+  const rows = getEl('linkList').querySelectorAll('.link-row');
+  const collected = [];
   let valid = true;
-  valid = setFieldInvalid(textEl, textEl.value.trim() ? '' : 'Display text is required.') && valid;
-  valid = setFieldInvalid(urlEl, urlEl.value.trim() ? '' : 'Link URL is required.') && valid;
+  Array.prototype.forEach.call(rows, function (row) {
+    const textEl = row.querySelector('.link-row-text');
+    const urlEl = row.querySelector('.link-row-url');
+    const text = (textEl && textEl.value || '').trim();
+    const url = (urlEl && urlEl.value || '').trim();
+    if (!text && !url) return; // skip empty rows
+    let rowValid = true;
+    rowValid = setFieldInvalid(textEl, text ? '' : 'Display text is required.') && rowValid;
+    rowValid = setFieldInvalid(urlEl, url ? '' : 'Link URL is required.') && rowValid;
+    if (!rowValid) { valid = false; return; }
+    collected.push({ text: text, url: normalizeLinkUrl_(url) });
+  });
   if (!valid) return;
   if (!appState.fieldLinks) appState.fieldLinks = {};
-  appState.fieldLinks[fieldKey] = {
-    text: textEl.value.trim(),
-    url: normalizeLinkUrl_(urlEl.value)
-  };
+  if (collected.length) {
+    appState.fieldLinks[fieldKey] = collected;
+  } else {
+    delete appState.fieldLinks[fieldKey];
+  }
   // Keep the field's own text as the user typed it: the hyperlink display
-  // text lives in fieldLinks and is rendered below the field text.
+  // texts live in fieldLinks and are rendered below the field text.
   updateFieldLinkButton(fieldKey);
   closeLinkModal();
-  showToast('Hyperlink applied to ' + fieldKey, 'success');
-}
-
-function removeFieldLink() {
-  const fieldKey = getEl('linkField').value;
-  if (!fieldKey) return;
-  if (appState.fieldLinks) delete appState.fieldLinks[fieldKey];
-  updateFieldLinkButton(fieldKey);
-  closeLinkModal();
-  showToast('Hyperlink removed', 'info');
+  showToast(collected.length ? 'Hyperlinks applied to ' + fieldKey : 'Hyperlinks removed', collected.length ? 'success' : 'info');
 }
 
 function resetEditForm() {
@@ -4425,6 +4524,19 @@ function resetEditForm() {
     const el = getEl(id);
     if (el) setFieldInvalid(el, '');
   });
+}
+
+// Returns the current link list for a field as an array of {text, url} (or
+// null when no links are set). Used when saving so the payload carries the
+// multi-link array form the server now expects.
+function readFieldLinks_(fieldKey) {
+  const raw = appState.fieldLinks && appState.fieldLinks[fieldKey];
+  if (!raw) return null;
+  const list = Array.isArray(raw) ? raw : [raw];
+  const cleaned = list.filter(function (l) { return l && l.url; }).map(function (l) {
+    return { text: (l.text || '').trim(), url: String(l.url || '').trim() };
+  });
+  return cleaned.length ? cleaned : null;
 }
 
 function addNewItem() {
@@ -4450,10 +4562,21 @@ function editItem(row) {
   getEl('editFlagged').checked = !!item.flagged;
   appState.fieldLinks = {};
   Object.keys(linkFields_).forEach(function (fieldKey) {
-    const url = item.linkUrls && item.linkUrls[fieldKey];
-    if (url) {
-      const text = (item.linkTexts && item.linkTexts[fieldKey]) || item[fieldKey] || '';
-      appState.fieldLinks[fieldKey] = { text: text, url: url };
+    // Prefer the full per-field link list (array form); fall back to the
+    // legacy single {url, text} shape from linkUrls/linkTexts.
+    const list = (item.links && item.links[fieldKey]) || null;
+    if (Array.isArray(list) && list.length) {
+      appState.fieldLinks[fieldKey] = list.map(function (l) {
+        return { text: (l && l.text) || '', url: (l && l.url) || '' };
+      });
+    } else if (list && list.url) {
+      appState.fieldLinks[fieldKey] = [{ text: list.text || '', url: list.url }];
+    } else {
+      const url = item.linkUrls && item.linkUrls[fieldKey];
+      if (url) {
+        const text = (item.linkTexts && item.linkTexts[fieldKey]) || item[fieldKey] || '';
+        appState.fieldLinks[fieldKey] = [{ text: text, url: url }];
+      }
     }
     updateFieldLinkButton(fieldKey);
   });
@@ -4488,7 +4611,7 @@ function saveEditModal(e) {
     reviewDate: getEl('editReviewDate').value.trim(),
     flagged: getEl('editFlagged').checked,
     links: {
-      action: appState.fieldLinks && appState.fieldLinks.action ? appState.fieldLinks.action : null
+      action: readFieldLinks_('action')
     }
   };
 
@@ -4734,7 +4857,7 @@ function renderSubmissionCard(s) {
     <div class="submission-card">
       <div class="submission-meta">
         <span>${escapeHtml(s.email)}${ownerTag} ${lockedBadge} ${displayedBadge}</span>
-        <span>${escapeHtml(s.createdAt || '')}</span>
+        <span>${escapeHtml(formatTimestamp(s.createdAt))}</span>
       </div>
       <div class="submission-text preserve-whitespace">${escapeHtml(s.text || '')}</div>
       <div class="submission-actions">${editBtn}${lockBtn}${deleteBtn}${displayBtn}${lockNote}</div>

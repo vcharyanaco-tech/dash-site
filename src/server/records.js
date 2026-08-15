@@ -88,6 +88,44 @@ function reviewStatusForRow_(row) {
  * Link helpers
  * ============================================================ */
 
+// A field's links can be stored as a single link object ({url, text}) — the
+// original one-link-per-field format — or as an array of them (the multi-link
+// format). Normalize any input to an array of {url, text}.
+function normalizeLinksField_(value) {
+  if (Array.isArray(value)) {
+    return value
+      .filter(function (l) { return l && l.url; })
+      .map(function (l) {
+        return { url: String(l.url || ''), text: l.text != null ? String(l.text) : '' };
+      });
+  }
+  if (value && typeof value === 'object' && value.url) {
+    return [{ url: String(value.url), text: value.text != null ? String(value.text) : '' }];
+  }
+  return [];
+}
+
+// Normalizes the whole links object ({fieldKey: value|array}) to the array
+// form, dropping empty fields. Used both when reading rows and before storing.
+function normalizeLinksForStorage_(links) {
+  const out = {};
+  if (!links || typeof links !== 'object') return out;
+  Object.keys(links).forEach(function (key) {
+    const normalized = normalizeLinksField_(links[key]);
+    if (normalized.length) out[key] = normalized;
+  });
+  return out;
+}
+
+function parseLinksRow_(raw) {
+  try {
+    const parsed = JSON.parse(raw || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (err) {
+    return {};
+  }
+}
+
 // Older clients appended the link display text to the field value; drop a
 // trailing occurrence so the text isn't duplicated next to the hyperlink.
 function stripTrailingLinkText_(value, linkText) {
@@ -101,16 +139,20 @@ function stripTrailingLinkText_(value, linkText) {
   return s;
 }
 
-function fieldHtml_(value, linkObj) {
-  const link = linkObj && linkObj.url ? linkObj : null;
-  if (link) {
-    const url = absUrl_(link.url);
-    if (!url) return linkifyText_(value);
-    const text = String(link.text || '').trim() || String(value || '');
-    // Show the field's own text first, then a blank line, then the hyperlink.
-    const textHtml = linkifyText_(stripTrailingLinkText_(value, text));
-    const linkHtml = '<a href="' + escHtml_(url) + '" target="_blank" rel="noopener noreferrer" data-embed="1">' + escHtml_(text) + '</a>';
-    return (textHtml ? textHtml + '<br><br>' : '') + linkHtml;
+// Renders a field value plus its hyperlink list. Each link is shown on its
+// own line with a blank line (one line space) between consecutive links, and
+// the field's own text is separated from the first link by a blank line too.
+function fieldHtml_(value, linkValue) {
+  const links = normalizeLinksField_(linkValue);
+  if (links.length) {
+    const textHtml = linkifyText_(stripTrailingLinkText_(value, links[0].text || ''));
+    const linksHtml = links.map(function (link) {
+      const url = absUrl_(link.url);
+      if (!url) return '';
+      const text = String(link.text || '').trim() || String(value || '');
+      return '<a href="' + escHtml_(url) + '" target="_blank" rel="noopener noreferrer" data-embed="1">' + escHtml_(text) + '</a>';
+    }).filter(Boolean).join('<br><br>');
+    return (textHtml ? textHtml + '<br><br>' : '') + linksHtml;
   }
   return linkifyText_(value);
 }
@@ -120,8 +162,6 @@ function fieldHtml_(value, linkObj) {
  * ============================================================ */
 
 function rowToRowSpec_(row) {
-  let links = {};
-  try { links = JSON.parse(row.links || '{}'); } catch (err) { links = {}; }
   return {
     rowNumber: Number(row.row),
     idRaw: row.row - CONFIG.SHEET.START_ROW + 1,
@@ -132,7 +172,7 @@ function rowToRowSpec_(row) {
     responsibility: row.responsibility || '',
     reviewDate: row.review_date || '',
     reviewBg: row.review_bg || CONFIG.COLORS.NORMAL,
-    links: links
+    links: normalizeLinksForStorage_(parseLinksRow_(row.links))
   };
 }
 
@@ -162,7 +202,7 @@ function buildItemFromRowSpec_(rowSpec) {
     }
     let fieldHtml = '';
     if (normalizedLabel.indexOf('date') === -1) {
-      const hasLink = !!(linkObj && linkObj.url);
+      const hasLink = normalizeLinksField_(linkObj).length > 0;
       if (hasLink) {
         fieldHtml = fieldHtml_(formattedValue, linkObj);
       } else if (looksLikeUrl_(formattedValue)) {
@@ -178,10 +218,12 @@ function buildItemFromRowSpec_(rowSpec) {
   const linkUrls = {};
   const linkTexts = {};
   FIELD_KEYS.forEach(function (key) {
-    const l = rowSpec.links[key];
-    if (l && l.url) {
-      linkUrls[key] = String(l.url);
-      if (l.text) linkTexts[key] = String(l.text);
+    const list = rowSpec.links[key] || [];
+    if (list.length) {
+      // First link kept in the legacy per-field shape for AI-insight and
+      // older client code; the full list rides along in `links`.
+      linkUrls[key] = String(list[0].url);
+      if (list[0].text) linkTexts[key] = String(list[0].text);
     }
   });
 
@@ -199,7 +241,9 @@ function buildItemFromRowSpec_(rowSpec) {
     reviewStatus: reviewStatus,
     displayFields: displayFields,
     linkUrls: linkUrls,
-    linkTexts: linkTexts
+    linkTexts: linkTexts,
+    // Full per-field link list (array form) for multi-link editing.
+    links: rowSpec.links
   };
 }
 
@@ -268,7 +312,8 @@ function getData() {
           reviewStatus: reviewStatus,
           displayFields: [],
           linkUrls: {},
-          linkTexts: {}
+          linkTexts: {},
+          links: {}
         };
       });
     }
@@ -415,7 +460,7 @@ function addRecord_(item, token) {
       String(normalized.action || ''),
       String(normalized.responsibility || ''),
       String(normalized.reviewDate || ''),
-      JSON.stringify(normalized.links || {}),
+      JSON.stringify(normalizeLinksForStorage_(normalized.links || {})),
       item.flagged ? CONFIG.COLORS.FLAG : CONFIG.COLORS.NORMAL,
       Date.now(),
       Date.now()
@@ -449,7 +494,7 @@ function updateRecord_(item, token) {
       String(normalized.action || ''),
       String(normalized.responsibility || ''),
       String(normalized.reviewDate || ''),
-      JSON.stringify(normalized.links || {}),
+      JSON.stringify(normalizeLinksForStorage_(normalized.links || {})),
       item.flagged ? CONFIG.COLORS.FLAG : CONFIG.COLORS.NORMAL,
       Date.now(),
       row
