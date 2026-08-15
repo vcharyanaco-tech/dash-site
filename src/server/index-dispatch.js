@@ -124,6 +124,12 @@ const dispatch = {
         return { pull: pulled, push: { pushed: false, ok: false, reason: (pushErr && pushErr.message) || String(pushErr) } };
       });
     });
+  },
+
+  // Auto-sync configuration + last run (periodic background sync). Admin only.
+  getSyncStatus: function (args) {
+    auth.requireAdmin(A(args, 0));
+    return require('./auto-sync').getSyncStatus();
   }
 };
 

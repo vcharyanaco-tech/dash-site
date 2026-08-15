@@ -95,6 +95,7 @@ const ApiService = {
   adminResetPassword: function (email, newPassword) { return apiCall_('adminResetPassword', email, newPassword, getAuthToken()); },
   adminEmailAllUsers: function (subject, body) { return apiCall_('adminEmailAllUsers', subject, body, getAuthToken()); },
   adminSyncFromSheet: function () { return apiCall_('adminSyncFromSheet', getAuthToken()); },
+  adminGetSyncStatus: function () { return apiCall_('adminGetSyncStatus', getAuthToken()); },
   getMyNotifications: function () { return apiCall_('getMyNotifications', getAuthToken()); },
   generateReviewNotifications: function () { return apiCall_('generateReviewNotifications', getAuthToken()); },
   markNotificationsRead: function (ids) { return apiCall_('markNotificationsRead', ids, getAuthToken()); },
@@ -3223,6 +3224,7 @@ function renderSettings() {
   // Google Sheet sync — admin only.
   const sheetSyncCard = getEl('sheetSyncCard');
   if (sheetSyncCard) sheetSyncCard.classList.toggle('hidden', !appState.isAdmin);
+  if (appState.isAdmin) loadAutoSyncStatus();
 
   const usersAdmin = getEl('usersAdmin');
   const userActivityCard = getEl('userActivityCard');
@@ -3282,6 +3284,34 @@ function syncFromSheet() {
     status.className = 'form-status error';
   }).finally(function () {
     btn.disabled = false;
+  });
+}
+
+// Shows the periodic auto-sync configuration + last run in the Settings card.
+function loadAutoSyncStatus() {
+  const el = getEl('autoSyncStatus');
+  if (!el) return;
+  ApiService.adminGetSyncStatus().then(function (data) {
+    const mins = data && data.intervalMinutes;
+    const enabled = !!(data && data.enabled);
+    const parts = [];
+    parts.push(enabled ? 'Auto-sync every ' + mins + ' min' : 'Auto-sync disabled');
+    const last = data && data.lastRun;
+    if (last && last.at) {
+      if (last.error) {
+        parts.push('last run ' + formatTimestamp(last.at) + ' failed: ' + last.error);
+      } else {
+        const pull = last.pull || {};
+        const push = last.push || {};
+        parts.push('last run ' + formatTimestamp(last.at) + ': pulled ' + (pull.sheetRows != null ? pull.sheetRows + ' rows' : '—') +
+          (push && push.pushed ? ', pushed ' + push.rows + ' back' : ''));
+      }
+    } else {
+      parts.push('no run yet');
+    }
+    el.textContent = parts.join(' — ');
+  }).catch(function () {
+    el.textContent = 'Auto-sync status unavailable';
   });
 }
 

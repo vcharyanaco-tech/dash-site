@@ -18,6 +18,7 @@
 
 let timer = null;
 let running = false;
+let lastRun = null; // {at, pull, push} or {at, error} from the most recent pass
 
 /** Resolves the configured interval in minutes (0 = disabled). */
 function intervalMinutes() {
@@ -60,14 +61,28 @@ async function runAutoSyncOnce() {
         linksSource: pulled.linksSource
       }) +
       ' push: ' + JSON.stringify(pushed));
+    lastRun = { at: new Date().toISOString(), pull: pulled, push: pushed };
     return { pull: pulled, push: pushed };
   } catch (err) {
     const message = (err && err.message) || String(err);
     console.error('[auto-sync] run failed: ' + message);
+    lastRun = { at: new Date().toISOString(), error: message };
     return { error: message };
   } finally {
     running = false;
   }
+}
+
+/**
+ * Current auto-sync configuration + most recent run (for the Settings UI).
+ * @returns {{enabled: boolean, intervalMinutes: number, lastRun: Object|null}}
+ */
+function getSyncStatus() {
+  return {
+    enabled: intervalMinutes() > 0,
+    intervalMinutes: intervalMinutes(),
+    lastRun: lastRun
+  };
 }
 
 /**
@@ -98,4 +113,4 @@ function stopAutoSync() {
   }
 }
 
-module.exports = { startAutoSync, stopAutoSync, runAutoSyncOnce, intervalMinutes };
+module.exports = { startAutoSync, stopAutoSync, runAutoSyncOnce, intervalMinutes, getSyncStatus };
