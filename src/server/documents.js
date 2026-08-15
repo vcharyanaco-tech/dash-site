@@ -72,8 +72,11 @@ function deleteDocument_(docId) {
     } catch (err) {
       console.error('Failed to delete document file: ' + err.message);
     }
+    // Remove the KV copy too so a deleted attachment can't resurrect on redeploy.
+    try { require('./data-sync').deleteRemoteFile('uploads', fileKey); } catch (err) {}
   }
   db.prepare('DELETE FROM documents WHERE id = ?').run(String(docId));
+  try { require('./data-sync').requestBackup(); } catch (err) {}
   return true;
 }
 

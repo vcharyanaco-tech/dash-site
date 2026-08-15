@@ -1145,6 +1145,8 @@ function deleteMeetingFile(token, name) {
   } catch (err) {
     return { success: false, message: 'File not found.' };
   }
+  // Remove the KV copy too so the file can't resurrect on the next redeploy.
+  try { require('./data-sync').deleteRemoteFile('meetings', safe); } catch (err) {}
   try { require('./data-sync').requestBackup(); } catch (err) {}
   return { success: true, deleted: safe };
 }

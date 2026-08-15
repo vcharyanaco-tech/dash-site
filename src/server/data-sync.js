@@ -311,6 +311,24 @@ async function backupData() {
   return out;
 }
 
+/** Immediately delete one file's KV copy (kind: 'uploads' | 'meetings'). Used by
+ *  deleteMeetingFile / deleteDocument so a deleted file never resurrects on the
+ *  next redeploy; the hourly orphan sweep remains as a safety net. */
+async function deleteRemoteFile(kind, name) {
+  if (!enabled()) return false;
+  if (kind !== 'uploads' && kind !== 'meetings') return false;
+  const safe = String(name || '');
+  if (!safe || safe.indexOf('/') !== -1 || safe.indexOf('\\') !== -1) return false;
+  try {
+    await fetchWithTimeout_(BASE + '/' + kind + '/' + encodeURIComponent(safe), { method: 'DELETE', headers: authHeaders() });
+    stats.deletesToday++;
+    return true;
+  } catch (err) {
+    console.error('[data-sync] remote delete failed (' + kind + '/' + safe + '): ' + (err && err.message));
+    return false;
+  }
+}
+
 function getBackupStatus() {
   rollBudgetIfNeeded_();
   return {
@@ -381,4 +399,4 @@ function startAutoSync() {
   });
 }
 
-module.exports = { enabled, restoreData, backupData, startAutoSync, requestBackup, getBackupStatus };
+module.exports = { enabled, restoreData, backupData, startAutoSync, requestBackup, getBackupStatus, deleteRemoteFile };
