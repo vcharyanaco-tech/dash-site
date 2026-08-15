@@ -1,8 +1,8 @@
 ﻿/* ==========================================================================
-   India Post Dashboard â€” Design System
+   India Post Dashboard — Design System
    ==========================================================================
    Tokens, typography, spacing, layout, and every component.
-   8px spacing scale Â· Inter typography Â· enterprise palette Â· dark mode.
+   8px spacing scale · Inter typography · enterprise palette · dark mode.
    ========================================================================== */
 
 /* ---------------------------------- Tokens ---------------------------------- */
@@ -1666,13 +1666,13 @@ body.sidebar-collapsed .nav-item.active { box-shadow: inset 0 0 0 2px var(--seco
 .data-table thead th.sortable { cursor: pointer; user-select: none; }
 .data-table thead th.sortable:hover { color: var(--text); }
 .data-table thead th[aria-sort]::after {
-  content: 'â†•';
+  content: '↕';
   margin-left: 6px;
   opacity: .5;
   font-size: 11px;
 }
-.data-table thead th[aria-sort="ascending"]::after { content: 'â†‘'; opacity: 1; }
-.data-table thead th[aria-sort="descending"]::after { content: 'â†“'; opacity: 1; }
+.data-table thead th[aria-sort="ascending"]::after { content: '↑'; opacity: 1; }
+.data-table thead th[aria-sort="descending"]::after { content: '↓'; opacity: 1; }
 
 .data-table tbody tr { transition: background var(--transition); }
 .data-table tbody tr:hover { background: var(--surface-2); }
