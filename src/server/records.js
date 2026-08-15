@@ -408,7 +408,17 @@ function getAppData(token) {
   const summary = buildSummaryFromItems(items);
   const analytics = buildAnalytics_(items);
   const submissionOverview = require('./submissions').getSubmissionOverview_();
+  // Most recent data change across records (and submissions), as a display
+  // date — used by the About dialog's Build row to show the last update.
+  const lastUpdatedRow = db.prepare(
+    'SELECT MAX(updated_at) AS m FROM (SELECT updated_at FROM records UNION ALL SELECT COALESCE(updated_at, created_at) AS updated_at FROM submissions)'
+  ).get();
+  const lastUpdatedMs = Number(lastUpdatedRow && lastUpdatedRow.m);
+  const lastUpdated = isFinite(lastUpdatedMs) && lastUpdatedMs > 0
+    ? formatDate_(new Date(lastUpdatedMs))
+    : today_();
   return {
+    lastUpdated: lastUpdated,
     user: {
       email: context.email,
       username: context.username || '',

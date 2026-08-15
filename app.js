@@ -192,6 +192,7 @@ function can(module, action) {
 /* Apply a full server payload (getAppData shape) to the client state in one
    place so every refresh path keeps the same fields in sync. */
 function applyAppData(data) {
+  appState.lastUpdated = (data && data.lastUpdated) || '';
   appState.items = (data && data.items) || [];
   appState.summary = (data && data.summary) || {};
   appState.analytics = (data && data.analytics) || {};
@@ -5114,7 +5115,9 @@ function toggleDisplaySubmission(id) {
 
 function openAbout() {
   getEl('aboutVersion').textContent = APP_VERSION;
-  getEl('aboutBuild').textContent = APP_BUILD;
+  // Build row shows the last update date (when the dashboard data was last
+  // changed) rather than a hardcoded build string; falls back to APP_BUILD.
+  getEl('aboutBuild').textContent = appState.lastUpdated || APP_BUILD;
   openDialog('aboutModal');
   getEl('profileDropdown').classList.remove('open');
 }
