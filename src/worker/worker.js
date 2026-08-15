@@ -417,12 +417,20 @@ async function forwardToServer(request, url, serverOrigin) {
   const isGetHead = request.method === 'GET' || request.method === 'HEAD';
   const bodyText = isGetHead ? undefined : await request.text();
 
-  const resp = await fetch(target.toString(), {
-    method: request.method,
-    headers: fwd,
-    body: bodyText,
-    redirect: 'follow',
-  });
+  let resp;
+  try {
+    resp = await fetch(target.toString(), {
+      method: request.method,
+      headers: fwd,
+      body: bodyText,
+      redirect: 'follow',
+    });
+  } catch (fwdErr) {
+    return new Response('FORWARD_ERROR: ' + (fwdErr && fwdErr.message) + ' | target=' + target.toString() + ' | SERVER_ORIGIN=' + serverOrigin, {
+      status: 500,
+      headers: COMMON_HEADERS,
+    });
+  }
 
   const newHeaders = new Headers(resp.headers);
   Object.entries(COMMON_HEADERS).forEach(([k, v]) => newHeaders.set(k, v));
