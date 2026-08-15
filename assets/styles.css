@@ -1643,7 +1643,20 @@ body.col-resizing * { cursor: col-resize !important; user-select: none; }
 
 .table-scroll {
   overflow: auto;
-  max-height: 62vh;
+  max-height: 78vh;
+}
+
+/* Vertical resize handle under the records table window. */
+.table-resize-handle {
+  height: 9px;
+  cursor: row-resize;
+  border-top: 1px solid var(--dt-border, var(--border));
+  background: transparent;
+  touch-action: none;
+}
+.table-resize-handle:hover,
+.table-resize-handle:active {
+  background: color-mix(in srgb, var(--dt-header, #da291c) 18%, transparent);
 }
 
 /* Excel "Format as Table → Medium" treatment in the India Post red theme.
@@ -1717,6 +1730,25 @@ body.dark-mode .card-ai-table {
 .data-table tbody tr:last-child td { border-bottom: none; }
 
 .data-table .details-cell { max-width: 320px; }
+
+/* Records table: keep the Actions column pinned to the right edge so it is
+   always visible even when other columns overflow horizontally. */
+#dashboardTable th.dash-actions-col {
+  position: sticky;
+  right: 0;
+  z-index: 6;
+  background: var(--dt-header);
+  box-shadow: -1px 0 0 0 var(--dt-border);
+}
+#dashboardTable tbody td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--dt-row-a);
+  box-shadow: -1px 0 0 0 var(--dt-border);
+}
+#dashboardTable tbody tr:nth-child(even) td:last-child { background: var(--dt-row-b); }
+#dashboardTable tbody tr:hover td:last-child { background: var(--dt-row-hover); }
 
 .data-table .audit-check-col { width: 40px; text-align: center; }
 .data-table th.audit-check-col { padding-left: 6px; padding-right: 6px; }

@@ -174,6 +174,12 @@ const appState = {
   // Persisted "Analyze link" panels: row -> { data, collapsed }. Kept across
   // background refreshes so an analysis stays visible until the user closes it.
   linkAnalysis: {},
+  // Persisted "AI insight" panels — same persistence as the link panels.
+  aiAnalysis: {},
+  // Bumped on every submission mutation (add/update/delete/read-all) so a
+  // background refresh that started BEFORE the mutation can be detected as
+  // stale and discarded instead of reverting the card's submission state.
+  submissionSeq: 0,
   audit: [],
   user: {},
   settings: {},
@@ -1418,7 +1424,12 @@ function toggleCardAi(row, btn) {
   const article = btn.closest('.card');
   if (!article) return;
   let panel = article.querySelector('.card-ai-insight');
-  if (panel) { panel.classList.toggle('card-ai-collapsed'); return; }
+  if (panel) {
+    panel.classList.toggle('card-ai-collapsed');
+    const cached = cachedAiPanel_(row);
+    if (cached) cached.collapsed = panel.classList.contains('card-ai-collapsed');
+    return;
+  }
   panel = document.createElement('div');
   panel.className = 'card-ai-panel card-ai-insight';
   panel.innerHTML = cardAiPanelHtml_();
@@ -1431,11 +1442,17 @@ function collapseCardAi(btn) {
   if (!panel) return;
   panel.classList.add('card-ai-collapsed');
   const rowEl = panel.closest('[data-row]');
-  if (rowEl) {
-    const row = String(rowEl.getAttribute('data-row'));
+  if (!rowEl) return;
+  const row = String(rowEl.getAttribute('data-row'));
+  const isLink = panel.classList.contains('card-link-panel');
+  if (isLink) {
     const cached = cachedLinkPanel_(row);
     if (cached) cached.collapsed = true;
     else persistLinkPanel_(row, null, true);
+  } else {
+    const cached = cachedAiPanel_(row);
+    if (cached) cached.collapsed = true;
+    else persistAiPanel_(row, null, true);
   }
 }
 
@@ -1444,7 +1461,11 @@ function toggleRowAi(row, btn) {
   const tr = btn.closest('tr');
   if (!tr) return;
   const next = tr.nextElementSibling;
-  if (next && next.classList && next.classList.contains('ai-insight-tr')) { next.remove(); return; }
+  if (next && next.classList && next.classList.contains('ai-insight-tr')) {
+    next.remove();
+    delete appState.aiAnalysis[String(row)];
+    return;
+  }
   const panelTr = document.createElement('tr');
   panelTr.className = 'ai-insight-tr';
   const td = document.createElement('td');
@@ -1469,9 +1490,35 @@ function aiBulletsHtml_(text, tag) {
   }).join('');
 }
 
+function cachedAiPanel_(row) {
+  return appState.aiAnalysis[String(row)] || null;
+}
+
+function persistAiPanel_(row, data, collapsed) {
+  appState.aiAnalysis[String(row)] = { data: data || null, collapsed: !!collapsed };
+}
+
+function aiPanelHtmlFromCache_(row) {
+  const cached = cachedAiPanel_(row);
+  if (!cached || !cached.data) return '';
+  return '<div class="card-ai-panel card-ai-insight' + (cached.collapsed ? ' card-ai-collapsed' : '') + '">' +
+    '<div class="card-ai-head">' +
+    '<span class="card-ai-title">AI insight</span>' +
+    '<button class="btn btn-small btn-ghost" type="button" onclick="collapseCardAi(this)">Collapse</button>' +
+    '</div>' +
+    '<div class="card-ai-body">' + aiBulletsHtml_(cached.data.insights || '', 'div') + '</div>' +
+    '</div>';
+}
+
 function loadCardAi(panel, row) {
   const body = panel.querySelector('.card-ai-body');
   if (!body) return;
+  const cached = cachedAiPanel_(row);
+  if (cached && cached.data) {
+    body.innerHTML = aiBulletsHtml_(cached.data.insights || '', 'div');
+    if (cached.collapsed) panel.classList.add('card-ai-collapsed');
+    return;
+  }
   body.innerHTML = '<div class="card-ai-loading">Generating insight…</div>';
   ApiService.getCardAiInsight(row).then(function (data) {
     if (!data || data.success !== true) {
@@ -1479,6 +1526,7 @@ function loadCardAi(panel, row) {
       body.innerHTML = '<div class="card-ai-error">' + escapeHtml(msg) + '</div>';
       return;
     }
+    persistAiPanel_(row, data, false);
     body.innerHTML = aiBulletsHtml_(data.insights || '', 'div');
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
@@ -2098,6 +2146,38 @@ function initApp() {
   // across tbody re-renders, so the widths keep working after any refresh.
   document.querySelectorAll('.data-table').forEach(function (t) { makeTableResizable_(t); });
 
+  // Vertical drag-resize for the records table window (height). The chosen
+  // height is remembered across sessions.
+  (function () {
+    const handle = getEl('dashboardTableResize');
+    const scroller = document.querySelector('#dashboardTableWrap .table-scroll');
+    if (!handle || !scroller) return;
+    const saved = Number(window.localStorage.getItem('dashTableHeight'));
+    if (saved && saved > 200) {
+      scroller.style.maxHeight = 'none';
+      scroller.style.height = saved + 'px';
+    }
+    handle.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      const startY = e.clientY;
+      const startH = scroller.getBoundingClientRect().height;
+      document.body.classList.add('col-resizing');
+      function onMove(ev) {
+        const h = Math.max(240, Math.min(window.innerHeight * 0.92, startH + (ev.clientY - startY)));
+        scroller.style.maxHeight = 'none';
+        scroller.style.height = h + 'px';
+        try { window.localStorage.setItem('dashTableHeight', String(h)); } catch (err) {}
+      }
+      function onUp() {
+        document.body.classList.remove('col-resizing');
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  })();
+
   const token = getAuthToken();
 
   if (!token) {
@@ -2534,6 +2614,7 @@ function buildCardHtml(item) {
       ${showId ? '<div class="card-title preserve-whitespace"><span class="id-badge">#' + escapeHtml(item.id) + '</span></div>' : ''}
       <div class="card-fields">${fieldsHtml || '<div class="card-field"><span class="field-label">Details</span><div class="field-value preserve-whitespace">No details available</div></div>'}${updateFieldsHtml}</div>
       ${showActions ? '<div class="card-footer"><div class="actions">' + actionsHtml + '</div></div>' : ''}
+      ${aiPanelHtmlFromCache_(item.row)}
       ${linkPanelHtmlFromCache_(item.row)}
     </article>`;
 }
@@ -2657,7 +2738,11 @@ function buildTableRowHtml(item) {
       ${appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="event.stopPropagation(); editItem('${escAttr(item.row)}')">Edit</button>` : ''}
       ${appState.isEditor ? `<button class="btn btn-danger btn-small" onclick="event.stopPropagation(); deleteItem('${escAttr(item.row)}')">Delete</button>` : ''}
     </div>`;
-  const persistedPanel = linkPanelHtmlFromCache_(item.row);
+  let persistedPanels = '';
+  const aiPanel = aiPanelHtmlFromCache_(item.row);
+  if (aiPanel) persistedPanels += '<tr class="ai-insight-tr"><td colspan="7">' + aiPanel + '</td></tr>';
+  const linkPanel = linkPanelHtmlFromCache_(item.row);
+  if (linkPanel) persistedPanels += '<tr class="ai-link-tr"><td colspan="7">' + linkPanel + '</td></tr>';
   return `
     <tr class="row-clickable ${item.reviewStatus === 'due' ? 'row-flagged' : ''}" data-row="${escAttr(item.row)}" tabindex="0">
       <td><span class="id-badge">#${escapeHtml(item.id)}</span></td>
@@ -2667,7 +2752,7 @@ function buildTableRowHtml(item) {
       <td class="preserve-whitespace">${escapeHtml(item.reviewDate || '')}</td>
       <td>${statusBadge}</td>
       <td>${actions}</td>
-    </tr>` + (persistedPanel ? '<tr class="ai-link-tr"><td colspan="7">' + persistedPanel + '</td></tr>' : '');
+    </tr>` + persistedPanels;
 }
 
 function renderDashboardTable() {
@@ -4697,10 +4782,24 @@ function autoRefreshTick() {
   if (typeof document !== 'undefined' && document.hidden) return;
   if (document.body.classList.contains('modal-open')) return;
   autoRefreshInFlight = true;
+  const seqAtStart = appState.submissionSeq || 0;
   ApiService.getAppData().then(function (data) {
     autoRefreshInFlight = false;
     if (!data || !data.user || !data.user.loggedIn) {
       setAuthToken('');
+      return;
+    }
+    if ((appState.submissionSeq || 0) !== seqAtStart) {
+      // A submission changed while this request was in flight — the payload is
+      // stale for submission fields and would revert the card's badge/updates.
+      // Discard it and retry shortly so the fresh state wins.
+      if (!appState.refreshRetryScheduled) {
+        appState.refreshRetryScheduled = true;
+        setTimeout(function () {
+          appState.refreshRetryScheduled = false;
+          autoRefreshTick();
+        }, 2000);
+      }
       return;
     }
     applyAppData(data);
@@ -5266,6 +5365,7 @@ function markAllSubmissionsRead() {
   showOverlay('Marking all updates as read…');
   ApiService.markAllSubmissionsRead().then(function (overview) {
     hideOverlay();
+    appState.submissionSeq++;
     appState.submissionCounts = (overview && overview.counts) || {};
     appState.submissionFlash = (overview && overview.flash) || {};
     appState.displayedSubmissions = (overview && overview.displayed) || [];
@@ -5376,6 +5476,7 @@ function submitSubmission() {
     showOverlay('Saving submission…');
     ApiService.updateSubmission(editingId, text).then(function (list) {
       hideOverlay();
+      appState.submissionSeq++;
       appState.submissions = list || [];
       appState.submissionEditingId = '';
       getEl('submissionText').value = '';
@@ -5392,6 +5493,7 @@ function submitSubmission() {
     showOverlay('Submitting update…');
     ApiService.addSubmission(Number(appState.submissionCardRow), appState.submissionCardId, text).then(function (list) {
       hideOverlay();
+      appState.submissionSeq++;
       appState.submissions = list || [];
       appState.submissionCounts[Number(appState.submissionCardRow)] = (list || []).length;
       appState.submissionFlash[Number(appState.submissionCardRow)] = true;
@@ -5450,6 +5552,7 @@ function deleteSubmission(id) {
     if (!ok) return;
     showOverlay('Deleting submission…');
     ApiService.deleteSubmission(id).then(function (list) {
+      appState.submissionSeq++;
       hideOverlay();
       appState.submissions = list || [];
       renderSubmissionList();
