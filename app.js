@@ -390,6 +390,7 @@ function openDialog(id) {
   modal.classList.remove('hidden');
   modal.setAttribute('aria-hidden', 'false');
   document.body.classList.add('modal-open');
+  restoreModalSize_(modal);
   const focusable = modal.querySelector('input:not([type=hidden]), textarea, select, button, [tabindex]');
   if (focusable) focusable.focus();
 }
@@ -401,6 +402,63 @@ function closeDialog(id) {
   modal.setAttribute('aria-hidden', 'true');
   if (!document.querySelector('.modal-backdrop:not(.hidden)')) {
     document.body.classList.remove('modal-open');
+  }
+}
+
+/* ---------------------------------- Drag-resizable windows ---------------------------------- */
+/* Every modal window and the inline analyze/AI panels get a corner grip that
+   drag-resizes them. Modal sizes are remembered per dialog id in localStorage;
+   panel sizes live in the persisted panel state so they survive re-renders. */
+
+function makeModalResizable_(card) {
+  if (!card || card.querySelector('.modal-resize-grip')) return;
+  const grip = document.createElement('div');
+  grip.className = 'modal-resize-grip';
+  grip.title = 'Drag to resize';
+  card.appendChild(grip);
+  grip.addEventListener('mousedown', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX, startY = e.clientY;
+    const rect = card.getBoundingClientRect();
+    const startW = rect.width, startH = rect.height;
+    document.body.classList.add('modal-resizing');
+    function onMove(ev) {
+      const w = Math.max(280, Math.min(window.innerWidth - 32, startW + (ev.clientX - startX)));
+      const h = Math.max(200, Math.min(window.innerHeight - 32, startH + (ev.clientY - startY)));
+      card.style.width = w + 'px';
+      card.style.maxWidth = 'none';
+      card.style.height = h + 'px';
+      card.style.maxHeight = 'none';
+      const modal = card.closest('.modal-backdrop');
+      if (modal && modal.id) {
+        try { window.localStorage.setItem('dashModalSize_' + modal.id, w + 'x' + h); } catch (err) {}
+      }
+    }
+    function onUp() {
+      document.body.classList.remove('modal-resizing');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+function restoreModalSize_(modal) {
+  if (!modal) return;
+  const card = modal.querySelector('.modal-card');
+  if (!card) return;
+  let saved = null;
+  try { saved = window.localStorage.getItem('dashModalSize_' + modal.id); } catch (err) {}
+  if (!saved) return;
+  const m = String(saved).split('x').map(Number);
+  if (m.length !== 2 || !isFinite(m[0]) || !isFinite(m[1])) return;
+  if (m[0] >= 280 && m[1] >= 200) {
+    card.style.width = m[0] + 'px';
+    card.style.maxWidth = 'none';
+    card.style.height = m[1] + 'px';
+    card.style.maxHeight = 'none';
   }
 }
 
@@ -1411,12 +1469,31 @@ function setMeetingRecStatus(msg) {
    (editors and admins). If the record has a linked file, an "Analyze linked
    file" button fetches the link content and runs AI analysis over it. */
 
+/* Inline style carrying a persisted drag-resized panel size, or '' when the
+   panel was never resized. Keeps a resized analyze/AI panel's dimensions
+   across background refreshes and re-renders. */
+function panelSizeStyle_(cached) {
+  if (!cached || !cached.w || !cached.h) return '';
+  return ' style="width:' + cached.w + 'px;max-width:none;height:' + cached.h + 'px;max-height:none;"';
+}
+
+function applyPanelSize_(panel, row, isLink) {
+  if (!panel) return;
+  const cached = isLink ? cachedLinkPanel_(row) : cachedAiPanel_(row);
+  if (!cached || !cached.w || !cached.h) return;
+  panel.style.width = cached.w + 'px';
+  panel.style.maxWidth = 'none';
+  panel.style.height = cached.h + 'px';
+  panel.style.maxHeight = 'none';
+}
+
 function cardAiPanelHtml_() {
   return '<div class="card-ai-head">' +
     '<span class="card-ai-title">AI insight</span>' +
     '<button class="btn btn-small btn-ghost" type="button" onclick="collapseCardAi(this)">Collapse</button>' +
     '</div>' +
-    '<div class="card-ai-body"></div>';
+    '<div class="card-ai-body"></div>' +
+    '<div class="panel-resize-grip" title="Drag to resize"></div>';
 }
 
 function toggleCardAi(row, btn) {
@@ -1495,24 +1572,28 @@ function cachedAiPanel_(row) {
 }
 
 function persistAiPanel_(row, data, collapsed) {
-  appState.aiAnalysis[String(row)] = { data: data || null, collapsed: !!collapsed };
+  const prev = appState.aiAnalysis[String(row)] || {};
+  appState.aiAnalysis[String(row)] = { data: data || null, collapsed: !!collapsed, w: prev.w, h: prev.h };
 }
 
 function aiPanelHtmlFromCache_(row) {
   const cached = cachedAiPanel_(row);
   if (!cached || !cached.data) return '';
-  return '<div class="card-ai-panel card-ai-insight' + (cached.collapsed ? ' card-ai-collapsed' : '') + '">' +
+  return '<div class="card-ai-panel card-ai-insight' + (cached.collapsed ? ' card-ai-collapsed' : '') + '"' +
+    panelSizeStyle_(cached) + '>' +
     '<div class="card-ai-head">' +
     '<span class="card-ai-title">AI insight</span>' +
     '<button class="btn btn-small btn-ghost" type="button" onclick="collapseCardAi(this)">Collapse</button>' +
     '</div>' +
     '<div class="card-ai-body">' + aiBulletsHtml_(cached.data.insights || '', 'div') + '</div>' +
+    '<div class="panel-resize-grip" title="Drag to resize"></div>' +
     '</div>';
 }
 
 function loadCardAi(panel, row) {
   const body = panel.querySelector('.card-ai-body');
   if (!body) return;
+  applyPanelSize_(panel, row, false);
   const cached = cachedAiPanel_(row);
   if (cached && cached.data) {
     body.innerHTML = aiBulletsHtml_(cached.data.insights || '', 'div');
@@ -1540,7 +1621,8 @@ function cardLinkPanelHtml_() {
     '<span class="card-ai-title">Linked file analysis</span>' +
     '<button class="btn btn-small btn-ghost" type="button" onclick="collapseCardAi(this)">Collapse</button>' +
     '</div>' +
-    '<div class="card-ai-body"></div>';
+    '<div class="card-ai-body"></div>' +
+    '<div class="panel-resize-grip" title="Drag to resize"></div>';
 }
 
 function cachedLinkPanel_(row) {
@@ -1548,7 +1630,8 @@ function cachedLinkPanel_(row) {
 }
 
 function persistLinkPanel_(row, data, collapsed) {
-  appState.linkAnalysis[String(row)] = { data: data || null, collapsed: !!collapsed };
+  const prev = appState.linkAnalysis[String(row)] || {};
+  appState.linkAnalysis[String(row)] = { data: data || null, collapsed: !!collapsed, w: prev.w, h: prev.h };
 }
 
 /* Full persisted link panel HTML (head + body filled from the cached result),
@@ -1557,12 +1640,14 @@ function persistLinkPanel_(row, data, collapsed) {
 function linkPanelHtmlFromCache_(row) {
   const cached = cachedLinkPanel_(row);
   if (!cached || !cached.data) return '';
-  return '<div class="card-ai-panel card-link-panel' + (cached.collapsed ? ' card-ai-collapsed' : '') + '">' +
+  return '<div class="card-ai-panel card-link-panel' + (cached.collapsed ? ' card-ai-collapsed' : '') + '"' +
+    panelSizeStyle_(cached) + '>' +
     '<div class="card-ai-head">' +
     '<span class="card-ai-title">Linked file analysis</span>' +
     '<button class="btn btn-small btn-ghost" type="button" onclick="collapseCardAi(this)">Collapse</button>' +
     '</div>' +
     '<div class="card-ai-body">' + linkAiResultHtml_(cached.data) + '</div>' +
+    '<div class="panel-resize-grip" title="Drag to resize"></div>' +
     '</div>';
 }
 
@@ -1679,6 +1764,7 @@ function makeTableResizable_(table) {
 function loadCardLink(panel, row) {
   const body = panel.querySelector('.card-ai-body');
   if (!body) return;
+  applyPanelSize_(panel, row, true);
   // Already analyzed and persisted? Render instantly from the cache so the
   // result survives background refreshes without re-hitting the API.
   const cached = cachedLinkPanel_(row);
@@ -2145,6 +2231,52 @@ function initApp() {
   // users, activity, tasks). Handlers attach once — the header cells persist
   // across tbody re-renders, so the widths keep working after any refresh.
   document.querySelectorAll('.data-table').forEach(function (t) { makeTableResizable_(t); });
+
+  // Drag-resize grip on every modal window. The chosen size is remembered
+  // per dialog id and re-applied in openDialog.
+  document.querySelectorAll('.modal-card').forEach(function (card) { makeModalResizable_(card); });
+
+  // Drag-resize for the inline analyze/AI panels. Delegated on document
+  // because the panels are re-created on every refresh; the size is stored in
+  // the persisted panel state so it survives re-renders.
+  document.addEventListener('mousedown', function (e) {
+    const grip = e.target && e.target.closest ? e.target.closest('.panel-resize-grip') : null;
+    if (!grip) return;
+    const panel = grip.closest('.card-ai-panel');
+    if (!panel) return;
+    const rowEl = panel.closest('[data-row]');
+    if (!rowEl) return;
+    const row = String(rowEl.getAttribute('data-row'));
+    const isLink = panel.classList.contains('card-link-panel');
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX, startY = e.clientY;
+    const rect = panel.getBoundingClientRect();
+    const startW = rect.width, startH = rect.height;
+    const parent = panel.parentElement;
+    const maxW = parent ? Math.max(240, parent.clientWidth - 16) : window.innerWidth - 32;
+    document.body.classList.add('modal-resizing');
+    grip.classList.add('active');
+    function onMove(ev) {
+      const w = Math.max(240, Math.min(maxW, startW + (ev.clientX - startX)));
+      const h = Math.max(140, Math.min(window.innerHeight - 32, startH + (ev.clientY - startY)));
+      panel.style.width = w + 'px';
+      panel.style.maxWidth = 'none';
+      panel.style.height = h + 'px';
+      panel.style.maxHeight = 'none';
+      let cached = isLink ? cachedLinkPanel_(row) : cachedAiPanel_(row);
+      if (!cached) { cached = { data: null, collapsed: false }; if (isLink) persistLinkPanel_(row, null, false); else persistAiPanel_(row, null, false); }
+      cached.w = Math.round(w); cached.h = Math.round(h);
+    }
+    function onUp() {
+      document.body.classList.remove('modal-resizing');
+      grip.classList.remove('active');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
 
   // Vertical drag-resize for the records table window (height). The chosen
   // height is remembered across sessions.
@@ -5352,7 +5484,9 @@ function openSubmissionsModal(row, cardId, onlyMine) {
   getEl('submissionStatus').textContent = '';
   getEl('submissionsOnlyMine').checked = !!onlyMine;
   getEl('submissionText').placeholder = 'Write your update for record #' + cardId + '…';
-  getEl('submissionsModal').classList.remove('hidden');
+  const subsModal = getEl('submissionsModal');
+  subsModal.classList.remove('hidden');
+  restoreModalSize_(subsModal);
   loadSubmissions();
 }
 
