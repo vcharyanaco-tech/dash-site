@@ -75,6 +75,7 @@ const dispatch = {
   getRecordDocuments: function (args) { return documents.getRecordDocuments(A(args, 0), A(args, 1)); },
   uploadDocument: function (args) { return documents.uploadDocument(A(args, 0), A(args, 1), A(args, 2), A(args, 3), A(args, 4), A(args, 5)); },
   deleteDocument: function (args) { return documents.deleteDocument(A(args, 0), A(args, 1)); },
+  setDocumentKeep: function (args) { return documents.setDocumentKeep(A(args, 0), A(args, 1), A(args, 2)); },
 
   getSubmissions: function (args) { return submissions.getSubmissions(A(args, 0), A(args, 1)); },
   addSubmission: function (args) { return submissions.addSubmission(A(args, 0), A(args, 1), A(args, 2), A(args, 3)); },

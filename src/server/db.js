@@ -72,6 +72,15 @@ if (!recordColumns.some(function (c) { return String(c.name) === 'source'; })) {
   db.exec("ALTER TABLE records ADD COLUMN source TEXT NOT NULL DEFAULT 'sheet'");
 }
 
+/* ---- Migration: documents.keep (retention exemption) ----
+   Attachments flagged with keep=1 are never pruned by the retention sweep
+   (DASH_RETENTION_DAYS). Older DBs lack the column; nothing is kept by
+   default. */
+const docColumns = db.prepare('PRAGMA table_info(documents)').all();
+if (!docColumns.some(function (c) { return String(c.name) === 'keep'; })) {
+  db.exec('ALTER TABLE documents ADD COLUMN keep INTEGER NOT NULL DEFAULT 0');
+}
+
 settings.setDb(db);
 
 /* ============================================================

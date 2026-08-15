@@ -54,3 +54,37 @@ test('enforceRetention_ prunes old meetings + uploads but keeps recent ones', as
   // Pruned files are recorded in the daily stats (2 meetings + 1 upload).
   assert.strictEqual(dataSync.getBackupStatus().prunedToday, 3);
 });
+
+test('setDocumentKeep toggles the retention exemption and the sweep honours it', async function () {
+  const documents = require('../documents');
+  db.prepare("INSERT INTO users (email, role, salt, password_hash, must_change, created_by, created_at, username) VALUES ('k@x.com', 'ADMIN', 'salt', 'x', 0, '', 0, 'keepadmin')").run();
+  db.prepare("INSERT INTO sessions (token, email, created_at, expires_at) VALUES ('keeptok', 'k@x.com', 0, " + (Date.now() + 3600000) + ")").run();
+  db.prepare(
+    "INSERT INTO documents (id, record_row, record_id, file_name, file_key, mime_type, size, uploaded_by, uploaded_at) VALUES ('keptdoc', 3, '3', 'keep.pdf', 'keepkey', 'application/pdf', 10, 'k@x.com', 1)"
+  ).run();
+  const upDir = path.join(TMP, 'uploads');
+  fs.writeFileSync(path.join(upDir, 'keepkey'), Buffer.from('keep me'));
+
+  // Toggle on — exempt from retention.
+  const on = documents.setDocumentKeep('keptdoc', 1, 'keeptok');
+  assert.strictEqual(on.success, true);
+  assert.strictEqual(on.keep, 1);
+  // Kept flag shows up in the doc record returned to the client.
+  const listed = documents.getRecordDocuments(3, 'keeptok');
+  assert.strictEqual(listed.length, 1);
+  assert.strictEqual(listed[0].keep, 1);
+
+  // An old kept document survives the sweep.
+  const pruned = await dataSync.enforceRetention_(true);
+  assert.strictEqual(pruned.uploads, 0, 'kept upload not pruned');
+  assert.ok(fs.existsSync(path.join(upDir, 'keepkey')), 'kept file still on disk');
+  assert.strictEqual(db.prepare('SELECT COUNT(*) c FROM documents WHERE id = ?').get('keptdoc').c, 1, 'kept row retained');
+
+  // Toggle off — retention applies again.
+  const off = documents.setDocumentKeep('keptdoc', 0, 'keeptok');
+  assert.strictEqual(off.keep, 0);
+  const pruned2 = await dataSync.enforceRetention_(true);
+  assert.strictEqual(pruned2.uploads, 1, 'un-kept upload now pruned');
+  assert.ok(!fs.existsSync(path.join(upDir, 'keepkey')), 'un-kept file removed');
+  assert.strictEqual(db.prepare('SELECT COUNT(*) c FROM documents WHERE id = ?').get('keptdoc').c, 0, 'un-kept row removed');
+});

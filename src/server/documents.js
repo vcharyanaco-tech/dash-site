@@ -43,7 +43,8 @@ function docRecordFromRow_(row) {
     mimeType: String(row.mime_type || ''),
     size: Number(row.size) || 0,
     uploadedBy: String(row.uploaded_by || '').toLowerCase(),
-    uploadedAt: row.uploaded_at ? Number(row.uploaded_at) : 0
+    uploadedAt: row.uploaded_at ? Number(row.uploaded_at) : 0,
+    keep: row.keep ? 1 : 0
   };
 }
 
@@ -118,6 +119,27 @@ function deleteDocument(docId, token) {
   return { success: true };
 }
 
+/** Toggle a document's retention exemption. keep=1 protects the attachment
+ *  from the DASH_RETENTION_DAYS prune sweep (data-sync.enforceRetention_). */
+function setDocumentKeep(docId, keep, token) {
+  const user = auth.requireLogin(token);
+  const row = db.prepare('SELECT * FROM documents WHERE id = ?').get(String(docId));
+  if (!row) throw new Error('Document not found.');
+  const keepVal = keep ? 1 : 0;
+  db.prepare('UPDATE documents SET keep = ? WHERE id = ?').run(keepVal, String(docId));
+  try { require('./data-sync').requestBackup(); } catch (err) {}
+  try {
+    require('./notifications').notifyStaffLocked_(
+      NOTIFICATION_TYPES.RECORD,
+      keepVal ? 'Document kept' : 'Document un-kept',
+      (keepVal ? 'A document (' + String(docId) + ') was flagged to be kept (exempt from retention) by ' : 'A document (' + String(docId) + ') was un-kept (retention applies again) by ') + user.email + '.',
+      '',
+      user.email
+    );
+  } catch (err) {}
+  return { success: true, keep: keepVal, id: String(docId) };
+}
+
 /* Resolves a file_key to { path, meta } or null. Used by the GET /files/:key route. */
 function resolveDocumentFile(fileKey) {
   const row = db.prepare('SELECT * FROM documents WHERE file_key = ?').get(String(fileKey || ''));
@@ -136,5 +158,6 @@ module.exports = {
   getRecordDocuments,
   uploadDocument,
   deleteDocument,
+  setDocumentKeep,
   resolveDocumentFile
 };

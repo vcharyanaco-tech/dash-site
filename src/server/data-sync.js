@@ -272,7 +272,8 @@ async function enforceRetention_(force) {
   // Uploads: prune by the documents row age, then orphan files by mtime.
   try {
     const { db } = require('./db');
-    const rows = db.prepare('SELECT id, file_key, record_id FROM documents WHERE uploaded_at IS NOT NULL AND uploaded_at < ?').all(cutoff);
+    // Documents flagged keep=1 are exempt from retention.
+    const rows = db.prepare('SELECT id, file_key, record_id FROM documents WHERE uploaded_at IS NOT NULL AND uploaded_at < ? AND (keep IS NULL OR keep = 0)').all(cutoff);
     for (const row of rows) {
       const fk = String(row.file_key || '');
       if (fk) {

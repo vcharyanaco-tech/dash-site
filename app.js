@@ -134,6 +134,7 @@ const ApiService = {
   getRecordDocuments: function (row) { return apiCall_('getRecordDocuments', row, getAuthToken()); },
   uploadDocument: function (row, recordId, fileName, fileBytes, mimeType) { return apiCall_('uploadDocument', row, recordId, fileName, fileBytes, mimeType, getAuthToken()); },
   deleteDocument: function (docId) { return apiCall_('deleteDocument', docId, getAuthToken()); },
+  setDocumentKeep: function (docId, keep) { return apiCall_('setDocumentKeep', docId, keep, getAuthToken()); },
   getSubmissions: function (cardRow) { return apiCall_('getSubmissions', getAuthToken(), cardRow); },
   addSubmission: function (cardRow, cardId, text) { return apiCall_('addSubmission', cardRow, cardId, text, getAuthToken()); },
   updateSubmission: function (submissionId, text) { return apiCall_('updateSubmission', submissionId, text, getAuthToken()); },
@@ -3991,6 +3992,9 @@ function loadRecordDocuments(row) {
         return '<li class="detail-doc-item">' +
           '<button class="btn btn-ghost btn-small" type="button" onclick="openDriveDocPreview(\'' + escAttr(d.driveFileId) + '\', \'' + escAttr(d.fileName) + '\')">Preview</button>' +
           '<a href="' + escapeHtml(d.url || '#') + '" target="_blank" rel="noopener">' + escapeHtml(d.fileName) + '</a>' +
+          (d.keep
+            ? '<button class="btn btn-small btn-keep" type="button" title="Kept: exempt from the 30-day retention cleanup. Click to un-keep." onclick="toggleDocKeep(\'' + escAttr(d.id) + '\', 0, ' + escAttr(row) + ')">Kept ✓</button>'
+            : '<button class="btn btn-ghost btn-small" type="button" title="Keep this document so the 30-day retention cleanup never deletes it." onclick="toggleDocKeep(\'' + escAttr(d.id) + '\', 1, ' + escAttr(row) + ')">Keep</button>') +
           '<button class="btn btn-ghost btn-small" type="button" onclick="deleteRecordDoc(\'' + escAttr(d.id) + '\', \'' + escAttr(row) + '\')">Remove</button>' +
           '</li>';
       }).join('')}</ul>` : '';
@@ -4018,6 +4022,16 @@ function handleDocUpload(row, input) {
     });
   };
   reader.readAsArrayBuffer(file);
+}
+
+function toggleDocKeep(docId, keep, row) {
+  ApiService.setDocumentKeep(docId, keep).then(function (res) {
+    showToast(keep ? 'Document kept — exempt from retention cleanup.' : 'Document un-kept — retention applies again.', 'success');
+    loadRecordDocuments(row);
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+    showToast('Could not update document: ' + (err.message || err), 'error');
+  });
 }
 
 function deleteRecordDoc(docId, row) {

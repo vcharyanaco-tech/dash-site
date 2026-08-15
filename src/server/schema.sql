@@ -117,7 +117,8 @@ CREATE TABLE IF NOT EXISTS documents (
   mime_type TEXT NOT NULL DEFAULT '',
   size INTEGER NOT NULL DEFAULT 0,
   uploaded_by TEXT NOT NULL DEFAULT '',
-  uploaded_at INTEGER
+  uploaded_at INTEGER,
+  keep INTEGER NOT NULL DEFAULT 0
 );
 
 -- Sessions (CacheService replacement).
