@@ -29,6 +29,7 @@
 const crypto = require('crypto');
 const { db } = require('./db');
 const { CONFIG } = require('./config');
+const settings = require('./settings');
 
 const SOURCE_SPREADSHEET_ID =
   process.env.DASH_SPREADSHEET_ID ||
@@ -213,6 +214,22 @@ async function pullFromSheet() {
     }
   });
 
+  // Prune DB rows that no longer exist in the sheet (records deleted by the
+  // owner). Without this, a deleted sheet row stays in the DB forever and the
+  // next push re-creates it in the sheet as a stale duplicate.
+  //
+  // Guard: only rows within the sheet's *previously seen* extent are pruned.
+  // Records created in the app get nextRow_() = MAX(row)+1, which lies beyond
+  // the sheet extent until the next push writes them to the sheet — pruning
+  // them blindly here would destroy them before push can persist them.
+  const prevLastRow = Number(settings.getString('sync.prevSheetLastRow')) || 0;
+  const currentLastRow = START_ROW + rows.length - 1;
+  const pruneUpTo = prevLastRow >= START_ROW ? prevLastRow : currentLastRow;
+  const pruned = db.prepare('DELETE FROM records WHERE row > ? AND row <= ?')
+    .run(currentLastRow, pruneUpTo).changes;
+  if (pruned) console.log('[sync] pruned ' + pruned + ' stale DB row(s) beyond sheet row ' + currentLastRow);
+  settings.set('sync.prevSheetLastRow', String(currentLastRow));
+
   require('./records').invalidateDataCache();
 
   return {
@@ -221,6 +238,7 @@ async function pullFromSheet() {
     sheetRows: rows.length,
     inserted: inserted,
     updated: updated,
+    pruned: pruned,
     linksRead: linkCount,
     linksSource: API_KEY ? 'sheets-api' : (linksError ? 'db-kept (api error: ' + linksError + ')' : 'db-kept (no GOOGLE_SHEETS_API_KEY)')
   };
