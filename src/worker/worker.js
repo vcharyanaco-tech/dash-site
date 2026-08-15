@@ -547,6 +547,7 @@ function hashText(str) {
 
 const BACKUP_DB_KEY = 'backup:db.sqlite';
 const BACKUP_UPLOAD_PREFIX = 'backup:uploads/';
+const BACKUP_MEETING_PREFIX = 'backup:meetings/';
 
 async function handleBackup(request, env, url) {
   const kv = env.DATA_BACKUP_KV;
@@ -589,6 +590,40 @@ async function handleBackup(request, env, url) {
   const m = rest.match(/^\/uploads\/([A-Za-z0-9._-]{1,200})$/);
   if (m) {
     const key = BACKUP_UPLOAD_PREFIX + m[1];
+    if (request.method === 'GET') {
+      const v = await kv.get(key, 'arrayBuffer');
+      if (v === null) return jsonResponse({ error: 'not found' }, 404);
+      // no-store: same reasoning as /api/backup/db.
+      return new Response(v, { headers: { ...COMMON_HEADERS, 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' } });
+    }
+    if (request.method === 'PUT') {
+      const buf = await request.arrayBuffer();
+      await kv.put(key, buf);
+      return jsonResponse({ ok: true, bytes: buf.byteLength });
+    }
+    if (request.method === 'DELETE') {
+      await kv.delete(key);
+      return jsonResponse({ ok: true });
+    }
+    return jsonResponse({ error: 'method not allowed' }, 405);
+  }
+
+  // GET /api/backup/meetings  → { files: [...] } (saved meeting recordings + notes)
+  if (rest === '/meetings') {
+    if (request.method === 'GET') {
+      const list = await kv.list({ prefix: BACKUP_MEETING_PREFIX });
+      const files = list.keys.map((k) => k.name.slice(BACKUP_MEETING_PREFIX.length));
+      return jsonResponse({ ok: true, files: files });
+    }
+    return jsonResponse({ error: 'method not allowed' }, 405);
+  }
+
+  // GET/PUT/DELETE /api/backup/meetings/<name> (names may contain spaces — encoded)
+  const mm = rest.match(/^\/meetings\/([^/]{1,300})$/);
+  if (mm) {
+    let name;
+    try { name = decodeURIComponent(mm[1]); } catch (err) { return jsonResponse({ error: 'bad name' }, 400); }
+    const key = BACKUP_MEETING_PREFIX + name;
     if (request.method === 'GET') {
       const v = await kv.get(key, 'arrayBuffer');
       if (v === null) return jsonResponse({ error: 'not found' }, 404);

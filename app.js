@@ -137,6 +137,9 @@ const ApiService = {
   processMeetingRecording: function (payload) { return apiCall_('processMeetingRecording', payload, getAuthToken()); },
   transcribeMeetingSegment: function (payload) { return apiCall_('transcribeMeetingSegment', payload, getAuthToken()); },
   generateMeetingMinutes: function (payload) { return apiCall_('generateMeetingMinutes', payload, getAuthToken()); },
+  listMeetingFiles: function () { return apiCall_('listMeetingFiles', {}, getAuthToken()); },
+  getMeetingFile: function (name) { return apiCall_('getMeetingFile', { name: name }, getAuthToken()); },
+  deleteMeetingFile: function (name) { return apiCall_('deleteMeetingFile', { name: name }, getAuthToken()); },
   getFathomStatus: function () { return apiCall_('getFathomStatus', getAuthToken()); },
   setFathomApiKey: function (apiKey) { return apiCall_('setFathomApiKey', getAuthToken(), apiKey); },
   listFathomMeetings: function (opts) { return apiCall_('listFathomMeetings', getAuthToken(), opts || {}); },
@@ -228,6 +231,18 @@ function renderAuditPanel() {
     showToast('Could not load audit log: ' + (err.message || err), 'error');
     renderAudit();
   });
+}
+
+function escapeAttr(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function formatFileSize(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
 function escapeHtml(value) {
@@ -401,6 +416,7 @@ function openMeetingNotes() {
   }
   syncMeetingRecFloat_();
   initFathomPanel();
+  loadPreviousMeetings();
 }
 
 function closeMeetingNotes() {
@@ -408,6 +424,109 @@ function closeMeetingNotes() {
   // A live recording keeps running in the background; the floating indicator
   // lets the user reopen the dialog and stop it later.
   syncMeetingRecFloat_();
+}
+
+/* Previous recordings + notes saved on the server (data/meetings). Admin-only,
+   like the rest of the meeting-notes feature. Notes download as editable
+   markdown; audio downloads as the original file. Delete removes from the
+   server (and its backup) permanently. */
+function loadPreviousMeetings() {
+  const list = getEl('previousMeetingsList');
+  if (!list) return;
+  list.innerHTML = '<p class="meeting-notes-hint" style="padding:6px 0;">Loading saved recordings &amp; notes\u2026</p>';
+  ApiService.listMeetingFiles().then(function (data) {
+    if (!data || data.success !== true) {
+      list.innerHTML = '<p class="meeting-notes-hint" style="padding:6px 0;">' +
+        escapeHtml((data && data.message) || 'Could not load saved meetings.') + '</p>';
+      return;
+    }
+    if (!data.total) {
+      list.innerHTML = '<p class="meeting-notes-hint" style="padding:6px 0;">No saved meetings yet — recordings and notes appear here after you transcribe one.</p>';
+      return;
+    }
+    let html = '<div class="meeting-notes-list">';
+    const noteRow = function (f) {
+      return '<div class="fathom-meeting-item">' +
+        '<div class="fathom-meeting-title">' + escapeHtml(f.title) + '</div>' +
+        '<div class="fathom-meeting-meta">' + escapeHtml(formatTimestamp(f.modified)) + ' &middot; ' +
+        formatFileSize(f.size) + ' &middot; notes (.md)</div>' +
+        '<div class="fathom-meeting-actions">' +
+        '<button class="btn btn-small btn-secondary" type="button" onclick="downloadMeetingFile(\'' + escapeAttr(f.name) + '\')">Download</button>' +
+        '<button class="btn btn-small btn-danger-ghost" type="button" onclick="deleteMeetingFile(\'' + escapeAttr(f.name) + '\')">Delete</button>' +
+        '</div></div>';
+    };
+    const audioRow = function (f) {
+      return '<div class="fathom-meeting-item">' +
+        '<div class="fathom-meeting-title">' + escapeHtml(f.title) + '</div>' +
+        '<div class="fathom-meeting-meta">' + escapeHtml(formatTimestamp(f.modified)) + ' &middot; ' +
+        formatFileSize(f.size) + ' &middot; recording</div>' +
+        '<div class="fathom-meeting-actions">' +
+        '<button class="btn btn-small btn-secondary" type="button" onclick="downloadMeetingFile(\'' + escapeAttr(f.name) + '\')">Download</button>' +
+        '<button class="btn btn-small btn-danger-ghost" type="button" onclick="deleteMeetingFile(\'' + escapeAttr(f.name) + '\')">Delete</button>' +
+        '</div></div>';
+    };
+    (data.notes || []).forEach(function (f) { html += noteRow(f); });
+    (data.audio || []).forEach(function (f) { html += audioRow(f); });
+    html += '</div>';
+    list.innerHTML = html;
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+    list.innerHTML = '<p class="meeting-notes-hint" style="padding:6px 0;">' +
+      escapeHtml(err && err.message ? err.message : String(err)) + '</p>';
+  });
+}
+
+function downloadMeetingFile(name) {
+  if (!name) return;
+  showOverlay('Preparing download\u2026');
+  ApiService.getMeetingFile(name).then(function (data) {
+    hideOverlay();
+    if (!data || data.success !== true) {
+      showToast((data && data.message) || 'Could not download the file.', 'error');
+      loadPreviousMeetings();
+      return;
+    }
+    let bytes;
+    try {
+      bytes = atob(data.base64);
+    } catch (err) {
+      showToast('Could not decode the file.', 'error');
+      return;
+    }
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    const blob = new Blob([arr], { type: data.mimeType || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = data.name || name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    showToast('Downloaded ' + (data.name || name), 'success');
+  }).catch(function (err) {
+    hideOverlay();
+    if (handleServerFailure(err)) return;
+    showToast('Download failed: ' + (err && err.message ? err.message : String(err)), 'error');
+  });
+}
+
+function deleteMeetingFile(name) {
+  if (!name) return;
+  if (!window.confirm('Delete \u201C' + name + '\u201D from the server? This cannot be undone.')) return;
+  ApiService.deleteMeetingFile(name).then(function (data) {
+    if (data && data.success === true) {
+      showToast('Deleted ' + name, 'success');
+    } else {
+      showToast((data && data.message) || 'Could not delete the file.', 'error');
+    }
+    loadPreviousMeetings();
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+    showToast('Delete failed: ' + (err && err.message ? err.message : String(err)), 'error');
+    loadPreviousMeetings();
+  });
 }
 
 function processMeetingNotes() {
@@ -747,6 +866,8 @@ function renderMeetingMinutes(data) {
   }
   html += '</div>';
   body.innerHTML = html;
+  // A fresh transcription just saved new audio + notes on the server.
+  loadPreviousMeetings();
 }
 
 function toggleMeetingTranscript() {

@@ -40,7 +40,12 @@ const helpers = require('./helpers');
 const auth = require('./auth');
 const records = require('./records');
 
-const MEETINGS_DIR = path.join(__dirname, '..', '..', 'data', 'meetings');
+// Same DASH_DATA_DIR convention as db.js / data-sync.js so saved recordings
+// land beside the DB (on Render: /app/data) and get backed up to the KV bridge.
+const MEETINGS_DIR = path.join(
+  process.env.DASH_DATA_DIR || path.join(__dirname, '..', '..', 'data'),
+  'meetings'
+);
 
 /* ============================================================
  * Script-Properties replacement
@@ -424,11 +429,12 @@ async function runAiProvider_(provider, apiKey, model, prompt, systemPrompt) {
   }
 }
 
-async function generateAiText_(prompt, systemPrompt) {
+async function generateAiText_(prompt, systemPrompt, opts) {
+  opts = opts || {};
   const ai = (ENTERPRISE_SETTINGS || {}).AI_INSIGHTS || {};
-  const provider = (spGet_('AI_PROVIDER') || ai.provider || 'openrouter').toLowerCase();
+  const provider = (opts.provider || spGet_('AI_PROVIDER') || ai.provider || 'openrouter').toLowerCase();
   const apiKey = spGet_(aiKeyPropName_(provider)) || ai.apiKey || '';
-  const model = spGet_('AI_MODEL') || ai.model || aiDefaultModel_(provider);
+  const model = opts.model || spGet_('AI_MODEL') || ai.model || aiDefaultModel_(provider);
 
   let result = await runAiProvider_(provider, apiKey, model, prompt, systemPrompt);
   if (result.success) return result;
@@ -835,7 +841,10 @@ async function transcribeAndBuildMinutes_(title, bytes, mimeType, fileName) {
   if (!transcript) return { success: false, message: 'No speech was detected in the recording.' };
 
   const minutesPrompt = 'Meeting title: ' + title + '\n\nTranscript:\n' + transcript.substring(0, ENTERPRISE_AI_TRANSCRIPT_MAX_CHARS);
-  const ai = await generateAiText_(minutesPrompt, ENTERPRISE_AI_MEETING_SYSTEM_PROMPT);
+  // Minutes are drafted by Groq (llama-3.3-70b) — the key is required for
+  // transcription anyway — with the Kilo free fallback if Groq is unavailable.
+  const ai = await generateAiText_(minutesPrompt, ENTERPRISE_AI_MEETING_SYSTEM_PROMPT,
+    { provider: 'groq', model: 'llama-3.3-70b-versatile' });
   let minutes = { summary: '', decisions: [], actionItems: [], risks: [] };
   let minutesText = '';
   if (ai.success) {
@@ -886,6 +895,8 @@ async function processMeetingRecording(payload, token) {
   const result = await transcribeAndBuildMinutes_(title, bytes, mimeType, fileName);
   if (!result.success) return { success: false, message: result.message, driveAudio: driveAudio };
   result.driveAudio = driveAudio;
+  // Persist the saved audio + minutes quickly so a redeploy doesn't lose them.
+  try { require('./data-sync').requestBackup(); } catch (err) {}
   return result;
 }
 
@@ -922,7 +933,9 @@ async function generateMeetingMinutes(payload, token) {
 
   const minutesPrompt = 'Meeting title: ' + title + '\n\nTranscript:\n' +
     transcript.substring(0, ENTERPRISE_AI_TRANSCRIPT_MAX_CHARS);
-  const ai = await generateAiText_(minutesPrompt, ENTERPRISE_AI_MEETING_SYSTEM_PROMPT);
+  // Groq first (key required for transcription anyway), Kilo free fallback.
+  const ai = await generateAiText_(minutesPrompt, ENTERPRISE_AI_MEETING_SYSTEM_PROMPT,
+    { provider: 'groq', model: 'llama-3.3-70b-versatile' });
   let minutes = { summary: '', decisions: [], actionItems: [], risks: [] };
   let minutesText = '';
   if (ai.success) {
@@ -1064,6 +1077,79 @@ async function getFathomMeetingContent(token, recordingId) {
 }
 
 /* ============================================================
+ * Meeting library (saved recordings + minutes on this server)
+ * ============================================================ */
+
+function safeMeetingFileName_(name) {
+  const base = String(name || '').trim();
+  if (!base || base === '.' || base === '..') return '';
+  if (base.indexOf('/') !== -1 || base.indexOf('\\') !== -1) return '';
+  if (base.indexOf('\0') !== -1) return '';
+  const dir = path.resolve(MEETINGS_DIR);
+  const full = path.resolve(path.join(dir, base));
+  if (full.indexOf(dir + path.sep) !== 0 && full !== dir) return '';
+  return base;
+}
+
+function meetingTitleFromFile_(name) {
+  const base = String(name || '').replace(/\.[a-z0-9]{2,5}$/i, '');
+  return base.replace(/_\d{4}-\d{2}-\d{2}_\d{4}$/, '').replace(/_/g, ' ').trim() || base;
+}
+
+function listMeetingFiles(token) {
+  auth.requireAdmin(token);
+  ensureMeetingsDir_();
+  let names = [];
+  try { names = fs.readdirSync(MEETINGS_DIR); } catch (err) { names = []; }
+  const audio = [];
+  const notes = [];
+  names.forEach(function (name) {
+    if (!name || name.indexOf('.') === 0) return;
+    let st;
+    try { st = fs.statSync(path.join(MEETINGS_DIR, name)); } catch (err) { return; }
+    if (!st.isFile()) return;
+    const info = {
+      name: name,
+      size: st.size,
+      modified: st.mtime.toISOString(),
+      title: meetingTitleFromFile_(name)
+    };
+    if (/\.md$/i.test(name)) notes.push(info);
+    else audio.push(info);
+  });
+  audio.sort(function (a, b) { return b.modified.localeCompare(a.modified); });
+  notes.sort(function (a, b) { return b.modified.localeCompare(a.modified); });
+  return { success: true, audio: audio, notes: notes, total: audio.length + notes.length };
+}
+
+function getMeetingFile(token, name) {
+  auth.requireAdmin(token);
+  const safe = safeMeetingFileName_(name);
+  if (!safe) return { success: false, message: 'Invalid file name.' };
+  let bytes;
+  try {
+    bytes = fs.readFileSync(path.join(MEETINGS_DIR, safe));
+  } catch (err) {
+    return { success: false, message: 'File not found.' };
+  }
+  const mime = /\.md$/i.test(safe) ? 'text/markdown' : 'application/octet-stream';
+  return { success: true, name: safe, mimeType: mime, size: bytes.length, base64: bytes.toString('base64') };
+}
+
+function deleteMeetingFile(token, name) {
+  auth.requireAdmin(token);
+  const safe = safeMeetingFileName_(name);
+  if (!safe) return { success: false, message: 'Invalid file name.' };
+  try {
+    fs.unlinkSync(path.join(MEETINGS_DIR, safe));
+  } catch (err) {
+    return { success: false, message: 'File not found.' };
+  }
+  try { require('./data-sync').requestBackup(); } catch (err) {}
+  return { success: true, deleted: safe };
+}
+
+/* ============================================================
  * Offline queue replay
  * ============================================================ */
 
@@ -1191,6 +1277,9 @@ module.exports = {
   processMeetingRecording,
   transcribeMeetingSegment,
   generateMeetingMinutes,
+  listMeetingFiles,
+  getMeetingFile,
+  deleteMeetingFile,
   getFathomStatus,
   listFathomMeetings,
   getFathomMeetingContent,

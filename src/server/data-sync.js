@@ -22,6 +22,7 @@ const path = require('path');
 const DATA_DIR = process.env.DASH_DATA_DIR || path.join(__dirname, '..', '..', 'data');
 const DB_PATH = path.join(DATA_DIR, 'dashboard.db');
 const UPLOAD_DIR = process.env.DASH_UPLOAD_DIR || path.join(DATA_DIR, 'uploads');
+const MEETINGS_DIR = path.join(DATA_DIR, 'meetings');
 
 const BASE = (process.env.DATA_SYNC_URL || '').replace(/\/+$/, '');
 const TOKEN = process.env.WORKER_API_TOKEN || '';
@@ -75,7 +76,7 @@ async function putBuf(url, buf) {
 async function restoreData() {
   if (!enabled()) return { restored: false, reason: 'disabled' };
   if (fs.existsSync(DB_PATH)) return { restored: false, reason: 'local db exists' };
-  const out = { restored: false, db: false, uploads: 0 };
+  const out = { restored: false, db: false, uploads: 0, meetings: 0 };
   try {
     const dbBuf = await fetchBuf(BASE + '/db', { headers: authHeaders() });
     if (dbBuf) {
@@ -108,6 +109,25 @@ async function restoreData() {
         }
       }
     }
+    // Saved meeting recordings + minutes, same ephemeral-disk story as uploads.
+    const meetResp = await fetch(BASE + '/meetings', { headers: authHeaders() });
+    if (meetResp.ok) {
+      const list = await meetResp.json();
+      if (list && Array.isArray(list.files)) {
+        fs.mkdirSync(MEETINGS_DIR, { recursive: true });
+        for (const name of list.files) {
+          const buf = await fetchBuf(BASE + '/meetings/' + encodeURIComponent(name), { headers: authHeaders() });
+          if (buf) {
+            fs.writeFileSync(path.join(MEETINGS_DIR, name), buf);
+            out.meetings++;
+          }
+        }
+        if (out.meetings) {
+          out.restored = true;
+          console.log('[data-sync] restored ' + out.meetings + ' meeting file(s)');
+        }
+      }
+    }
   } catch (err) {
     console.error('[data-sync] restore failed: ' + (err && err.message));
   }
@@ -119,7 +139,7 @@ async function restoreData() {
  *  SQLite) + every file in the uploads dir, pushed to the KV bridge. */
 async function backupData() {
   if (!enabled()) return { backedUp: false, reason: 'disabled' };
-  const out = { backedUp: true, dbBytes: 0, uploads: 0 };
+  const out = { backedUp: true, dbBytes: 0, uploads: 0, meetings: 0 };
   try {
     const { db } = require('./db');
     const tmp = path.join(DATA_DIR, '.dashboard.backup-tmp.db');
@@ -161,7 +181,18 @@ async function backupData() {
       await putBuf(BASE + '/uploads/' + encodeURIComponent(name), fs.readFileSync(p));
       out.uploads++;
     }
-    console.log('[data-sync] backup pushed: db=' + out.dbBytes + 'B, uploads=' + out.uploads);
+    let meetNames = [];
+    try { meetNames = fs.readdirSync(MEETINGS_DIR); } catch (e) {}
+    for (const name of meetNames) {
+      if (name.indexOf('.') === 0) continue;
+      const p = path.join(MEETINGS_DIR, name);
+      let st;
+      try { st = fs.statSync(p); } catch (e) { continue; }
+      if (!st.isFile()) continue;
+      await putBuf(BASE + '/meetings/' + encodeURIComponent(name), fs.readFileSync(p));
+      out.meetings++;
+    }
+    console.log('[data-sync] backup pushed: db=' + out.dbBytes + 'B, uploads=' + out.uploads + ', meetings=' + out.meetings);
   } catch (err) {
     out.backedUp = false;
     out.error = (err && err.message) || String(err);
