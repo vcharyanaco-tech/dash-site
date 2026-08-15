@@ -116,6 +116,9 @@ const dispatch = {
   validateEnterpriseConfiguration: function (args) { return enterprise.validateEnterpriseConfiguration(); },
   getEnterpriseHealth: function (args) { return enterprise.getEnterpriseHealth(); },
 
+  // Full database backup download (VACUUM'd SQLite copy). Admin only.
+  exportFullBackup: function (args) { return require('./full-backup').exportFullBackup(A(args, 0)); },
+
   // Google Sheet sync (origin spreadsheet <-> SQLite). Admin only.
   adminSyncFromSheet: function (args) {
     auth.requireAdmin(A(args, 0));

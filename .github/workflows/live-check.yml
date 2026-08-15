@@ -1,0 +1,20 @@
+name: Live health check
+
+on:
+  schedule:
+    # 07:30 IST (02:00 UTC) — after the 06:00 IST wake-up so the Render
+    # instance is warm. A failing run emails the repo owner (GitHub's
+    # default workflow-failure notification).
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  live-check:
+    name: Live health + data + static check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run live checks
+        run: node scripts/live-check.cjs

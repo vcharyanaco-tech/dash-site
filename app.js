@@ -114,6 +114,7 @@ const ApiService = {
   adminEmailAllUsers: function (subject, body) { return apiCall_('adminEmailAllUsers', subject, body, getAuthToken()); },
   adminSyncFromSheet: function () { return apiCall_('adminSyncFromSheet', getAuthToken()); },
   adminPreviewSyncFromSheet: function () { return apiCall_('adminPreviewSyncFromSheet', getAuthToken()); },
+  exportFullBackup: function () { return apiCall_('exportFullBackup', getAuthToken()); },
   getSyncStatus: function () { return apiCall_('getSyncStatus'); },
   getMyNotifications: function () { return apiCall_('getMyNotifications', getAuthToken()); },
   generateReviewNotifications: function () { return apiCall_('generateReviewNotifications', getAuthToken()); },
@@ -3406,9 +3407,11 @@ function sendEmailAllUsers() {
 function renderSettings() {
   getEl('mustChangeBanner').classList.toggle('hidden', !appState.mustChange);
 
-  // Google Sheet sync — admin only.
+  // Google Sheet sync + full backup — admin only.
   const sheetSyncCard = getEl('sheetSyncCard');
   if (sheetSyncCard) sheetSyncCard.classList.toggle('hidden', !appState.isAdmin);
+  const backupCard = getEl('backupCard');
+  if (backupCard) backupCard.classList.toggle('hidden', !appState.isAdmin);
   if (appState.isAdmin) loadAutoSyncStatus();
 
   const usersAdmin = getEl('usersAdmin');
@@ -3439,6 +3442,47 @@ function loadUsers() {
    always preserved (the pull never prunes app-created rows, and links are
    merged, not replaced). */
 let syncPreviewData = null;
+
+function downloadFullBackup() {
+  if (!appState.isAdmin) { showToast('Admin access required', 'warning'); return; }
+  const status = getEl('backupStatus');
+  if (status) { status.textContent = 'Building backup…'; status.className = 'form-status'; }
+  showOverlay('Building backup…');
+  ApiService.exportFullBackup().then(function (data) {
+    hideOverlay();
+    if (!data || data.success !== true) {
+      const msg = (data && data.message) || 'Could not build the backup.';
+      if (status) { status.textContent = msg; status.className = 'form-status error'; }
+      showToast(msg, 'error');
+      return;
+    }
+    let bin;
+    try { bin = atob(data.base64); } catch (err) {
+      if (status) { status.textContent = 'Could not decode the backup file.'; status.className = 'form-status error'; }
+      return;
+    }
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    const blob = new Blob([arr], { type: data.mimeType || 'application/x-sqlite3' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = data.name || 'india-post-dashboard-backup.db';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    if (status) { status.textContent = 'Downloaded ' + (data.name || '') + ' (' + formatFileSize(data.size) + ').';
+      status.className = 'form-status'; }
+    showToast('Full backup downloaded.', 'success');
+  }).catch(function (err) {
+    hideOverlay();
+    if (handleServerFailure(err)) return;
+    const msg = err && err.message ? err.message : String(err);
+    if (status) { status.textContent = msg; status.className = 'form-status error'; }
+    showToast('Backup failed: ' + msg, 'error');
+  });
+}
 
 function syncFromSheet() {
   if (!appState.isAdmin) { showToast('Admin access required', 'warning'); return; }

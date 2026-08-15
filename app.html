@@ -397,6 +397,20 @@
               <p class="section-copy muted" id="autoSyncStatus"></p>
               <p class="section-copy muted" id="syncSheetHint">The project runs from its own database and never depends on the spreadsheet being reachable. Clicking Sync pulls the sheet's latest records and hyperlinks into the project. Changes are previewed first — nothing is applied until you confirm. Records and links you add in the dashboard are always preserved, even if they don't exist in the sheet. No automatic background sync runs.</p>
             </div>
+
+            <div id="backupCard" class="settings-card hidden">
+              <div class="settings-card-head">
+                <h3 class="text-subheading">Backup</h3>
+                <p class="section-copy">Download a full copy of the project database (records, submissions, tasks, users, audit, settings, documents) as a standalone SQLite file. Keep it offline — it can be inspected or restored with any SQLite tool.</p>
+              </div>
+              <div class="settings-card-actions">
+                <button class="btn btn-secondary" type="button" onclick="downloadFullBackup()">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  Download full backup
+                </button>
+              </div>
+              <div id="backupStatus" class="form-status" aria-live="polite"></div>
+            </div>
           </div>
 
           <div id="usersAdmin" class="settings-card hidden">

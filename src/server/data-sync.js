@@ -228,7 +228,8 @@ async function backupData() {
     const tmp = path.join(DATA_DIR, '.dashboard.backup-tmp.db');
     try { fs.unlinkSync(tmp); } catch (e) {}
     try {
-      db.exec('VACUUM INTO ' + JSON.stringify(tmp.replace(/\\/g, '/')));
+      // Single-quoted SQL string: SQLite parses double quotes as an identifier.
+      db.exec("VACUUM INTO '" + String(tmp).replace(/'/g, "''") + "'");
     } catch (vacErr) {
       await db.backup(tmp);
     }

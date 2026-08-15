@@ -23,13 +23,45 @@ import { connect } from 'cloudflare:sockets';
 
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vcharyanaco-tech/dash-site/main';
 
+// ── Trusted origins for CORS ────────────────────────────────────────────────
+// Access-Control-Allow-Origin is echoed ONLY when the request's Origin matches
+// one of these (same list the old GAS-era worker hardened to). Same-origin
+// requests (dashboardharyana.site — the app's API_URL) send no Origin header
+// and are unaffected; foreign pages never get an ACAO header, so they cannot
+// read API responses. The dashboard is same-origin by default, so this only
+// affects the www / github.io mirrors.
+const TRUSTED_ORIGINS = new Set([
+  'https://dashboardharyana.site',
+  'https://www.dashboardharyana.site',
+  'https://vcharyanaco-tech.github.io',
+]);
+
 const COMMON_HEADERS = {
-  'X-Frame-Options': 'ALLOWALL',
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  // Clickjacking defence: refuse to render inside any cross-origin frame.
+  // SAMEORIGIN (not ALLOWALL) still lets the page frame itself.
+  'X-Frame-Options': 'SAMEORIGIN',
+  'Content-Security-Policy': "frame-ancestors 'self'",
+  'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer-when-downgrade',
 };
+
+function corsOriginFor(request) {
+  const origin = request.headers.get('Origin') || '';
+  return TRUSTED_ORIGINS.has(origin) ? origin : null;
+}
+
+/** Edge wrapper: applies origin-aware CORS + security headers to every
+ *  response, no matter which route built it. */
+function applySecurityHeaders(response, request) {
+  const headers = new Headers(response.headers);
+  const origin = corsOriginFor(request);
+  if (origin) headers.set('Access-Control-Allow-Origin', origin);
+  else headers.delete('Access-Control-Allow-Origin');
+  headers.set('X-Frame-Options', 'SAMEORIGIN');
+  headers.set('Content-Security-Policy', "frame-ancestors 'self'");
+  headers.set('X-Content-Type-Options', 'nosniff');
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
 
 export default {
   async fetch(request, env, ctx) {
@@ -37,11 +69,23 @@ export default {
     const path = url.pathname;
 
     if (request.method === 'OPTIONS') {
+      const origin = corsOriginFor(request);
       return new Response(null, {
         status: 204,
-        headers: { ...COMMON_HEADERS, 'Access-Control-Max-Age': '86400' },
+        headers: {
+          ...COMMON_HEADERS,
+          ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}),
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Max-Age': '86400',
+        },
       });
     }
+
+    return applySecurityHeaders(await this.route_(request, env, ctx, url, path), request);
+  },
+
+  async route_(request, env, ctx, url, path) {
 
     // ── Route: /api/* ───────────────────────────────────────────────────────
     // Enterprise routes (AI insights, WhatsApp) use Worker-only secrets and are
