@@ -277,12 +277,18 @@ async function fetchFromPages(path, search) {
   const ct = guessContentType(filePath) || resp.headers.get('Content-Type') || 'application/octet-stream';
   const body = await resp.arrayBuffer();
 
+  // The app bundle (HTML/JS/CSS) changes on every deploy. The Cloudflare
+  // edge caches these responses keyed WITHOUT the query string, so the old
+  // `?v=` busting never worked — stale CSS/JS lingered for up to an hour and
+  // users saw old UI (the mojibake sort arrows are the example). Serve the
+  // bundle with no-store: the service worker handles offline caching, and
+  // raw GitHub is fast enough that freshness beats edge caching here.
   const headers = {
     ...COMMON_HEADERS,
     'Content-Type': ct,
-    'Cache-Control': filePath.match(/\.(js|css|png|ico|jpg|svg|woff2?)(\?|$)/)
-      ? 'public, max-age=3600'
-      : 'public, max-age=300',
+    'Cache-Control': filePath.match(/\.(html|js|css)(\?|$)/)
+      ? 'no-store'
+      : 'public, max-age=3600',
   };
 
   return new Response(body, { status: resp.status, headers });
