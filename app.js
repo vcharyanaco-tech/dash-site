@@ -3679,7 +3679,7 @@ function renderUserActivity(activity) {
           <td class="preserve-whitespace">${escapeHtml(u.email)}</td>
           <td>${u.actions || 0}</td>
           <td>${u.logins || 0}</td>
-          <td class="preserve-whitespace">${escapeHtml(u.lastSeen || '')}</td>
+          <td class="preserve-whitespace">${escapeHtml(u.lastSeenMs > 0 ? formatTimestamp(u.lastSeenMs) : (u.lastSeen || ''))}</td>
         </tr>`;
     }).join('') || '<tr><td colspan="4">No activity recorded yet.</td></tr>';
   }
