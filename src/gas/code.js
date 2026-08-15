@@ -1,5 +1,9 @@
 /**
  * ============================================================
+ * ⚠️ DEPRECATED — see README.md in this directory.
+ * Legacy Google Apps Script mirror; the live dashboard is the
+ * Node/SQLite deployment (src/server/). Not maintained in sync.
+ * ============================================================
  * Circle Office Haryana Dashboard V3
  * Code.gs (Part 1) - Web-app entry facade
  * ============================================================

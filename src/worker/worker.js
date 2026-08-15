@@ -50,6 +50,71 @@ function corsOriginFor(request) {
   return TRUSTED_ORIGINS.has(origin) ? origin : null;
 }
 
+// ── Per-IP rate limiting ────────────────────────────────────────────────────
+// Cloudflare's free plan ships no built-in rate limiting, so we keep a per-IP
+// sliding window here using cf-connecting-ip (set by Cloudflare, not
+// spoofable). It protects two things: the Node backend from a single-IP flood,
+// and the paid AI quota — transcription / minutes generation are POST /api
+// calls, and even though Groq caps per-minute usage itself, this stops one IP
+// from burning the whole daily budget in a long scripted run. Buckets live in
+// isolate memory, so counts are approximate across isolates — exactly right
+// for abuse throttling. /api/health is exempt from the per-path limits
+// (keep-alive cron + scheduled live-check ping it constantly).
+const RATE_WINDOW_MS = 60000;
+const RATE_LIMITS = {
+  all: 600, // any request per IP per minute (general flood cap)
+  'post-api': 60, // POST /api/* — dashboard writes, transcription, AI
+  'get-api': 240, // GET /api/*
+};
+const rateBuckets = new Map(); // ip -> { key: [timestamps] }
+
+function rateLimitKey_(path, method) {
+  if (method === 'POST' && (path === '/api' || path.startsWith('/api/'))) return 'post-api';
+  if (method === 'GET' && (path === '/api' || path.startsWith('/api/'))) return 'get-api';
+  return null; // static bundle / health: only the general 'all' cap applies
+}
+
+function checkRateLimit_(request) {
+  const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+  const path = new URL(request.url).pathname;
+  const method = request.method;
+  const now = Date.now();
+
+  let rec = rateBuckets.get(ip);
+  if (!rec) {
+    rec = { all: [] };
+    rateBuckets.set(ip, rec);
+    // Keep the map from growing forever on a long-lived isolate: drop idle
+    // entries once it gets large.
+    if (rateBuckets.size > 5000) {
+      for (const [k, v] of rateBuckets) {
+        if (!v.all.length || v.all[v.all.length - 1] <= now - RATE_WINDOW_MS) rateBuckets.delete(k);
+      }
+    }
+  }
+
+  const keys = ['all'];
+  const key = rateLimitKey_(path, method);
+  if (key) keys.push(key);
+
+  let limited = false;
+  for (const k of keys) {
+    const arr = rec[k] || (rec[k] = []);
+    while (arr.length && arr[0] <= now - RATE_WINDOW_MS) arr.shift();
+    arr.push(now);
+    if (arr.length > RATE_LIMITS[k]) limited = true;
+  }
+
+  if (limited) {
+    return jsonResponse({
+      error: 'rate_limited',
+      message: 'Too many requests from this IP — please wait a moment and retry.',
+      retryAfter: Math.ceil(RATE_WINDOW_MS / 1000),
+    }, 429, { 'Retry-After': String(Math.ceil(RATE_WINDOW_MS / 1000)) });
+  }
+  return null;
+}
+
 /** Edge wrapper: applies origin-aware CORS + security headers to every
  *  response, no matter which route built it. */
 function applySecurityHeaders(response, request) {
@@ -81,6 +146,11 @@ export default {
         },
       });
     }
+
+    // Rate-limit BEFORE routing so throttled requests never reach the Node
+    // backend or the paid AI APIs (see checkRateLimit_ below).
+    const limited = checkRateLimit_(request);
+    if (limited) return applySecurityHeaders(limited, request);
 
     return applySecurityHeaders(await this.route_(request, env, ctx, url, path), request);
   },

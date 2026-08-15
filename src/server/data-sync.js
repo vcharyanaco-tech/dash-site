@@ -147,6 +147,13 @@ async function restoreData() {
  * uploads/meetings keys (files deleted locally) are also pruned from KV on
  * an hourly cadence so deletes truly persist across redeploys. */
 const WRITE_BUDGET = Number(process.env.DASH_BACKUP_WRITE_BUDGET || 400);
+/* ── Retention ─────────────────────────────────────────────────────────
+ * Meeting recordings/notes and record attachments ride the same snapshot
+ * bridge, so they accumulate in KV toward the 1 GB free cap. Files older
+ * than DASH_RETENTION_DAYS (default 30) are pruned — local disk, KV copy,
+ * and (for uploads) the documents row — by the hourly sweep inside
+ * backupData. Set DASH_RETENTION_DAYS=0 to disable. */
+const RETENTION_DAYS = Math.max(0, Number(process.env.DASH_RETENTION_DAYS || 30));
 const stats = {
   dayKey: '',
   writesToday: 0,
@@ -155,10 +162,13 @@ const stats = {
   dbBytes: 0,
   uploads: 0,
   meetings: 0,
+  prunedToday: 0,
+  retentionDays: RETENTION_DAYS,
   error: '',
   skippedBudget: false
 };
 let lastCleanupAt = 0;
+let lastRetentionAt = 0;
 
 function budgetDayKey_() {
   return new Date().toISOString().slice(0, 10);
@@ -218,6 +228,88 @@ async function cleanupOrphanedKeys_() {
   } catch (err) {
     console.error('[data-sync] cleanup failed: ' + (err && err.message));
   }
+}
+
+function retentionCutoff_() {
+  return Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+}
+
+/** Prune files older than RETENTION_DAYS from local disk + KV (and, for
+ *  uploads, the documents rows so the UI never shows a broken attachment).
+ *  Meeting files embed their creation stamp ('<title>_YYYY-MM-DD_HHMM.ext')
+ *  which survives restoreData (mtime does not — restored files get fresh
+ *  mtimes). Upload file keys are uuids with no stamp, so those use the
+ *  documents.uploaded_at column; orphan files on disk fall back to mtime.
+ *  Hourly cadence (like the orphan sweep); pass force=true to run now. */
+async function enforceRetention_(force) {
+  const pruned = { meetings: 0, uploads: 0 };
+  if (!RETENTION_DAYS) return pruned;
+  const now = Date.now();
+  if (!force && now - lastRetentionAt < 3600000) return pruned;
+  lastRetentionAt = now;
+  const cutoff = retentionCutoff_();
+
+  // Meetings: the stamp is anchored at the end of the base name.
+  let names = [];
+  try { names = fs.readdirSync(MEETINGS_DIR); } catch (e) { names = []; }
+  for (const name of names) {
+    if (!name || name.indexOf('.') === 0) continue;
+    const p = path.join(MEETINGS_DIR, name);
+    let st;
+    try { st = fs.statSync(p); } catch (e) { continue; }
+    if (!st.isFile()) continue;
+    const m = String(name).match(/(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})\.[a-z0-9]{2,5}$/);
+    const ageMs = m
+      ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]))
+      : st.mtimeMs;
+    if (isNaN(ageMs) || ageMs > cutoff) continue;
+    try { fs.unlinkSync(p); } catch (e) { continue; }
+    try { await deleteRemoteFile('meetings', name); } catch (e) {}
+    pruned.meetings++;
+    console.log('[data-sync] retention pruned meeting file: ' + name);
+  }
+
+  // Uploads: prune by the documents row age, then orphan files by mtime.
+  try {
+    const { db } = require('./db');
+    const rows = db.prepare('SELECT id, file_key, record_id FROM documents WHERE uploaded_at IS NOT NULL AND uploaded_at < ?').all(cutoff);
+    for (const row of rows) {
+      const fk = String(row.file_key || '');
+      if (fk) {
+        const p = path.join(UPLOAD_DIR, fk);
+        try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (e) {}
+        try { await deleteRemoteFile('uploads', fk); } catch (e) {}
+      }
+      db.prepare('DELETE FROM documents WHERE id = ?').run(String(row.id));
+      pruned.uploads++;
+      try {
+        require('./audit').logAudit_('DOC_PURGE', String(row.record_id || row.id), 'Attachment older than ' + RETENTION_DAYS + ' days pruned by retention policy', 'system');
+      } catch (e) {}
+    }
+    let unames = [];
+    try { unames = fs.readdirSync(UPLOAD_DIR); } catch (e) { unames = []; }
+    for (const name of unames) {
+      if (!name || name.indexOf('.') === 0) continue;
+      const p = path.join(UPLOAD_DIR, name);
+      let st;
+      try { st = fs.statSync(p); } catch (e) { continue; }
+      if (!st.isFile()) continue;
+      if (db.prepare('SELECT 1 FROM documents WHERE file_key = ?').get(name)) continue;
+      if (st.mtimeMs > cutoff) continue;
+      try { fs.unlinkSync(p); } catch (e) { continue; }
+      try { await deleteRemoteFile('uploads', name); } catch (e) {}
+      pruned.uploads++;
+    }
+    if (pruned.uploads) requestBackup(); // DB rows changed — fresh snapshot
+  } catch (err) {
+    console.error('[data-sync] upload retention failed: ' + (err && err.message));
+  }
+
+  if (pruned.meetings || pruned.uploads) {
+    stats.prunedToday += pruned.meetings + pruned.uploads;
+    console.log('[data-sync] retention pruned ' + pruned.meetings + ' meeting file(s), ' + pruned.uploads + ' upload(s)');
+  }
+  return pruned;
 }
 
 async function backupData() {
@@ -283,6 +375,7 @@ async function backupData() {
     }
 
     await cleanupOrphanedKeys_();
+    await enforceRetention_();
 
     // Reflect the run in the live stats (written to KV too, for the worker's
     // /api/health when Node is unreachable).
@@ -299,6 +392,8 @@ async function backupData() {
       writesToday: stats.writesToday,
       budget: WRITE_BUDGET,
       deletesToday: stats.deletesToday,
+      prunedToday: stats.prunedToday,
+      retentionDays: RETENTION_DAYS,
       skippedBudget: stats.skippedBudget
     };
     await putBufCounted_(BASE + '/stats', Buffer.from(JSON.stringify(payload)));
@@ -343,6 +438,8 @@ function getBackupStatus() {
     budget: WRITE_BUDGET,
     budgetLeft: budgetLeft(),
     deletesToday: stats.deletesToday,
+    prunedToday: stats.prunedToday,
+    retentionDays: RETENTION_DAYS,
     skippedBudget: stats.skippedBudget
   };
 }
@@ -400,4 +497,4 @@ function startAutoSync() {
   });
 }
 
-module.exports = { enabled, restoreData, backupData, startAutoSync, requestBackup, getBackupStatus, deleteRemoteFile };
+module.exports = { enabled, restoreData, backupData, startAutoSync, requestBackup, getBackupStatus, deleteRemoteFile, enforceRetention_, retentionCutoff_, RETENTION_DAYS };
