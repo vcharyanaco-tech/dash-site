@@ -50,8 +50,13 @@ function writeCredentialConfigured() {
  * ------------------------------------------------------------------ */
 
 function fetchGviz() {
+  // Pin the header count (= START_ROW - 1) explicitly: gviz's automatic header
+  // detection is heuristic and has been observed to flip (treating the first
+  // data row as a header, dropping record id 1 and shifting every row's
+  // content by one). START_ROW rows precede the data (title, blank, header).
+  const headers = START_ROW - 1;
   const url = 'https://docs.google.com/spreadsheets/d/' + SOURCE_SPREADSHEET_ID +
-    '/gviz/tq?tqx=out:json&sheet=' + encodeURIComponent(SHEET_NAME);
+    '/gviz/tq?tqx=out:json&headers=' + headers + '&sheet=' + encodeURIComponent(SHEET_NAME);
   return fetch(url).then(function (resp) {
     if (!resp.ok) throw new Error('gviz HTTP ' + resp.status);
     return resp.text();
