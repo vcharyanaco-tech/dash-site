@@ -171,6 +171,9 @@ const appState = {
   filtered: [],
   summary: {},
   analytics: {},
+  // Persisted "Analyze link" panels: row -> { data, collapsed }. Kept across
+  // background refreshes so an analysis stays visible until the user closes it.
+  linkAnalysis: {},
   audit: [],
   user: {},
   settings: {},
@@ -1425,7 +1428,15 @@ function toggleCardAi(row, btn) {
 
 function collapseCardAi(btn) {
   const panel = btn.closest('.card-ai-panel');
-  if (panel) panel.classList.add('card-ai-collapsed');
+  if (!panel) return;
+  panel.classList.add('card-ai-collapsed');
+  const rowEl = panel.closest('[data-row]');
+  if (rowEl) {
+    const row = String(rowEl.getAttribute('data-row'));
+    const cached = cachedLinkPanel_(row);
+    if (cached) cached.collapsed = true;
+    else persistLinkPanel_(row, null, true);
+  }
 }
 
 function toggleRowAi(row, btn) {
@@ -1484,12 +1495,40 @@ function cardLinkPanelHtml_() {
     '<div class="card-ai-body"></div>';
 }
 
+function cachedLinkPanel_(row) {
+  return appState.linkAnalysis[String(row)] || null;
+}
+
+function persistLinkPanel_(row, data, collapsed) {
+  appState.linkAnalysis[String(row)] = { data: data || null, collapsed: !!collapsed };
+}
+
+/* Full persisted link panel HTML (head + body filled from the cached result),
+   or '' when nothing is cached for that row. Embedded by the card / row
+   builders so open analyses survive background refreshes and re-renders. */
+function linkPanelHtmlFromCache_(row) {
+  const cached = cachedLinkPanel_(row);
+  if (!cached || !cached.data) return '';
+  return '<div class="card-ai-panel card-link-panel' + (cached.collapsed ? ' card-ai-collapsed' : '') + '">' +
+    '<div class="card-ai-head">' +
+    '<span class="card-ai-title">Linked file analysis</span>' +
+    '<button class="btn btn-small btn-ghost" type="button" onclick="collapseCardAi(this)">Collapse</button>' +
+    '</div>' +
+    '<div class="card-ai-body">' + linkAiResultHtml_(cached.data) + '</div>' +
+    '</div>';
+}
+
 function toggleCardLink(row, btn) {
   if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
   const article = btn.closest('.card');
   if (!article) return;
   let panel = article.querySelector('.card-link-panel');
-  if (panel) { panel.classList.toggle('card-ai-collapsed'); return; }
+  if (panel) {
+    panel.classList.toggle('card-ai-collapsed');
+    const cached = cachedLinkPanel_(row);
+    if (cached) cached.collapsed = panel.classList.contains('card-ai-collapsed');
+    return;
+  }
   panel = document.createElement('div');
   panel.className = 'card-ai-panel card-link-panel';
   panel.innerHTML = cardLinkPanelHtml_();
@@ -1502,7 +1541,12 @@ function toggleRowLink(row, btn) {
   const tr = btn.closest('tr');
   if (!tr) return;
   const next = tr.nextElementSibling;
-  if (next && next.classList && next.classList.contains('ai-link-tr')) { next.remove(); return; }
+  if (next && next.classList && next.classList.contains('ai-link-tr')) {
+    // Explicit close by the user — drop the persisted panel so it stays closed.
+    next.remove();
+    delete appState.linkAnalysis[String(row)];
+    return;
+  }
   const panelTr = document.createElement('tr');
   panelTr.className = 'ai-link-tr';
   const td = document.createElement('td');
@@ -1587,6 +1631,15 @@ function makeTableResizable_(table) {
 function loadCardLink(panel, row) {
   const body = panel.querySelector('.card-ai-body');
   if (!body) return;
+  // Already analyzed and persisted? Render instantly from the cache so the
+  // result survives background refreshes without re-hitting the API.
+  const cached = cachedLinkPanel_(row);
+  if (cached && cached.data) {
+    body.innerHTML = linkAiResultHtml_(cached.data);
+    makeTableResizable_(body.querySelector('.card-ai-table'));
+    if (cached.collapsed) panel.classList.add('card-ai-collapsed');
+    return;
+  }
   body.innerHTML = '<div class="card-ai-loading">Analyzing linked file…</div>';
   ApiService.getLinkContentAiInsight(row).then(function (data) {
     if (!data || data.success !== true) {
@@ -1594,6 +1647,7 @@ function loadCardLink(panel, row) {
       body.innerHTML = '<div class="card-ai-error">' + escapeHtml(msg) + '</div>';
       return;
     }
+    persistLinkPanel_(row, data, false);
     body.innerHTML = linkAiResultHtml_(data);
     makeTableResizable_(body.querySelector('.card-ai-table'));
   }).catch(function (err) {
@@ -2475,11 +2529,12 @@ function buildCardHtml(item) {
   const showId = dashboardColumnVisible_('id');
   const showActions = dashboardColumnVisible_('actions');
   return `
-    <article class="card ${item.reviewStatus === 'due' ? 'review-due' : ''}">
+    <article class="card ${item.reviewStatus === 'due' ? 'review-due' : ''}" data-row="${escAttr(item.row)}">
       ${reviewBadgeHtml}
       ${showId ? '<div class="card-title preserve-whitespace"><span class="id-badge">#' + escapeHtml(item.id) + '</span></div>' : ''}
       <div class="card-fields">${fieldsHtml || '<div class="card-field"><span class="field-label">Details</span><div class="field-value preserve-whitespace">No details available</div></div>'}${updateFieldsHtml}</div>
       ${showActions ? '<div class="card-footer"><div class="actions">' + actionsHtml + '</div></div>' : ''}
+      ${linkPanelHtmlFromCache_(item.row)}
     </article>`;
 }
 
@@ -2602,6 +2657,7 @@ function buildTableRowHtml(item) {
       ${appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="event.stopPropagation(); editItem('${escAttr(item.row)}')">Edit</button>` : ''}
       ${appState.isEditor ? `<button class="btn btn-danger btn-small" onclick="event.stopPropagation(); deleteItem('${escAttr(item.row)}')">Delete</button>` : ''}
     </div>`;
+  const persistedPanel = linkPanelHtmlFromCache_(item.row);
   return `
     <tr class="row-clickable ${item.reviewStatus === 'due' ? 'row-flagged' : ''}" data-row="${escAttr(item.row)}" tabindex="0">
       <td><span class="id-badge">#${escapeHtml(item.id)}</span></td>
@@ -2611,7 +2667,7 @@ function buildTableRowHtml(item) {
       <td class="preserve-whitespace">${escapeHtml(item.reviewDate || '')}</td>
       <td>${statusBadge}</td>
       <td>${actions}</td>
-    </tr>`;
+    </tr>` + (persistedPanel ? '<tr class="ai-link-tr"><td colspan="7">' + persistedPanel + '</td></tr>' : '');
 }
 
 function renderDashboardTable() {
