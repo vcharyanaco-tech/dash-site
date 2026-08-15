@@ -8,29 +8,34 @@
  */
 
 /**
- * Builds a RichTextValue whose text carries a hyperlink. When linkText is
- * given and appears within the text, only that substring is hyperlinked; the
- * rest of the text stays plain. Falls back to linking the whole text when the
- * link text is missing or not found.
+ * Builds a RichTextValue whose text carries zero or more hyperlinks. Accepts
+ * either a single {url, text} object or an array of them (the multi-link
+ * format). When a link's text appears within the cell text, only that
+ * substring is hyperlinked; otherwise the whole text is linked. Mirrors the
+ * Node port's buildTextRuns_ so the sheet round-trips the same links JSON.
  * @param {string} text Full display text.
- * @param {string} url Link URL (empty to build plain text).
- * @param {string} linkText The exact substring that should carry the link.
+ * @param {Object|Array<{url: string, text: string}>} links A link object or
+ *   an array of them (empty/absent builds plain text).
  * @returns {GoogleAppsScript.Spreadsheet.RichTextValue}
  */
-function buildRichTextValue_(text, url, linkText) {
+function buildRichTextValue_(text, links) {
   const t = String(text == null ? "" : text);
   const builder = SpreadsheetApp.newRichTextValue().setText(t);
-  if (url) {
-    const lt = String(linkText == null ? "" : linkText);
-    const idx = lt ? t.indexOf(lt) : -1;
+  const list = normalizeLinksField_(links);
+  list.forEach(function (link) {
+    const url = String(link.url || "");
+    if (!url) return;
+    const lt = String(link.text || "").trim();
+    let idx = -1;
+    if (lt) idx = t.indexOf(lt);
     try {
       if (idx >= 0) {
-        builder.setLinkUrl(idx, idx + lt.length, String(url));
+        builder.setLinkUrl(idx, idx + lt.length, url);
       } else {
-        builder.setLinkUrl(String(url));
+        builder.setLinkUrl(url);
       }
     } catch (e) {}
-  }
+  });
   return builder.build();
 }
 
@@ -79,16 +84,15 @@ function addRecord_(item, token) {
       ]]
     }]);
 
-    const links = normalized.links || {};
+    const links = normalizeLinksForStorage_(normalized.links || {});
     [
       [COL.SECTOR, "sector"],
       [COL.DESCRIPTION, "description"],
       [COL.ACTION, "action"]
     ].forEach(function (pair) {
-      const link = links[pair[1]];
-      const url = link && link.url ? String(link.url) : "";
-      if (url) {
-        sheet.getRange(row, pair[0]).setRichTextValue(buildRichTextValue_(normalized[pair[1]], url, link && link.text ? String(link.text) : ""));
+      const list = links[pair[1]] || [];
+      if (list.length) {
+        sheet.getRange(row, pair[0]).setRichTextValue(buildRichTextValue_(normalized[pair[1]], list));
       }
     });
 
@@ -163,30 +167,37 @@ function updateRecord_(item, token) {
       let rt = null;
       try { rt = range.getRichTextValue(); } catch (e) { rt = null; }
       const plain = rt ? String(rt.getText()) : String(range.getValue() == null ? "" : range.getValue());
-      return { plain: plain, link: extractLinkUrl_(rt), linkText: extractLinkText_(rt) };
+      return { plain: plain, links: rt ? extractLinks_(rt) : [] };
     }
 
-    function writeLinkedField(col, state, newVal, linkUrl, linkText) {
+    // Compares a cell's current links JSON against the incoming normalized
+    // array form so unchanged cells keep their rich text untouched.
+    function sameLinks_(stateLinks, newLinks) {
+      const a = JSON.stringify(normalizeLinksField_(stateLinks));
+      const b = JSON.stringify(normalizeLinksField_(newLinks));
+      return a === b;
+    }
+
+    function writeLinkedField(col, state, newVal, newLinks) {
       const o = state.plain.replace(/\r\n/g, "\n");
       const n = String(newVal == null ? "" : newVal).replace(/\r\n/g, "\n");
-      const newLink = String(linkUrl == null ? "" : linkUrl);
-      const newLinkText = String(linkText == null ? "" : linkText);
-      if (o === n && state.link === newLink && (state.linkText || "") === newLinkText) return;
-      if (newLink) {
+      const links = normalizeLinksField_(newLinks);
+      if (o === n && sameLinks_(state.links, links)) return;
+      if (links.length) {
         // Hyperlink-rich text is not a plain value; write it directly.
-        sheet.getRange(row, col).setRichTextValue(buildRichTextValue_(newVal, newLink, newLinkText));
+        sheet.getRange(row, col).setRichTextValue(buildRichTextValue_(newVal, links));
       } else {
         pendingWrites.push({ row: row, col: col, values: [[newVal]] });
       }
     }
 
     // Read old values and only write changed cells to preserve rich text / hyperlinks
-    const links = normalized.links || {};
+    const links = normalizeLinksForStorage_(normalized.links || {});
     writeIfChanged(COL.ID, sheet.getRange(row, COL.ID).getValue(), normalized.id);
-    writeLinkedField(COL.SECTOR, readCellState(COL.SECTOR), normalized.sector, links.sector ? links.sector.url : "", links.sector ? links.sector.text : "");
-    writeLinkedField(COL.DESCRIPTION, readCellState(COL.DESCRIPTION), normalized.description, links.description ? links.description.url : "", links.description ? links.description.text : "");
+    writeLinkedField(COL.SECTOR, readCellState(COL.SECTOR), normalized.sector, links.sector || []);
+    writeLinkedField(COL.DESCRIPTION, readCellState(COL.DESCRIPTION), normalized.description, links.description || []);
     writeIfChanged(COL.ENTRY_DATE, sheet.getRange(row, COL.ENTRY_DATE).getValue(), normalized.entryDate);
-    writeLinkedField(COL.ACTION, readCellState(COL.ACTION), normalized.action, links.action ? links.action.url : "", links.action ? links.action.text : "");
+    writeLinkedField(COL.ACTION, readCellState(COL.ACTION), normalized.action, links.action || []);
     writeIfChanged(COL.RESPONSIBILITY, sheet.getRange(row, COL.RESPONSIBILITY).getValue(), normalized.responsibility);
     writeIfChanged(COL.REVIEW_DATE, sheet.getRange(row, COL.REVIEW_DATE).getValue(), normalized.reviewDate);
 

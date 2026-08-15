@@ -264,6 +264,31 @@ function linkTextFromCell_(cell) {
   return out;
 }
 
+/** All hyperlinks in a cell as [{url, text}, ...] (multi-link). Consecutive
+ *  runs sharing one URL merge into a single entry. Mirrors extractLinks_ for
+ *  the advanced-grid fast path so reads agree across both backends. */
+function linksFromCell_(cell) {
+  if (!cell) return [];
+  if (cell.hyperlink) {
+    return [{ url: String(cell.hyperlink), text: String(cell.value == null ? "" : cell.value) }];
+  }
+  const out = [];
+  const runs = cell.runs || [];
+  for (let i = 0; i < runs.length; i++) {
+    const link = runs[i].format && runs[i].format.link;
+    if (!link || !link.uri) continue;
+    const url = String(link.uri);
+    const text = String(runs[i].text || "");
+    const last = out[out.length - 1];
+    if (last && last.url === url) {
+      last.text += text;
+    } else {
+      out.push({ url: url, text: text });
+    }
+  }
+  return out;
+}
+
 /** Rebuilds the display HTML for a cell from its raw value + runs,
  *  mirroring richToHtml_ (links, colors, bold/italic/underline). */
 function cellHtmlFromRuns_(cell) {
@@ -319,6 +344,7 @@ function buildRowsFromAdvanced_(grid, sheet) {
 
     const linkUrls = {};
     const linkTexts = {};
+    const links = {};
     const displayFields = [];
     headerValues.forEach(function (label, headerIndex) {
       const clean = String(label || "").trim();
@@ -329,6 +355,10 @@ function buildRowsFromAdvanced_(grid, sheet) {
       if (url && fieldIndexByKey[headerIndex] !== undefined) {
         linkUrls[fieldIndexByKey[headerIndex]] = url;
         if (linkText) linkTexts[fieldIndexByKey[headerIndex]] = linkText;
+      }
+      if (fieldIndexByKey[headerIndex] !== undefined) {
+        const fieldLinks = linksFromCell_(cell);
+        if (fieldLinks.length) links[fieldIndexByKey[headerIndex]] = fieldLinks;
       }
       displayFields.push({
         label: clean,
@@ -350,6 +380,7 @@ function buildRowsFromAdvanced_(grid, sheet) {
       displayFields: displayFields,
       linkUrls: linkUrls,
       linkTexts: linkTexts,
+      links: links,
       reviewBg: cells[6] ? cells[6].bg : "#ffffff"
     });
   }
@@ -400,6 +431,7 @@ function getSheetDataRows_(sheet) {
     }, {});
     const linkUrls = {};
     const linkTexts = {};
+    const links = {};
     const displayFields = (headerValues || []).reduce(function (fields, header, headerIndex) {
       const label = String(header || "").trim();
       if (!label) {
@@ -411,6 +443,7 @@ function getSheetDataRows_(sheet) {
       let html = "";
       let linkUrl = "";
       let linkText = "";
+      let fieldLinks = [];
       const richValue = (richValues[rowNumber - 1] || [])[headerIndex];
       if (richValue) {
         try {
@@ -428,10 +461,18 @@ function getSheetDataRows_(sheet) {
         } catch (err2b) {
           linkText = "";
         }
+        try {
+          fieldLinks = extractLinks_(richValue);
+        } catch (err2c) {
+          fieldLinks = [];
+        }
       }
       if (linkUrl && fieldIndexByKey[headerIndex] !== undefined) {
         linkUrls[fieldIndexByKey[headerIndex]] = linkUrl;
         if (linkText) linkTexts[fieldIndexByKey[headerIndex]] = linkText;
+      }
+      if (fieldLinks.length && fieldIndexByKey[headerIndex] !== undefined) {
+        links[fieldIndexByKey[headerIndex]] = fieldLinks;
       }
 
       fields.push({
@@ -455,7 +496,8 @@ function getSheetDataRows_(sheet) {
       reviewDate: getFieldValue_(fieldMap, normalizedRow, "reviewDate", 6),
       displayFields: displayFields,
       linkUrls: linkUrls,
-      linkTexts: linkTexts
+      linkTexts: linkTexts,
+      links: links
     });
 
     return rows;
@@ -516,18 +558,18 @@ function getAuditDerivedRows_() {
   }
 }
 
-const SOURCE_SPREADSHEET_ID = "1xQaysoLjDIqNa5X_QnvA5FWp7J6lMr5r6lzLGalm-y8";
+const SOURCE_SPREADSHEET_ID = "1xQaysoLjDIqNa5X_QnvA5FWp7J6lMr5r6lzLGalm-y8";
 function getPreferredSpreadsheetId_() {
   return SOURCE_SPREADSHEET_ID;
-}
+}
 /**
  * Debug helper: returns the configured spreadsheet id and url.
  * @returns {{spreadsheetId: string, url: string}}
- */
+ */
 /**
  * Debug helper: binds the active spreadsheet into script properties.
  * @returns {{success: boolean, spreadsheetId?: string, url?: string, message?: string}}
- */
+ */
 let __spreadsheetCache__ = null;
 
 function getSpreadsheet_() {
@@ -714,7 +756,7 @@ function getDataRange_() {
 
 /* ============================================================
  * Data Helpers
- * ============================================================ */
+ * ============================================================ */
 
 /* ============================================================
  * Lock Helpers
@@ -741,7 +783,7 @@ function runWithLock_(callback) {
 
 /* ============================================================
  * Property Helpers
- * ============================================================ */
+ * ============================================================ */
 
 /* ============================================================
  * Read Cache Helpers
@@ -917,6 +959,7 @@ function buildRowSpecForRow_(sheet, row) {
 
     const linkUrls = {};
     const linkTexts = {};
+    const links = {};
     const displayFields = (headerValues || []).reduce(function (fields, header, headerIndex) {
       const label = String(header || "").trim();
       if (!label) return fields;
@@ -924,15 +967,20 @@ function buildRowSpecForRow_(sheet, row) {
       let html = "";
       let linkUrl = "";
       let linkText = "";
+      let fieldLinks = [];
       const richValue = richRow ? richRow[headerIndex] : null;
       if (richValue) {
         try { html = richToHtml_(richValue, String(value === null || value === undefined ? "" : value)); } catch (err) { html = ""; }
         try { linkUrl = extractLinkUrl_(richValue); } catch (err2) { linkUrl = ""; }
         try { linkText = extractLinkText_(richValue); } catch (err2b) { linkText = ""; }
+        try { fieldLinks = extractLinks_(richValue); } catch (err2c) { fieldLinks = []; }
       }
       if (linkUrl && fieldIndexByKey[headerIndex] !== undefined) {
         linkUrls[fieldIndexByKey[headerIndex]] = linkUrl;
         if (linkText) linkTexts[fieldIndexByKey[headerIndex]] = linkText;
+      }
+      if (fieldLinks.length && fieldIndexByKey[headerIndex] !== undefined) {
+        links[fieldIndexByKey[headerIndex]] = fieldLinks;
       }
       fields.push({ label: label, value: value, html: html, linkUrl: linkUrl });
       return fields;
@@ -949,7 +997,8 @@ function buildRowSpecForRow_(sheet, row) {
       reviewDate: getFieldValue_(fieldMap, normalizedRow, "reviewDate", 6),
       displayFields: displayFields,
       linkUrls: linkUrls,
-      linkTexts: linkTexts
+      linkTexts: linkTexts,
+      links: links
     };
   } catch (err) {
     return null;
@@ -1067,21 +1116,21 @@ function now_() {
 
 /* ============================================================
  * Color Helpers
- * ============================================================ */
+ * ============================================================ */
 /* ============================================================
  * Validation Helpers
- * ============================================================ */
+ * ============================================================ */
 /* ============================================================
  * Response Helpers
- * ============================================================ */
+ * ============================================================ */
 
 /* ============================================================
  * Logging
- * ============================================================ */
+ * ============================================================ */
 
 /* ============================================================
  * ID Generator
- * ============================================================ */
+ * ============================================================ */
 
 /* ============================================================
  * JSON Helpers

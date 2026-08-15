@@ -398,6 +398,89 @@ function extractLinkText_(rt) {
 }
 
 
+/**
+ * Normalizes a field's links (single {url,text} object or an array of them)
+ * to the multi-link array form [{url, text}, ...]. Mirrors the Node port's
+ * normalizeLinksField_ so both backends agree on the links JSON shape.
+ * @param {*} value A link object, an array of link objects, or null.
+ * @returns {Array<{url: string, text: string}>}
+ */
+function normalizeLinksField_(value) {
+  if (Array.isArray(value)) {
+    return value
+      .filter(function (l) { return l && l.url; })
+      .map(function (l) {
+        return { url: String(l.url || ""), text: l.text != null ? String(l.text) : "" };
+      });
+  }
+  if (value && typeof value === "object" && value.url) {
+    return [{ url: String(value.url), text: value.text != null ? String(value.text) : "" }];
+  }
+  return [];
+}
+
+/**
+ * Normalizes a whole links object ({fieldKey: value|array}) to the array
+ * form, dropping empty fields. Mirrors the Node port's normalizeLinksForStorage_.
+ * @param {Object} links Raw links object.
+ * @returns {Object} Normalized {fieldKey: [{url, text}, ...]}.
+ */
+function normalizeLinksForStorage_(links) {
+  const out = {};
+  if (!links || typeof links !== "object") return out;
+  Object.keys(links).forEach(function (key) {
+    const normalized = normalizeLinksField_(links[key]);
+    if (normalized.length) out[key] = normalized;
+  });
+  return out;
+}
+
+/**
+ * Returns every hyperlink in a rich-text value as [{url, text}, ...] (one
+ * entry per linked run). Falls back to the whole-cell link when the value
+ * has no runs. Mirrors the Node port's Sheets-API extraction so reads agree.
+ * @param {Object} rt A RichTextValue object (or null/undefined).
+ * @returns {Array<{url: string, text: string}>}
+ */
+function extractLinks_(rt) {
+  if (!rt) return [];
+  const out = [];
+  let runs = null;
+  try { runs = rt.getRuns(); } catch (e) { runs = null; }
+  if (runs && runs.length) {
+    for (let i = 0; i < runs.length; i++) {
+      let u = null;
+      try { u = runs[i].getLinkUrl(); } catch (e2) { u = null; }
+      if (u) {
+        let t = "";
+        try { t = runs[i].getText(); } catch (e3) { t = ""; }
+        out.push({ url: String(u), text: String(t || "") });
+      }
+    }
+    return out;
+  }
+  try {
+    if (typeof rt.getLinkUrl === "function") {
+      const direct = rt.getLinkUrl();
+      if (direct) return [{ url: String(direct), text: "" }];
+    }
+  } catch (e4) {}
+  return out;
+}
+
+/**
+ * Parses a links JSON string (or object) into the normalized array form.
+ * @param {string|Object} raw Stored links column value.
+ * @returns {Object} Normalized {fieldKey: [{url, text}, ...]}.
+ */
+function parseLinksRow_(raw) {
+  let parsed = raw;
+  if (typeof raw === "string") {
+    try { parsed = JSON.parse(raw || "{}"); } catch (e) { parsed = {}; }
+  }
+  if (!parsed || typeof parsed !== "object") parsed = {};
+  return normalizeLinksForStorage_(parsed);
+}
 
 
 var __SS_URL_ = null;

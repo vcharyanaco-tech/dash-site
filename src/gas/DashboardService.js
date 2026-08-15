@@ -165,7 +165,8 @@ function buildDashboardItems_(rows, sheet) {
       reviewStatus: reviewStatus,
       displayFields: displayFields,
       linkUrls: rowSpec.linkUrls || {},
-      linkTexts: rowSpec.linkTexts || {}
+      linkTexts: rowSpec.linkTexts || {},
+      links: rowSpec.links || {}
     };
   });
 }
