@@ -95,6 +95,7 @@ const ApiService = {
   adminResetPassword: function (email, newPassword) { return apiCall_('adminResetPassword', email, newPassword, getAuthToken()); },
   adminEmailAllUsers: function (subject, body) { return apiCall_('adminEmailAllUsers', subject, body, getAuthToken()); },
   adminSyncFromSheet: function () { return apiCall_('adminSyncFromSheet', getAuthToken()); },
+  adminPreviewSyncFromSheet: function () { return apiCall_('adminPreviewSyncFromSheet', getAuthToken()); },
   getSyncStatus: function () { return apiCall_('getSyncStatus'); },
   getMyNotifications: function () { return apiCall_('getMyNotifications', getAuthToken()); },
   generateReviewNotifications: function () { return apiCall_('generateReviewNotifications', getAuthToken()); },
@@ -3248,22 +3249,98 @@ function loadUsers() {
   });
 }
 
-/* Pull the latest records + hyperlinks from the origin Google Sheet, then
-   push project changes back (when a write credential is configured). */
+/* Pull the latest records + hyperlinks from the origin Google Sheet. The
+   pull is previewed first — the admin reviews exactly what would change and
+   confirms before anything is applied. Dashboard-added records and links are
+   always preserved (the pull never prunes app-created rows, and links are
+   merged, not replaced). */
+let syncPreviewData = null;
+
 function syncFromSheet() {
   if (!appState.isAdmin) { showToast('Admin access required', 'warning'); return; }
   const btn = getEl('syncSheetBtn');
   const status = getEl('syncSheetStatus');
   if (!btn || !status) return;
   btn.disabled = true;
-  status.textContent = 'Syncing with Google Sheet…';
+  status.textContent = 'Fetching sheet preview…';
   status.className = 'form-status';
+  ApiService.adminPreviewSyncFromSheet().then(function (preview) {
+    btn.disabled = false;
+    if (!preview) {
+      status.textContent = 'Preview failed: no data returned.';
+      status.className = 'form-status error';
+      return;
+    }
+    const added = (preview.added || []).length;
+    const updated = (preview.updated || []).length;
+    const removed = (preview.removed || []).length;
+    if (!preview.pending) {
+      status.textContent = 'Sheet is already in sync — no changes to apply.';
+      status.className = 'form-status success';
+      showToast('Sheet is up to date', 'success');
+      return;
+    }
+    syncPreviewData = preview;
+    renderSyncPreview(preview);
+    openDialog('syncPreviewModal');
+    status.textContent = 'Review the preview above, then apply or cancel.';
+    status.className = 'form-status';
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+    btn.disabled = false;
+    status.textContent = 'Preview failed: ' + (err.message || err);
+    status.className = 'form-status error';
+  });
+}
+
+// Renders the preview payload into the sync preview modal.
+function renderSyncPreview(preview) {
+  const summary = getEl('syncPreviewSummary');
+  const list = getEl('syncPreviewList');
+  const added = (preview.added || []).length;
+  const updated = (preview.updated || []).length;
+  const removed = (preview.removed || []).length;
+  const linksRead = preview.linksRead != null ? preview.linksRead : '—';
+  summary.textContent = 'Pull would affect ' + preview.pending + ' record(s) from the sheet: ' +
+    added + ' new, ' + updated + ' updated, ' + removed + ' removed. (' + linksRead + ' hyperlink(s) read.)';
+  const parts = [];
+  (preview.added || []).forEach(function (r) {
+    parts.push('<div class="sync-preview-item"><strong class="sync-preview-tag sync-preview-add">NEW</strong> ' +
+      escRec(r) + '</div>');
+  });
+  (preview.updated || []).forEach(function (r) {
+    const changes = (r.changes || []).join(', ') || 'content';
+    parts.push('<div class="sync-preview-item"><strong class="sync-preview-tag sync-preview-upd">UPDATE</strong> ' +
+      escRec(r) + ' <span class="muted">(' + escapeHtml(changes) + ')</span></div>');
+  });
+  (preview.removed || []).forEach(function (r) {
+    parts.push('<div class="sync-preview-item"><strong class="sync-preview-tag sync-preview-rem">REMOVE</strong> ' +
+      escRec(r) + '</div>');
+  });
+  list.innerHTML = parts.length ? parts.join('') : '<p class="muted">No changes detected.</p>';
+}
+
+function escRec(r) {
+  const label = escapeHtml(String(r.description || r.sector || ('Record ' + r.displayId)));
+  const idTag = r.displayId != null ? ' <span class="muted">#' + escapeHtml(String(r.displayId)) + '</span>' : '';
+  return label + idTag;
+}
+
+function applySyncPreview() {
+  const applyBtn = getEl('syncPreviewApplyBtn');
+  const status = getEl('syncPreviewStatus');
+  if (!applyBtn) return;
+  applyBtn.disabled = true;
+  if (status) { status.textContent = 'Applying…'; status.className = 'form-status'; }
   ApiService.adminSyncFromSheet().then(function (data) {
+    closeDialog('syncPreviewModal');
+    syncPreviewData = null;
     const pull = (data && data.pull) || {};
     const push = (data && data.push) || {};
     const lines = [];
     if (pull.pulled) {
-      lines.push('Pull: ' + pull.sheetRows + ' rows from sheet (' + pull.inserted + ' inserted, ' + pull.updated + ' updated).');
+      lines.push('Pull: ' + pull.sheetRows + ' rows from sheet (' + pull.inserted + ' inserted, ' + pull.updated + ' updated' +
+        (pull.pruned ? ', ' + pull.pruned + ' pruned' : '') + ').');
       if (pull.linksRead) lines.push('Hyperlinks read from sheet: ' + pull.linksRead + '.');
       else lines.push('Hyperlinks: ' + pull.linksSource + '.');
     } else {
@@ -3274,17 +3351,25 @@ function syncFromSheet() {
     } else {
       lines.push('Push: ' + (push.reason || 'not configured') + '.');
     }
-    status.textContent = lines.join(' ');
-    status.className = 'form-status ' + (pull.pulled && (push.ok || !push.pushed) ? 'success' : 'error');
+    const statusEl = getEl('syncSheetStatus');
+    if (statusEl) {
+      statusEl.textContent = lines.join(' ');
+      statusEl.className = 'form-status ' + (pull.pulled && (push.ok || !push.pushed) ? 'success' : 'error');
+    }
     showToast('Sync complete', 'success');
     refreshData();
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
-    status.textContent = 'Sync failed: ' + (err.message || err);
-    status.className = 'form-status error';
-  }).finally(function () {
-    btn.disabled = false;
+    applyBtn.disabled = false;
+    if (status) { status.textContent = 'Apply failed: ' + (err.message || err); status.className = 'form-status error'; }
   });
+}
+
+function cancelSyncPreview() {
+  closeDialog('syncPreviewModal');
+  syncPreviewData = null;
+  const status = getEl('syncSheetStatus');
+  if (status) { status.textContent = 'Sync cancelled — no changes applied.'; status.className = 'form-status'; }
 }
 
 // Shows the periodic auto-sync configuration + last run in the Settings card.
@@ -5091,7 +5176,7 @@ function wireGlobalEvents() {
         cancelConfirmDialog();
         return;
       }
-      ['editModal', 'aboutModal', 'submissionsModal', 'recordDetailModal', 'editUserModal', 'taskModal', 'columnModal', 'commandPalette', 'previewModal', 'linkModal'].forEach(function (id) {
+      ['editModal', 'aboutModal', 'submissionsModal', 'recordDetailModal', 'editUserModal', 'taskModal', 'columnModal', 'commandPalette', 'previewModal', 'linkModal', 'syncPreviewModal'].forEach(function (id) {
         const el = getEl(id);
         if (el && !el.classList.contains('hidden')) closeDialog(id);
       });

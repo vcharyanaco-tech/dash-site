@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS records (
   links TEXT NOT NULL DEFAULT '{}',
   -- background colour of the review-date "cell" (#ffffff/#ffab00/#c8e6c9)
   review_bg TEXT NOT NULL DEFAULT '#ffffff',
+  -- origin of this row: 'sheet' (imported/pulled) or 'app' (created in the
+  -- dashboard). Rows created in the dashboard are never overwritten or pruned
+  -- by a sheet pull.
+  source TEXT NOT NULL DEFAULT 'sheet',
   created_at INTEGER,
   updated_at INTEGER
 );

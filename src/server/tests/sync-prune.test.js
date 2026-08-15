@@ -53,7 +53,7 @@ test('guarded prune: deletes stale rows, keeps app-created rows', async () => {
   };
 
   // Add an app-created record at row 25 (beyond the sheet extent) — must survive.
-  db.prepare('INSERT INTO records (row, sector, description, entry_date, action, responsibility, review_date, links, created_at, updated_at) VALUES (25, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+  db.prepare("INSERT INTO records (row, sector, description, entry_date, action, responsibility, review_date, links, source, created_at, updated_at) VALUES (25, ?, ?, ?, ?, ?, ?, ?, 'app', ?, ?)")
     .run('App-created', '', '', '', '', '', '{}', Date.now(), Date.now());
 
   const result = await sync.pullFromSheet();

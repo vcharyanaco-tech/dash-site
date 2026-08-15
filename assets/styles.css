@@ -1973,6 +1973,11 @@ body.modal-open { overflow: hidden; }
 }
 
 .submissions-list { display: grid; gap: var(--sp-1); max-height: 45vh; overflow-y: auto; padding-right: 4px; }
+.sync-preview-item { padding: var(--sp-1); border: 1px solid var(--border-color, #ddd); border-radius: 6px; background: var(--bg-surface, #fff); }
+.sync-preview-tag { display: inline-block; min-width: 58px; padding: 1px 6px; border-radius: 4px; font-size: 0.72em; text-align: center; margin-right: 6px; }
+.sync-preview-add { background: #e8f5e9; color: #2e7d32; }
+.sync-preview-upd { background: #fff8e1; color: #f57f17; }
+.sync-preview-rem { background: #fdecea; color: #c62828; }
 
 .submission-card {
   border: 1px solid var(--border);

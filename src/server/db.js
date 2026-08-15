@@ -61,6 +61,17 @@ if (!submissionColumns.some(function (c) { return String(c.name) === 'read_at'; 
   db.exec('UPDATE submissions SET read_at = COALESCE(created_at, 0)');
 }
 
+/* ---- Migration: records.source (origin marker) ----
+   Rows created in the dashboard (addItem) are marked source='app' so a sheet
+   pull never overwrites or prunes them — the owner's dashboard additions are
+   preserved even when they don't exist in the sheet. Older DBs lack the
+   column; existing rows predate the marker and came from the sheet, so they
+   default to 'sheet'. */
+const recordColumns = db.prepare('PRAGMA table_info(records)').all();
+if (!recordColumns.some(function (c) { return String(c.name) === 'source'; })) {
+  db.exec("ALTER TABLE records ADD COLUMN source TEXT NOT NULL DEFAULT 'sheet'");
+}
+
 settings.setDb(db);
 
 /* ============================================================

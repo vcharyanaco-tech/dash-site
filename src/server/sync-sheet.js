@@ -163,10 +163,57 @@ async function fetchHyperlinks() {
  * Pull: sheet -> SQLite
  * ------------------------------------------------------------------ */
 
-// Upserts the sheet's records into the records table by display id (row =
-// START_ROW + displayId - 1). When links are unavailable (no API key), the
-// links column of existing rows is left untouched; new rows get {}.
-async function pullFromSheet() {
+// Field keys that can carry links, and the DB columns they map to.
+const LINK_FIELD_KEYS = ['sector', 'description', 'action'];
+
+// Parses a stored links JSON column into a plain object (never throws).
+function parseLinksCol_(raw) {
+  try {
+    const parsed = JSON.parse(raw || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+// Merges the sheet's links into the DB's existing links for a row. The sheet
+// is authoritative for the *content* of a field, but links the owner added in
+// the dashboard (or in the sheet) must never be lost: the result is the union
+// of the existing DB links and the sheet's links, keyed by field, with sheet
+// entries winning on the same (field, url).
+function mergeLinks_(existing, sheetLinks) {
+  const out = {};
+  LINK_FIELD_KEYS.forEach(function (key) {
+    const dbList = Array.isArray(existing[key]) ? existing[key] : [];
+    const sheetList = Array.isArray(sheetLinks[key]) ? sheetLinks[key] : [];
+    const seen = {};
+    const merged = [];
+    // Sheet entries first so identical (field, url) keeps the sheet's text.
+    sheetList.forEach(function (l) {
+      if (!l || !l.url) return;
+      if (seen[l.url]) return;
+      seen[l.url] = true;
+      merged.push({ url: String(l.url), text: l.text != null ? String(l.text) : '' });
+    });
+    dbList.forEach(function (l) {
+      if (!l || !l.url) return;
+      if (seen[l.url]) return;
+      seen[l.url] = true;
+      merged.push({ url: String(l.url), text: l.text != null ? String(l.text) : '' });
+    });
+    if (merged.length) out[key] = merged;
+  });
+  return out;
+}
+
+function sameText_(a, b) {
+  return String(a == null ? '' : a) === String(b == null ? '' : b);
+}
+
+// Fetches the sheet and computes a *plan* of what pulling it into the DB
+// would change — WITHOUT writing anything. Used both for the preview (shown
+// to the admin before applying) and as the input to applyPullPlan_().
+async function buildPullPlan_() {
   const text = await fetchGviz();
   const resp = parseGviz(text);
   const rows = gvizRows(resp);
@@ -181,9 +228,109 @@ async function pullFromSheet() {
     }
   }
 
+  const plan = {
+    rows: [],
+    added: [],
+    updated: [],
+    unchanged: 0,
+    removed: [],
+    sheetRows: rows.length,
+    linksRead: 0,
+    linksSource: API_KEY ? 'sheets-api' : (linksError ? 'db-kept (api error: ' + linksError + ')' : 'db-kept (no GOOGLE_SHEETS_API_KEY)'),
+    prevLastRow: Number(settings.getString('sync.prevSheetLastRow')) || 0,
+    currentLastRow: START_ROW + rows.length - 1
+  };
+
+  rows.forEach(function (r, i) {
+    const displayId = i + 1;
+    const row = START_ROW + i;
+    const proposed = {
+      sector: cellValue(r.c[1]),
+      description: cellValue(r.c[2]),
+      entryDate: cellValue(r.c[3]),
+      action: cellValue(r.c[4]),
+      responsibility: cellValue(r.c[5]),
+      reviewDate: cellValue(r.c[6])
+    };
+
+    const existingRow = db.prepare('SELECT * FROM records WHERE row = ?').get(row);
+    const existingLinks = existingRow ? parseLinksCol_(existingRow.links) : {};
+    const sheetLinks = linksByRow && linksByRow[displayId] || {};
+    const mergedLinks = mergeLinks_(existingLinks, sheetLinks);
+
+    if (sheetLinks && Object.keys(sheetLinks).length) {
+      plan.linksRead += Object.keys(sheetLinks).reduce(function (n, k) { return n + sheetLinks[k].length; }, 0);
+    }
+
+    const entry = {
+      displayId: displayId,
+      row: row,
+      proposed: proposed,
+      links: mergedLinks,
+      // A row the dashboard created (source='app') is owned by the app: the
+      // pull must never overwrite it with sheet content, even if the sheet
+      // grew into the same row number.
+      appOwned: !!(existingRow && String(existingRow.source || 'sheet') === 'app'),
+      existing: existingRow ? {
+        row: existingRow.row,
+        sector: existingRow.sector,
+        description: existingRow.description,
+        entryDate: existingRow.entry_date,
+        action: existingRow.action,
+        responsibility: existingRow.responsibility,
+        reviewDate: existingRow.review_date,
+        links: existingLinks
+      } : null
+    };
+    plan.rows.push(entry);
+
+    if (entry.appOwned) {
+      // Dashboard-created record colliding with a sheet row: preserved as-is.
+      plan.unchanged++;
+    } else if (!existingRow) {
+      plan.added.push(entry);
+    } else {
+      const existing = entry.existing;
+      const textChanged = !sameText_(existing.sector, proposed.sector) ||
+        !sameText_(existing.description, proposed.description) ||
+        !sameText_(existing.entryDate, proposed.entryDate) ||
+        !sameText_(existing.action, proposed.action) ||
+        !sameText_(existing.responsibility, proposed.responsibility) ||
+        !sameText_(existing.reviewDate, proposed.reviewDate);
+      const linksChanged = JSON.stringify(existing.links) !== JSON.stringify(mergedLinks);
+      if (textChanged || linksChanged) {
+        plan.updated.push(entry);
+      } else {
+        plan.unchanged++;
+      }
+    }
+  });
+
+  // Rows the DB has that fall outside the sheet's extent (owner deleted rows)
+  // are pruned — but ONLY within the sheet's previously-seen extent, and ONLY
+  // rows that came from the sheet (source='sheet'). Records created in the
+  // dashboard (source='app') are always preserved.
+  const pruneUpTo = plan.prevLastRow >= START_ROW ? plan.prevLastRow : plan.currentLastRow;
+  const stale = db.prepare("SELECT row, sector, description FROM records WHERE row > ? AND row <= ? AND source = 'sheet'")
+    .all(plan.currentLastRow, pruneUpTo);
+  plan.removed = stale.map(function (s) {
+    return {
+      row: s.row,
+      displayId: s.row - START_ROW + 1,
+      sector: s.sector,
+      description: s.description
+    };
+  });
+
+  return plan;
+}
+
+// Applies a plan produced by buildPullPlan_() to the DB (the "commit" half of
+// a preview-then-apply sync).
+async function applyPullPlan_(plan) {
   const insert = db.prepare(
-    'INSERT OR IGNORE INTO records (row, sector, description, entry_date, action, responsibility, review_date, links, review_bg, created_at, updated_at) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT OR IGNORE INTO records (row, sector, description, entry_date, action, responsibility, review_date, links, review_bg, source, created_at, updated_at) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
   const update = db.prepare(
     'UPDATE records SET sector = ?, description = ?, entry_date = ?, action = ?, responsibility = ?, review_date = ?, links = ?, review_bg = ?, updated_at = ? WHERE row = ?'
@@ -191,69 +338,92 @@ async function pullFromSheet() {
 
   let inserted = 0;
   let updated = 0;
-  let linkCount = 0;
+  let skipped = 0;
 
-  rows.forEach(function (r, i) {
-    const displayId = i + 1;
-    const row = START_ROW + i;
-    const sector = cellValue(r.c[1]);
-    const description = cellValue(r.c[2]);
-    const entryDate = cellValue(r.c[3]);
-    const action = cellValue(r.c[4]);
-    const responsibility = cellValue(r.c[5]);
-    const reviewDate = cellValue(r.c[6]);
-
-    let linksObj = {};
-    const sheetLinks = linksByRow && linksByRow[displayId];
-    if (sheetLinks && Object.keys(sheetLinks).length) {
-      linksObj = sheetLinks;
-      linkCount += Object.keys(sheetLinks).reduce(function (n, k) { return n + sheetLinks[k].length; }, 0);
-    } else {
-      // No API key / no links in this row: keep whatever the DB already has.
-      const existing = db.prepare('SELECT links FROM records WHERE row = ?').get(row);
-      try { linksObj = existing && existing.links ? JSON.parse(existing.links) : {}; } catch (e) { linksObj = {}; }
+  plan.rows.forEach(function (entry) {
+    if (entry.appOwned) {
+      // Dashboard-created row colliding with a sheet row: never overwrite.
+      skipped++;
+      return;
     }
-
-    const existing = db.prepare('SELECT row FROM records WHERE row = ?').get(row);
-    if (existing) {
-      update.run(sector, description, entryDate, action, responsibility, reviewDate,
-        JSON.stringify(linksObj), CONFIG.COLORS.NORMAL, Date.now(), row);
-      updated++;
-    } else {
-      insert.run(row, sector, description, entryDate, action, responsibility, reviewDate,
-        JSON.stringify(linksObj), CONFIG.COLORS.NORMAL, Date.now(), Date.now());
+    const p = entry.proposed;
+    if (!entry.existing) {
+      insert.run(entry.row, p.sector, p.description, p.entryDate, p.action, p.responsibility, p.reviewDate,
+        JSON.stringify(entry.links), CONFIG.COLORS.NORMAL, 'sheet', Date.now(), Date.now());
       inserted++;
+    } else {
+      update.run(p.sector, p.description, p.entryDate, p.action, p.responsibility, p.reviewDate,
+        JSON.stringify(entry.links), CONFIG.COLORS.NORMAL, Date.now(), entry.row);
+      updated++;
     }
   });
 
-  // Prune DB rows that no longer exist in the sheet (records deleted by the
-  // owner). Without this, a deleted sheet row stays in the DB forever and the
-  // next push re-creates it in the sheet as a stale duplicate.
-  //
-  // Guard: only rows within the sheet's *previously seen* extent are pruned.
-  // Records created in the app get nextRow_() = MAX(row)+1, which lies beyond
-  // the sheet extent until the next push writes them to the sheet — pruning
-  // them blindly here would destroy them before push can persist them.
-  const prevLastRow = Number(settings.getString('sync.prevSheetLastRow')) || 0;
-  const currentLastRow = START_ROW + rows.length - 1;
-  const pruneUpTo = prevLastRow >= START_ROW ? prevLastRow : currentLastRow;
-  const pruned = db.prepare('DELETE FROM records WHERE row > ? AND row <= ?')
-    .run(currentLastRow, pruneUpTo).changes;
-  if (pruned) console.log('[sync] pruned ' + pruned + ' stale DB row(s) beyond sheet row ' + currentLastRow);
-  settings.set('sync.prevSheetLastRow', String(currentLastRow));
+  // Only rows that came from the sheet are ever pruned (source='sheet');
+  // dashboard-created rows are preserved unconditionally.
+  const pruned = db.prepare("DELETE FROM records WHERE row > ? AND row <= ? AND source = 'sheet'")
+    .run(plan.currentLastRow, plan.prevLastRow >= START_ROW ? plan.prevLastRow : plan.currentLastRow).changes;
+  if (pruned) console.log('[sync] pruned ' + pruned + ' stale DB row(s) beyond sheet row ' + plan.currentLastRow);
+  settings.set('sync.prevSheetLastRow', String(plan.currentLastRow));
 
   require('./records').invalidateDataCache();
 
   return {
     pulled: true,
     spreadsheetId: SOURCE_SPREADSHEET_ID,
-    sheetRows: rows.length,
+    sheetRows: plan.sheetRows,
     inserted: inserted,
     updated: updated,
+    skipped: skipped,
     pruned: pruned,
-    linksRead: linkCount,
-    linksSource: API_KEY ? 'sheets-api' : (linksError ? 'db-kept (api error: ' + linksError + ')' : 'db-kept (no GOOGLE_SHEETS_API_KEY)')
+    linksRead: plan.linksRead,
+    linksSource: plan.linksSource
   };
+}
+
+// Computes what a pull would change and returns a human-readable preview
+// WITHOUT touching the DB. The admin reviews this, then calls pullFromSheet()
+// (via adminSyncFromSheet) to actually apply it.
+async function previewPullFromSheet() {
+  const plan = await buildPullPlan_();
+  const summarize = function (entry) {
+    const s = entry.existing;
+    const changes = [];
+    if (!s || !sameText_(s.sector, entry.proposed.sector)) changes.push('sector');
+    if (!s || !sameText_(s.description, entry.proposed.description)) changes.push('description');
+    if (!s || !sameText_(s.entryDate, entry.proposed.entryDate)) changes.push('entryDate');
+    if (!s || !sameText_(s.action, entry.proposed.action)) changes.push('action');
+    if (!s || !sameText_(s.responsibility, entry.proposed.responsibility)) changes.push('responsibility');
+    if (!s || !sameText_(s.reviewDate, entry.proposed.reviewDate)) changes.push('reviewDate');
+    if (!s || JSON.stringify(s.links) !== JSON.stringify(entry.links)) changes.push('links');
+    return {
+      displayId: entry.displayId,
+      row: entry.row,
+      sector: entry.proposed.sector,
+      description: entry.proposed.description,
+      changes: changes,
+      links: entry.links
+    };
+  };
+  return {
+    preview: true,
+    spreadsheetId: SOURCE_SPREADSHEET_ID,
+    sheetRows: plan.sheetRows,
+    added: plan.added.map(summarize),
+    updated: plan.updated.map(summarize),
+    removed: plan.removed,
+    unchanged: plan.unchanged,
+    linksRead: plan.linksRead,
+    linksSource: plan.linksSource,
+    pending: plan.added.length + plan.updated.length + plan.removed.length
+  };
+}
+
+// Upserts the sheet's records into the records table by display id (row =
+// START_ROW + displayId - 1). When links are unavailable (no API key), the
+// links column of existing rows is left untouched; new rows get {}.
+async function pullFromSheet() {
+  const plan = await buildPullPlan_();
+  return applyPullPlan_(plan);
 }
 
 /* ------------------------------------------------------------------ *
@@ -454,6 +624,7 @@ async function pushToSheet() {
 module.exports = {
   SOURCE_SPREADSHEET_ID,
   pullFromSheet,
+  previewPullFromSheet,
   pushToSheet,
   writeCredentialConfigured,
   pushToSheetEnabled,

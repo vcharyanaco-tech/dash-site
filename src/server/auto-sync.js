@@ -20,13 +20,15 @@ let timer = null;
 let running = false;
 let lastRun = null; // {at, pull, push} or {at, error} from the most recent pass
 
-/** Resolves the configured interval in minutes (0 = disabled). */
+/** Resolves the configured interval in minutes (0 = disabled).
+ *  Sync is now button-only by default: unless DASH_AUTO_SYNC_MINUTES is
+ *  explicitly set to a positive number, no periodic sync runs. */
 function intervalMinutes() {
   const rawEnv = process.env.DASH_AUTO_SYNC_MINUTES;
-  if (rawEnv === undefined || rawEnv === null || String(rawEnv).trim() === '') return 15; // unset → default
+  if (rawEnv === undefined || rawEnv === null || String(rawEnv).trim() === '') return 0; // unset → off
   const raw = Number(rawEnv);
   if (raw === 0) return 0; // explicit 0 disables
-  if (!isFinite(raw) || raw <= 0) return 15; // invalid → default
+  if (!isFinite(raw) || raw <= 0) return 0; // invalid → off
   return Math.max(5, Math.round(raw));
 }
 

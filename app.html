@@ -395,7 +395,7 @@
               </div>
               <div id="syncSheetStatus" class="form-status" aria-live="polite"></div>
               <p class="section-copy muted" id="autoSyncStatus"></p>
-              <p class="section-copy muted" id="syncSheetHint">The project runs from its own database and never depends on the spreadsheet being reachable. This button pulls the sheet's latest records in and pushes project changes back when a write credential is configured. An automatic sync also runs on a schedule so the two stay in step without manual clicks.</p>
+              <p class="section-copy muted" id="syncSheetHint">The project runs from its own database and never depends on the spreadsheet being reachable. Clicking Sync pulls the sheet's latest records and hyperlinks into the project. Changes are previewed first — nothing is applied until you confirm. Records and links you add in the dashboard are always preserved, even if they don't exist in the sheet. No automatic background sync runs.</p>
             </div>
           </div>
 
@@ -751,6 +751,27 @@
         <div class="form-row">
           <button id="confirmOkBtn" class="btn btn-primary" type="button" onclick="runConfirmDialog()">OK</button>
           <button class="btn btn-secondary" type="button" onclick="cancelConfirmDialog()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ SYNC PREVIEW DIALOG ============================ -->
+  <div id="syncPreviewModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="syncPreviewModalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="text-subheading" id="syncPreviewModalTitle">Review sheet sync changes</h3>
+        <button class="icon-btn" type="button" onclick="cancelSyncPreview()" aria-label="Close dialog">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="confirm-body">
+        <p id="syncPreviewSummary" class="confirm-message"></p>
+        <div id="syncPreviewList" class="submissions-list" style="max-height:40vh;overflow:auto;"></div>
+        <div class="form-row">
+          <button id="syncPreviewApplyBtn" class="btn btn-primary" type="button" onclick="applySyncPreview()">Apply changes</button>
+          <button class="btn btn-secondary" type="button" onclick="cancelSyncPreview()">Cancel</button>
+          <span id="syncPreviewStatus" class="form-status" aria-live="polite"></span>
         </div>
       </div>
     </div>

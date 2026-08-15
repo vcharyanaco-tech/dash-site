@@ -450,8 +450,8 @@ function addRecord_(item, token) {
     const id = row - CONFIG.SHEET.START_ROW + 1;
 
     db.prepare(
-      'INSERT INTO records (row, sector, description, entry_date, action, responsibility, review_date, links, review_bg, created_at, updated_at) ' +
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO records (row, sector, description, entry_date, action, responsibility, review_date, links, review_bg, source, created_at, updated_at) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(
       row,
       String(normalized.sector || ''),
@@ -462,6 +462,7 @@ function addRecord_(item, token) {
       String(normalized.reviewDate || ''),
       JSON.stringify(normalizeLinksForStorage_(normalized.links || {})),
       item.flagged ? CONFIG.COLORS.FLAG : CONFIG.COLORS.NORMAL,
+      'app',
       Date.now(),
       Date.now()
     );

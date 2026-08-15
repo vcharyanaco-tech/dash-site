@@ -34,6 +34,9 @@ services:
       - key: WORKER_API_TOKEN
         sync: false
       # Email via the worker SMTP relay (SMTP ports are blocked on free)
+      # Sync is button-only: no periodic sheet sync (see auto-sync.js default).
+      - key: DASH_AUTO_SYNC_MINUTES
+        value: "0"
       - key: MAIL_TRANSPORT
         value: http
       - key: MAIL_HTTP_URL

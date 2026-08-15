@@ -126,6 +126,14 @@ const dispatch = {
     });
   },
 
+  // Computes what a sheet pull WOULD change and returns the preview WITHOUT
+  // touching the DB. The admin reviews this (see app.js sync preview modal),
+  // then adminSyncFromSheet applies it. Admin only.
+  adminPreviewSyncFromSheet: function (args) {
+    auth.requireAdmin(A(args, 0));
+    return require('./sync-sheet').previewPullFromSheet();
+  },
+
   // Auto-sync configuration + last run (periodic background sync). Public —
   // non-sensitive operational info (interval + most recent run summary).
   getSyncStatus: function () {
