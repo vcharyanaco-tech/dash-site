@@ -429,7 +429,10 @@ function closeMeetingNotes() {
 /* Previous recordings + notes saved on the server (data/meetings). Admin-only,
    like the rest of the meeting-notes feature. Notes download as editable
    markdown; audio downloads as the original file. Delete removes from the
-   server (and its backup) permanently. */
+   server (and its backup) permanently. The search box filters client-side by
+   title, file name, or formatted date. */
+let previousMeetingsCache = null;
+
 function loadPreviousMeetings() {
   const list = getEl('previousMeetingsList');
   if (!list) return;
@@ -440,40 +443,67 @@ function loadPreviousMeetings() {
         escapeHtml((data && data.message) || 'Could not load saved meetings.') + '</p>';
       return;
     }
-    if (!data.total) {
-      list.innerHTML = '<p class="meeting-notes-hint" style="padding:6px 0;">No saved meetings yet — recordings and notes appear here after you transcribe one.</p>';
-      return;
-    }
-    let html = '<div class="meeting-notes-list">';
-    const noteRow = function (f) {
-      return '<div class="fathom-meeting-item">' +
-        '<div class="fathom-meeting-title">' + escapeHtml(f.title) + '</div>' +
-        '<div class="fathom-meeting-meta">' + escapeHtml(formatTimestamp(f.modified)) + ' &middot; ' +
-        formatFileSize(f.size) + ' &middot; notes (.md)</div>' +
-        '<div class="fathom-meeting-actions">' +
-        '<button class="btn btn-small btn-secondary" type="button" onclick="downloadMeetingFile(\'' + escapeAttr(f.name) + '\')">Download</button>' +
-        '<button class="btn btn-small btn-danger-ghost" type="button" onclick="deleteMeetingFile(\'' + escapeAttr(f.name) + '\')">Delete</button>' +
-        '</div></div>';
-    };
-    const audioRow = function (f) {
-      return '<div class="fathom-meeting-item">' +
-        '<div class="fathom-meeting-title">' + escapeHtml(f.title) + '</div>' +
-        '<div class="fathom-meeting-meta">' + escapeHtml(formatTimestamp(f.modified)) + ' &middot; ' +
-        formatFileSize(f.size) + ' &middot; recording</div>' +
-        '<div class="fathom-meeting-actions">' +
-        '<button class="btn btn-small btn-secondary" type="button" onclick="downloadMeetingFile(\'' + escapeAttr(f.name) + '\')">Download</button>' +
-        '<button class="btn btn-small btn-danger-ghost" type="button" onclick="deleteMeetingFile(\'' + escapeAttr(f.name) + '\')">Delete</button>' +
-        '</div></div>';
-    };
-    (data.notes || []).forEach(function (f) { html += noteRow(f); });
-    (data.audio || []).forEach(function (f) { html += audioRow(f); });
-    html += '</div>';
-    list.innerHTML = html;
+    previousMeetingsCache = data;
+    renderPreviousMeetings_();
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
     list.innerHTML = '<p class="meeting-notes-hint" style="padding:6px 0;">' +
       escapeHtml(err && err.message ? err.message : String(err)) + '</p>';
   });
+}
+
+function filterPreviousMeetings() {
+  renderPreviousMeetings_();
+}
+
+function renderPreviousMeetings_() {
+  const list = getEl('previousMeetingsList');
+  const input = getEl('meetingsSearchInput');
+  if (!list) return;
+  const data = previousMeetingsCache;
+  if (!data) {
+    list.innerHTML = '<p class="meeting-notes-hint" style="padding:6px 0;">No saved meetings yet — recordings and notes appear here after you transcribe one.</p>';
+    return;
+  }
+  const q = input ? String(input.value || '').trim().toLowerCase() : '';
+  const matches = function (f) {
+    if (!q) return true;
+    const hay = ((f.title || '') + ' ' + (f.name || '') + ' ' + formatTimestamp(f.modified)).toLowerCase();
+    return hay.indexOf(q) !== -1;
+  };
+  const notes = (data.notes || []).filter(matches);
+  const audio = (data.audio || []).filter(matches);
+  const noteRow = function (f) {
+    return '<div class="fathom-meeting-item">' +
+      '<div class="fathom-meeting-title">' + escapeHtml(f.title) + '</div>' +
+      '<div class="fathom-meeting-meta">' + escapeHtml(formatTimestamp(f.modified)) + ' &middot; ' +
+      formatFileSize(f.size) + ' &middot; notes (.md)</div>' +
+      '<div class="fathom-meeting-actions">' +
+      '<button class="btn btn-small btn-secondary" type="button" onclick="downloadMeetingFile(\'' + escapeAttr(f.name) + '\')">Download</button>' +
+      '<button class="btn btn-small btn-danger-ghost" type="button" onclick="deleteMeetingFile(\'' + escapeAttr(f.name) + '\')">Delete</button>' +
+      '</div></div>';
+  };
+  const audioRow = function (f) {
+    return '<div class="fathom-meeting-item">' +
+      '<div class="fathom-meeting-title">' + escapeHtml(f.title) + '</div>' +
+      '<div class="fathom-meeting-meta">' + escapeHtml(formatTimestamp(f.modified)) + ' &middot; ' +
+      formatFileSize(f.size) + ' &middot; recording</div>' +
+      '<div class="fathom-meeting-actions">' +
+      '<button class="btn btn-small btn-secondary" type="button" onclick="downloadMeetingFile(\'' + escapeAttr(f.name) + '\')">Download</button>' +
+      '<button class="btn btn-small btn-danger-ghost" type="button" onclick="deleteMeetingFile(\'' + escapeAttr(f.name) + '\')">Delete</button>' +
+      '</div></div>';
+  };
+  if (!notes.length && !audio.length) {
+    list.innerHTML = '<p class="meeting-notes-hint" style="padding:6px 0;">' +
+      (q ? 'No saved meetings match \u201C' + escapeHtml(input ? input.value : '') + '\u201D.' : 'No saved meetings yet — recordings and notes appear here after you transcribe one.') +
+      '</p>';
+    return;
+  }
+  let html = '<div class="meeting-notes-list">';
+  notes.forEach(function (f) { html += noteRow(f); });
+  audio.forEach(function (f) { html += audioRow(f); });
+  html += '</div>';
+  list.innerHTML = html;
 }
 
 function downloadMeetingFile(name) {

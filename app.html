@@ -1047,8 +1047,9 @@
         </div>
         <div id="meetingNotesResult"></div>
         <div class="meeting-divider"><span>previous recordings &amp; notes</span></div>
-        <div class="form-row">
-          <button id="meetingsRefreshBtn" class="btn btn-ghost" type="button" onclick="loadPreviousMeetings()">Refresh list</button>
+        <div class="form-row meeting-search-row">
+          <input id="meetingsSearchInput" class="input" type="search" placeholder="Search by title or date…" autocomplete="off" oninput="filterPreviousMeetings()">
+          <button id="meetingsRefreshBtn" class="btn btn-ghost" type="button" onclick="loadPreviousMeetings()">Refresh</button>
         </div>
         <div id="previousMeetingsList" class="meeting-notes-list"></div>
       </div>

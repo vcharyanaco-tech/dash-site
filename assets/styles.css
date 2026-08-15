@@ -1340,6 +1340,15 @@ body.sidebar-collapsed .nav-item.active { box-shadow: inset 0 0 0 2px var(--seco
   gap: 8px;
   margin-top: 4px;
 }
+.meeting-search-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.meeting-search-row .input {
+  flex: 1;
+  min-width: 0;
+}
 .btn-danger-ghost {
   background: transparent;
   color: var(--danger);
