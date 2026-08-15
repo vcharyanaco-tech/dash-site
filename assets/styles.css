@@ -1212,7 +1212,14 @@ body.sidebar-collapsed .nav-item.active { box-shadow: inset 0 0 0 2px var(--seco
   letter-spacing: .3px;
   border-bottom: 2px solid var(--dt-header);
 }
-.card-ai-table thead th:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.card-ai-table thead th:first-child {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  /* Frozen corner: the Division column header stays pinned to the top AND
+     left edges (both vertical and horizontal scroll). */
+  position: sticky;
+  left: 0;
+  z-index: 4;
+}
 .card-ai-table thead th:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 .card-ai-table tbody td { background: var(--dt-row-a); }
 .card-ai-table tbody tr:nth-child(even) td { background: var(--dt-row-b); }
@@ -1220,6 +1227,12 @@ body.sidebar-collapsed .nav-item.active { box-shadow: inset 0 0 0 2px var(--seco
 .card-ai-table tbody td:first-child {
   font-weight: 700;
   border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  /* Frozen Division column: pinned to the left edge so it stays visible
+     during horizontal scroll, exactly like the frozen header. */
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  box-shadow: 1px 0 0 0 var(--dt-border);
 }
 .card-ai-table tbody td:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 
