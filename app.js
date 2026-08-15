@@ -1485,6 +1485,15 @@ function applyPanelSize_(panel, row, isLink) {
   panel.style.maxWidth = 'none';
   panel.style.height = cached.h + 'px';
   panel.style.maxHeight = 'none';
+  // Restore the inner analyze-table window height so the table keeps its
+  // expanded/contracted size after a re-render.
+  if (cached.wrapH) {
+    const wrap = panel.querySelector('.card-ai-table-wrap');
+    if (wrap) {
+      wrap.style.maxHeight = 'none';
+      wrap.style.height = cached.wrapH + 'px';
+    }
+  }
 }
 
 function cardAiPanelHtml_() {
@@ -1631,7 +1640,7 @@ function cachedLinkPanel_(row) {
 
 function persistLinkPanel_(row, data, collapsed) {
   const prev = appState.linkAnalysis[String(row)] || {};
-  appState.linkAnalysis[String(row)] = { data: data || null, collapsed: !!collapsed, w: prev.w, h: prev.h };
+  appState.linkAnalysis[String(row)] = { data: data || null, collapsed: !!collapsed, w: prev.w, h: prev.h, wrapH: prev.wrapH };
 }
 
 /* Full persisted link panel HTML (head + body filled from the cached result),
@@ -1646,7 +1655,7 @@ function linkPanelHtmlFromCache_(row) {
     '<span class="card-ai-title">Linked file analysis</span>' +
     '<button class="btn btn-small btn-ghost" type="button" onclick="collapseCardAi(this)">Collapse</button>' +
     '</div>' +
-    '<div class="card-ai-body">' + linkAiResultHtml_(cached.data) + '</div>' +
+    '<div class="card-ai-body">' + linkAiResultHtml_(cached.data, cached.wrapH) + '</div>' +
     '<div class="panel-resize-grip" title="Drag to resize"></div>' +
     '</div>';
 }
@@ -1769,7 +1778,7 @@ function loadCardLink(panel, row) {
   // result survives background refreshes without re-hitting the API.
   const cached = cachedLinkPanel_(row);
   if (cached && cached.data) {
-    body.innerHTML = linkAiResultHtml_(cached.data);
+    body.innerHTML = linkAiResultHtml_(cached.data, cached.wrapH);
     makeTableResizable_(body.querySelector('.card-ai-table'));
     if (cached.collapsed) panel.classList.add('card-ai-collapsed');
     return;
@@ -1791,7 +1800,7 @@ function loadCardLink(panel, row) {
   });
 }
 
-function linkAiResultHtml_(data) {
+function linkAiResultHtml_(data, wrapH) {
   const head = '<div class="card-ai-link-label">' + escapeHtml(data.source || '') +
     (data.contentRead && data.contentLength ? ' <span class="card-ai-size">' +
       Number(data.contentLength).toLocaleString() + ' chars' +
@@ -1819,9 +1828,10 @@ function linkAiResultHtml_(data) {
       ? '<div class="card-ai-table-note">Showing first ' + data.previewRows.length + ' of ' +
         Number(data.previewRowTotal).toLocaleString() + ' rows</div>'
       : '';
+    const wrapStyle = wrapH ? ' style="max-height:none;height:' + wrapH + 'px;"' : '';
     html += '<details class="card-ai-preview" open><summary>Linked file preview</summary>' +
       (title ? '<div class="card-ai-table-title">' + escapeHtml(title) + '</div>' : '') +
-      '<div class="card-ai-table-wrap"><table class="card-ai-table">' + thead + tbody + '</table></div>' +
+      '<div class="card-ai-table-wrap"' + wrapStyle + '><table class="card-ai-table">' + thead + tbody + '</table></div>' +
       note + '</details>';
   } else if (data.preview) {
     html += '<details class="card-ai-preview"><summary>Linked file preview</summary>' +
@@ -2254,19 +2264,41 @@ function initApp() {
     const rect = panel.getBoundingClientRect();
     const startW = rect.width, startH = rect.height;
     const parent = panel.parentElement;
+    // In table view the panel lives inside the records-table window; grow /
+    // shrink that window with the panel so the analyze table is never
+    // clipped by the window's max-height (the previous "limits at a
+    // fraction" behaviour).
+    const scroller = panel.closest('.table-scroll');
+    const startScrollH = scroller ? scroller.getBoundingClientRect().height : 0;
+    // Inner table window: the analyze table wrap follows the panel height.
+    const wrap = panel.querySelector('.card-ai-table-wrap');
+    const startWrapTop = wrap ? (wrap.getBoundingClientRect().top - panel.getBoundingClientRect().top) : 0;
     const maxW = parent ? Math.max(240, parent.clientWidth - 16) : window.innerWidth - 32;
     document.body.classList.add('modal-resizing');
     grip.classList.add('active');
     function onMove(ev) {
       const w = Math.max(240, Math.min(maxW, startW + (ev.clientX - startX)));
-      const h = Math.max(140, Math.min(window.innerHeight - 32, startH + (ev.clientY - startY)));
+      const h = Math.max(140, Math.min(window.innerHeight - 12, startH + (ev.clientY - startY)));
       panel.style.width = w + 'px';
       panel.style.maxWidth = 'none';
       panel.style.height = h + 'px';
       panel.style.maxHeight = 'none';
+      // Inner analyze table follows the panel height (expand + contract).
+      if (wrap) {
+        wrap.style.maxHeight = 'none';
+        wrap.style.height = Math.max(120, h - startWrapTop - 8) + 'px';
+      }
+      // Surrounding records-table window follows the panel too.
+      if (scroller) {
+        const sh = Math.max(240, Math.min(window.innerHeight * 0.92, startScrollH + (h - startH)));
+        scroller.style.maxHeight = 'none';
+        scroller.style.height = sh + 'px';
+        try { window.localStorage.setItem('dashTableHeight', String(Math.round(sh))); } catch (err) {}
+      }
       let cached = isLink ? cachedLinkPanel_(row) : cachedAiPanel_(row);
       if (!cached) { cached = { data: null, collapsed: false }; if (isLink) persistLinkPanel_(row, null, false); else persistAiPanel_(row, null, false); }
       cached.w = Math.round(w); cached.h = Math.round(h);
+      if (wrap) cached.wrapH = Math.round(Math.max(120, h - startWrapTop - 8));
     }
     function onUp() {
       document.body.classList.remove('modal-resizing');
