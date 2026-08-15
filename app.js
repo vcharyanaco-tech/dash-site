@@ -456,6 +456,24 @@ function filterPreviousMeetings() {
   renderPreviousMeetings_();
 }
 
+function localDayKey_(d) {
+  const dt = d instanceof Date ? d : new Date(d);
+  if (isNaN(dt.getTime())) return '';
+  const pad = function (v) { return String(v).padStart(2, '0'); };
+  return dt.getFullYear() + '-' + pad(dt.getMonth() + 1) + '-' + pad(dt.getDate());
+}
+
+function previousMeetingGroup_(modified) {
+  const k = localDayKey_(modified);
+  if (!k) return 'earlier';
+  const todayKey = localDayKey_(new Date());
+  if (k === todayKey) return 'today';
+  const y = new Date();
+  y.setDate(y.getDate() - 1);
+  if (k === localDayKey_(y)) return 'yesterday';
+  return 'earlier';
+}
+
 function renderPreviousMeetings_() {
   const list = getEl('previousMeetingsList');
   const input = getEl('meetingsSearchInput');
@@ -471,37 +489,33 @@ function renderPreviousMeetings_() {
     const hay = ((f.title || '') + ' ' + (f.name || '') + ' ' + formatTimestamp(f.modified)).toLowerCase();
     return hay.indexOf(q) !== -1;
   };
-  const notes = (data.notes || []).filter(matches);
-  const audio = (data.audio || []).filter(matches);
-  const noteRow = function (f) {
+  const itemRow = function (f) {
+    const kind = /\.md$/i.test(f.name) ? 'notes (.md)' : 'recording';
     return '<div class="fathom-meeting-item">' +
       '<div class="fathom-meeting-title">' + escapeHtml(f.title) + '</div>' +
       '<div class="fathom-meeting-meta">' + escapeHtml(formatTimestamp(f.modified)) + ' &middot; ' +
-      formatFileSize(f.size) + ' &middot; notes (.md)</div>' +
+      formatFileSize(f.size) + ' &middot; ' + kind + '</div>' +
       '<div class="fathom-meeting-actions">' +
       '<button class="btn btn-small btn-secondary" type="button" onclick="downloadMeetingFile(\'' + escapeAttr(f.name) + '\')">Download</button>' +
       '<button class="btn btn-small btn-danger-ghost" type="button" onclick="deleteMeetingFile(\'' + escapeAttr(f.name) + '\')">Delete</button>' +
       '</div></div>';
   };
-  const audioRow = function (f) {
-    return '<div class="fathom-meeting-item">' +
-      '<div class="fathom-meeting-title">' + escapeHtml(f.title) + '</div>' +
-      '<div class="fathom-meeting-meta">' + escapeHtml(formatTimestamp(f.modified)) + ' &middot; ' +
-      formatFileSize(f.size) + ' &middot; recording</div>' +
-      '<div class="fathom-meeting-actions">' +
-      '<button class="btn btn-small btn-secondary" type="button" onclick="downloadMeetingFile(\'' + escapeAttr(f.name) + '\')">Download</button>' +
-      '<button class="btn btn-small btn-danger-ghost" type="button" onclick="deleteMeetingFile(\'' + escapeAttr(f.name) + '\')">Delete</button>' +
-      '</div></div>';
-  };
-  if (!notes.length && !audio.length) {
+  const all = (data.notes || []).concat(data.audio || []).filter(matches);
+  if (!all.length) {
     list.innerHTML = '<p class="meeting-notes-hint" style="padding:6px 0;">' +
       (q ? 'No saved meetings match \u201C' + escapeHtml(input ? input.value : '') + '\u201D.' : 'No saved meetings yet — recordings and notes appear here after you transcribe one.') +
       '</p>';
     return;
   }
+  const groups = { today: [], yesterday: [], earlier: [] };
+  all.forEach(function (f) { groups[previousMeetingGroup_(f.modified)].push(f); });
+  const labels = { today: 'Today', yesterday: 'Yesterday', earlier: 'Earlier' };
   let html = '<div class="meeting-notes-list">';
-  notes.forEach(function (f) { html += noteRow(f); });
-  audio.forEach(function (f) { html += audioRow(f); });
+  ['today', 'yesterday', 'earlier'].forEach(function (g) {
+    if (!groups[g].length) return;
+    html += '<div class="meeting-date-group">' + labels[g] + '</div>';
+    groups[g].forEach(function (f) { html += itemRow(f); });
+  });
   html += '</div>';
   list.innerHTML = html;
 }
