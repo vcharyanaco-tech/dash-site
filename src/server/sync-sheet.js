@@ -40,9 +40,16 @@ const START_ROW = CONFIG.SHEET.START_ROW; // 4
 const API_KEY = process.env.GOOGLE_SHEETS_API_KEY || '';
 const SERVICE_ACCOUNT_JSON = process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '';
 const OAUTH_TOKEN = process.env.GOOGLE_OAUTH_TOKEN || '';
+// Hard kill switch: push-back to the origin spreadsheet is DISABLED unless
+// explicitly opted in via DASH_PUSH_TO_SHEET=true. This protects the origin
+// sheet from being overwritten by stale/misaligned project data (a recurring
+// corruption source); the pull (sheet -> DB) is unaffected.
+function pushToSheetEnabled() {
+  return String(process.env.DASH_PUSH_TO_SHEET || '').toLowerCase() === 'true';
+}
 
 function writeCredentialConfigured() {
-  return !!(SERVICE_ACCOUNT_JSON || OAUTH_TOKEN);
+  return pushToSheetEnabled() && !!(SERVICE_ACCOUNT_JSON || OAUTH_TOKEN);
 }
 
 /* ------------------------------------------------------------------ *
@@ -349,6 +356,13 @@ function parseRecordLinks_(raw) {
 // Writes every record back to the sheet: plain values for all 7 columns, then
 // rich-text cells (with hyperlink runs) for any field that has links.
 async function pushToSheet() {
+  if (!pushToSheetEnabled()) {
+    return {
+      pushed: false,
+      ok: false,
+      reason: 'push-back disabled — set DASH_PUSH_TO_SHEET=true (and a write credential) to enable'
+    };
+  }
   const token = await accessToken_();
   if (!token) {
     return {
@@ -442,6 +456,7 @@ module.exports = {
   pullFromSheet,
   pushToSheet,
   writeCredentialConfigured,
+  pushToSheetEnabled,
   _parseGviz: parseGviz,
   _gvizRows: gvizRows
 };
