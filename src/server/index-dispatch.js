@@ -126,9 +126,9 @@ const dispatch = {
     });
   },
 
-  // Auto-sync configuration + last run (periodic background sync). Admin only.
-  getSyncStatus: function (args) {
-    auth.requireAdmin(A(args, 0));
+  // Auto-sync configuration + last run (periodic background sync). Public —
+  // non-sensitive operational info (interval + most recent run summary).
+  getSyncStatus: function () {
     return require('./auto-sync').getSyncStatus();
   }
 };

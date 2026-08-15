@@ -95,7 +95,7 @@ const ApiService = {
   adminResetPassword: function (email, newPassword) { return apiCall_('adminResetPassword', email, newPassword, getAuthToken()); },
   adminEmailAllUsers: function (subject, body) { return apiCall_('adminEmailAllUsers', subject, body, getAuthToken()); },
   adminSyncFromSheet: function () { return apiCall_('adminSyncFromSheet', getAuthToken()); },
-  adminGetSyncStatus: function () { return apiCall_('adminGetSyncStatus', getAuthToken()); },
+  getSyncStatus: function () { return apiCall_('getSyncStatus'); },
   getMyNotifications: function () { return apiCall_('getMyNotifications', getAuthToken()); },
   generateReviewNotifications: function () { return apiCall_('generateReviewNotifications', getAuthToken()); },
   markNotificationsRead: function (ids) { return apiCall_('markNotificationsRead', ids, getAuthToken()); },
@@ -3291,7 +3291,7 @@ function syncFromSheet() {
 function loadAutoSyncStatus() {
   const el = getEl('autoSyncStatus');
   if (!el) return;
-  ApiService.adminGetSyncStatus().then(function (data) {
+  ApiService.getSyncStatus().then(function (data) {
     const mins = data && data.intervalMinutes;
     const enabled = !!(data && data.enabled);
     const parts = [];
