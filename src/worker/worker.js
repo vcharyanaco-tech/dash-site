@@ -112,6 +112,14 @@ export default {
   // instance never idles out. Hitting SERVER_ORIGIN (not this worker's
   // /api/health, which is served locally) is intentional.
   async scheduled(event, env, ctx) {
+    // Night-time sleep: between 21:00 and 06:00 IST the keep-alive ping is
+    // skipped so the Render instance idles out and banks instance-hours
+    // (~9h/night, ~270h/month against the 750h free cap). Anyone who opens
+    // the dashboard at night pays one cold start (~30-60s, auto-retried by
+    // the frontend) — an accepted tradeoff.
+    const istMs = Date.now() + ((5 * 60 + 30) * 60000);
+    const istHour = new Date(istMs).getUTCHours();
+    if (istHour >= 21 || istHour < 6) return;
     const origin = env.SERVER_ORIGIN;
     if (!origin) return;
     try {
@@ -424,12 +432,19 @@ async function forwardToServer(request, url, serverOrigin) {
       headers: fwd,
       body: bodyText,
       redirect: 'follow',
+      // Workers free has no hard HTTP wall-time cap, but a hung backend (e.g.
+      // a cold start mid-redeploy) shouldn't leave the user waiting forever.
+      // 180s is generous even for long meeting transcriptions.
+      signal: AbortSignal.timeout(180000),
     });
   } catch (fwdErr) {
-    return new Response('FORWARD_ERROR: ' + (fwdErr && fwdErr.message) + ' | target=' + target.toString() + ' | SERVER_ORIGIN=' + serverOrigin, {
-      status: 500,
-      headers: COMMON_HEADERS,
-    });
+    return maintenanceResponse_(fwdErr && fwdErr.message);
+  }
+  if (resp.status === 502 || resp.status === 503 || resp.status === 504) {
+    // Render free has no zero-downtime deploys: while the old instance is
+    // down and the new one builds, the origin answers with a gateway error.
+    // Turn that into a clean retryable 503 instead of a raw 502/504.
+    return maintenanceResponse_('backend unavailable (HTTP ' + resp.status + ')');
   }
 
   const newHeaders = new Headers(resp.headers);
@@ -438,9 +453,27 @@ async function forwardToServer(request, url, serverOrigin) {
   return new Response(respBody, { status: resp.status, headers: newHeaders });
 }
 
+/** Clean 503 while the backend is restarting. The dashboard frontend sees the
+ *  status and auto-retries after the Retry-After delay (see app.js apiCall_). */
+function maintenanceResponse_(detail) {
+  return jsonResponse({
+    error: 'maintenance',
+    message: 'Dashboard server is restarting — retrying shortly.',
+    retryAfter: 15,
+    detail: detail || ''
+  }, 503, { 'Retry-After': '15' });
+}
+
 async function handleEnterpriseRoute(request, env, url, ctx) {
   if (url.pathname === '/api/health') {
-    return jsonResponse({ ok: true, service: 'dashv1-proxy' });
+    // Include the backup-bridge state written by the Node data-sync module so
+    // a KV-quota / last-backup problem is visible even while Node is down.
+    let backup = null;
+    try {
+      const raw = await env.DATA_BACKUP_KV.get('backup:stats');
+      if (raw) { try { backup = JSON.parse(raw); } catch (err) { backup = null; } }
+    } catch (err) { backup = null; }
+    return jsonResponse({ ok: true, service: 'dashv1-proxy', backup: backup });
   }
 
   const token = bearerToken(request);
@@ -614,6 +647,23 @@ async function handleBackup(request, env, url) {
       const list = await kv.list({ prefix: BACKUP_MEETING_PREFIX });
       const files = list.keys.map((k) => k.name.slice(BACKUP_MEETING_PREFIX.length));
       return jsonResponse({ ok: true, files: files });
+    }
+    return jsonResponse({ error: 'method not allowed' }, 405);
+  }
+
+  // GET/PUT /api/backup/stats — last-backup + write-budget state for health checks
+  if (rest === '/stats') {
+    if (request.method === 'GET') {
+      const v = await kv.get('backup:stats', 'text');
+      if (v === null) return jsonResponse({ ok: true, stats: null });
+      let stats = null;
+      try { stats = JSON.parse(v); } catch (err) { stats = null; }
+      return jsonResponse({ ok: true, stats: stats });
+    }
+    if (request.method === 'PUT') {
+      const buf = await request.arrayBuffer();
+      await kv.put('backup:stats', buf);
+      return jsonResponse({ ok: true });
     }
     return jsonResponse({ error: 'method not allowed' }, 405);
   }

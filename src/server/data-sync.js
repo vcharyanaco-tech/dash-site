@@ -137,6 +137,89 @@ async function restoreData() {
 /** Consistent snapshot of the live DB (VACUUM INTO — a fresh standalone copy,
  *  safe with WAL and live traffic; falls back to the backup API on older
  *  SQLite) + every file in the uploads dir, pushed to the KV bridge. */
+/* ── KV free-tier budget + stats ─────────────────────────────────────────
+ * Workers KV free allows ~1,000 writes/day, shared account-wide with the
+ * AI-insights cache in the same namespace. Every DB mutation triggers a
+ * snapshot backup, so a busy editing day could exhaust the quota — after
+ * which KV writes silently fail and the next redeploy restores stale data.
+ * We keep a rolling daily write budget (default 400, env
+ * DASH_BACKUP_WRITE_BUDGET) and STOP pushing once it is spent. Orphaned
+ * uploads/meetings keys (files deleted locally) are also pruned from KV on
+ * an hourly cadence so deletes truly persist across redeploys. */
+const WRITE_BUDGET = Number(process.env.DASH_BACKUP_WRITE_BUDGET || 400);
+const stats = {
+  dayKey: '',
+  writesToday: 0,
+  deletesToday: 0,
+  lastBackupAt: null,
+  dbBytes: 0,
+  uploads: 0,
+  meetings: 0,
+  error: '',
+  skippedBudget: false
+};
+let lastCleanupAt = 0;
+
+function budgetDayKey_() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function rollBudgetIfNeeded_() {
+  const k = budgetDayKey_();
+  if (stats.dayKey !== k) {
+    stats.dayKey = k;
+    stats.writesToday = 0;
+    stats.deletesToday = 0;
+  }
+}
+
+function budgetLeft() {
+  rollBudgetIfNeeded_();
+  return Math.max(0, WRITE_BUDGET - stats.writesToday);
+}
+
+function canWrite() {
+  return budgetLeft() > 0;
+}
+
+async function putBufCounted_(url, buf) {
+  if (!canWrite()) {
+    stats.skippedBudget = true;
+    return false;
+  }
+  await putBuf(url, buf);
+  stats.writesToday++;
+  return true;
+}
+
+async function cleanupOrphanedKeys_() {
+  const now = Date.now();
+  if (now - lastCleanupAt < 3600000) return; // at most once per hour
+  lastCleanupAt = now;
+  try {
+    const local = new Set();
+    let n;
+    try { n = fs.readdirSync(UPLOAD_DIR); } catch (e) { n = []; }
+    n.forEach(function (x) { if (x.indexOf('.') !== 0) local.add('uploads/' + x); });
+    try { n = fs.readdirSync(MEETINGS_DIR); } catch (e) { n = []; }
+    n.forEach(function (x) { if (x.indexOf('.') !== 0) local.add('meetings/' + x); });
+    const r1 = await fetchWithTimeout_(BASE + '/uploads', { headers: authHeaders() });
+    const r2 = await fetchWithTimeout_(BASE + '/meetings', { headers: authHeaders() });
+    const l1 = r1.ok ? await r1.json() : { files: [] };
+    const l2 = r2.ok ? await r2.json() : { files: [] };
+    const dels = [];
+    (l1.files || []).forEach(function (f) { if (!local.has('uploads/' + f)) dels.push('/uploads/' + encodeURIComponent(f)); });
+    (l2.files || []).forEach(function (f) { if (!local.has('meetings/' + f)) dels.push('/meetings/' + encodeURIComponent(f)); });
+    for (const u of dels.slice(0, 200)) {
+      await fetchWithTimeout_(BASE + u, { method: 'DELETE', headers: authHeaders() });
+      stats.deletesToday++;
+    }
+    if (dels.length) console.log('[data-sync] cleaned ' + dels.length + ' orphaned KV key(s)');
+  } catch (err) {
+    console.error('[data-sync] cleanup failed: ' + (err && err.message));
+  }
+}
+
 async function backupData() {
   if (!enabled()) return { backedUp: false, reason: 'disabled' };
   const out = { backedUp: true, dbBytes: 0, uploads: 0, meetings: 0 };
@@ -167,7 +250,12 @@ async function backupData() {
     const buf = fs.readFileSync(tmp);
     try { fs.unlinkSync(tmp); } catch (e) {}
     if (!ok) { out.backedUp = false; out.error = 'snapshot failed integrity check'; return out; }
-    await putBuf(BASE + '/db', buf);
+    if (!(await putBufCounted_(BASE + '/db', buf))) {
+      out.backedUp = false;
+      out.reason = 'budget';
+      out.error = 'daily KV write budget exhausted (backups paused for today)';
+      return out;
+    }
     out.dbBytes = buf.length;
 
     let names = [];
@@ -178,7 +266,7 @@ async function backupData() {
       let st;
       try { st = fs.statSync(p); } catch (e) { continue; }
       if (!st.isFile()) continue;
-      await putBuf(BASE + '/uploads/' + encodeURIComponent(name), fs.readFileSync(p));
+      if (!(await putBufCounted_(BASE + '/uploads/' + encodeURIComponent(name), fs.readFileSync(p)))) break;
       out.uploads++;
     }
     let meetNames = [];
@@ -189,16 +277,55 @@ async function backupData() {
       let st;
       try { st = fs.statSync(p); } catch (e) { continue; }
       if (!st.isFile()) continue;
-      await putBuf(BASE + '/meetings/' + encodeURIComponent(name), fs.readFileSync(p));
+      if (!(await putBufCounted_(BASE + '/meetings/' + encodeURIComponent(name), fs.readFileSync(p)))) break;
       out.meetings++;
     }
-    console.log('[data-sync] backup pushed: db=' + out.dbBytes + 'B, uploads=' + out.uploads + ', meetings=' + out.meetings);
+
+    await cleanupOrphanedKeys_();
+
+    // Reflect the run in the live stats (written to KV too, for the worker's
+    // /api/health when Node is unreachable).
+    stats.lastBackupAt = new Date().toISOString();
+    stats.dbBytes = out.dbBytes;
+    stats.uploads = out.uploads;
+    stats.meetings = out.meetings;
+    stats.error = '';
+    const payload = {
+      lastBackupAt: stats.lastBackupAt,
+      dbBytes: stats.dbBytes,
+      uploads: stats.uploads,
+      meetings: stats.meetings,
+      writesToday: stats.writesToday,
+      budget: WRITE_BUDGET,
+      deletesToday: stats.deletesToday,
+      skippedBudget: stats.skippedBudget
+    };
+    await putBufCounted_(BASE + '/stats', Buffer.from(JSON.stringify(payload)));
+    console.log('[data-sync] backup pushed: db=' + out.dbBytes + 'B, uploads=' + out.uploads + ', meetings=' + out.meetings + ', writesToday=' + stats.writesToday + '/' + WRITE_BUDGET);
   } catch (err) {
     out.backedUp = false;
     out.error = (err && err.message) || String(err);
+    stats.error = out.error;
     console.error('[data-sync] backup failed: ' + out.error);
   }
   return out;
+}
+
+function getBackupStatus() {
+  rollBudgetIfNeeded_();
+  return {
+    enabled: enabled(),
+    lastBackupAt: stats.lastBackupAt || null,
+    dbBytes: stats.dbBytes,
+    uploads: stats.uploads,
+    meetings: stats.meetings,
+    error: stats.error || null,
+    writesToday: stats.writesToday,
+    budget: WRITE_BUDGET,
+    budgetLeft: budgetLeft(),
+    deletesToday: stats.deletesToday,
+    skippedBudget: stats.skippedBudget
+  };
 }
 
 /* ── write-triggered backups ────────────────────────────────────────────
@@ -254,4 +381,4 @@ function startAutoSync() {
   });
 }
 
-module.exports = { enabled, restoreData, backupData, startAutoSync, requestBackup };
+module.exports = { enabled, restoreData, backupData, startAutoSync, requestBackup, getBackupStatus };

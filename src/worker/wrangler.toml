@@ -29,5 +29,7 @@ id = "3aed6a4c7ad842c7b5fba1558a68ab06"
 
 # Keep-alive: Render free services spin down after 15 min of inactivity;
 # this cron pings the backend /api/health every 10 min to keep it warm.
+# The worker SKIPS the ping between 21:00-06:00 IST so the instance sleeps
+# overnight and banks instance-hours against the 750h/month free cap.
 [triggers]
 crons = ["*/10 * * * *"]

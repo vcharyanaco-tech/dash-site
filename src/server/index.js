@@ -63,7 +63,11 @@ app.use(express.static(STATIC_ROOT, {
 }));
 
 app.get(API_PREFIX + '/health', function (req, res) {
-  res.json({ ok: true, name: 'India Post Dashboard server', port: PORT, now: Date.now() });
+  // Surface the KV backup bridge state so a quota/backup problem is visible
+  // in a health check instead of silently widening the redeploy data-loss window.
+  let dataSync = null;
+  try { dataSync = require('./data-sync').getBackupStatus(); } catch (err) { dataSync = { error: String(err && err.message || err) }; }
+  res.json({ ok: true, name: 'India Post Dashboard server', port: PORT, now: Date.now(), dataSync: dataSync });
 });
 
 function readBodyJson(req) {

@@ -57,12 +57,30 @@ var API_URL = (window.location.protocol + '//' + window.location.host + '/api');
 
 function apiCall_(fn) {
   const args = Array.prototype.slice.call(arguments, 1);
+  return fetchApiWithRetry_(fn, args, 0);
+}
+
+// Auto-retries 503s: the Cloudflare worker returns 503 maintenance while the
+// backend is restarting (Render free deploys have no zero-downtime, and the
+// service sleeps 21:00-06:00 IST). Retry a few times on the Retry-After cadence
+// so a deploy/cold start self-heals instead of erroring the user's screen.
+function fetchApiWithRetry_(fn, args, attempt) {
   return fetch(API_URL, {
     method: 'POST',
     // text/plain avoids a CORS preflight (application/json would require OPTIONS)
     headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify({ function: fn, args: args })
   }).then(function (res) {
+    if (res.status === 503 && attempt < 3) {
+      if (attempt === 0) showToast('Server is restarting — retrying automatically…', 'warning');
+      const retrySec = Number(res.headers.get('Retry-After')) || 15;
+      const delay = Math.min(30, Math.max(5, retrySec) * (attempt + 1));
+      return new Promise(function (resolve) {
+        setTimeout(function () {
+          resolve(fetchApiWithRetry_(fn, args, attempt + 1));
+        }, delay * 1000);
+      });
+    }
     if (!res.ok) throw new Error('HTTP ' + res.status);
     return res.json();
   }).then(function (data) {
