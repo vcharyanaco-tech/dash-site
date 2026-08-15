@@ -1185,54 +1185,37 @@ body.sidebar-collapsed .nav-item.active { box-shadow: inset 0 0 0 2px var(--seco
    bold text, banded rows, visible row rules. Colors are overridable per
    theme (dark mode swaps the palette, not the structure). */
 .card-ai-table {
-  --ai-header: #4472C4;
-  --ai-header-text: #ffffff;
-  --ai-row-a: #ffffff;
-  --ai-row-b: #EAF0FB;
-  --ai-row-hover: #D9E2F3;
-  --ai-text: #2F3B52;
-  --ai-border: #C9D4EC;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 13px;
+  font-size: 14px;
   min-width: 100%;
-  color: var(--ai-text);
-}
-body.dark-mode .card-ai-table {
-  --ai-header: #3A5DA8;
-  --ai-header-text: #ffffff;
-  --ai-row-a: #1D2432;
-  --ai-row-b: #26304A;
-  --ai-row-hover: #31406A;
-  --ai-text: #DCE4F5;
-  --ai-border: #37456B;
+  color: var(--dt-text);
 }
 .card-ai-table th,
 .card-ai-table td {
-  padding: 9px 12px;
+  padding: 10px 12px;
   text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: break-word;
   vertical-align: top;
-  border-bottom: 1px solid var(--ai-border);
+  border-bottom: 1px solid var(--dt-border);
 }
 .card-ai-table thead th {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--ai-header);
-  color: var(--ai-header-text);
-  font-size: 12px;
+  background: var(--dt-header);
+  color: var(--dt-header-text);
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: .3px;
-  border-bottom: 2px solid var(--ai-header);
+  border-bottom: 2px solid var(--dt-header);
 }
 .card-ai-table thead th:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
 .card-ai-table thead th:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
-.card-ai-table tbody td { background: var(--ai-row-a); }
-.card-ai-table tbody tr:nth-child(even) td { background: var(--ai-row-b); }
-.card-ai-table tbody tr:hover td { background: var(--ai-row-hover); }
+.card-ai-table tbody td { background: var(--dt-row-a); }
+.card-ai-table tbody tr:nth-child(even) td { background: var(--dt-row-b); }
+.card-ai-table tbody tr:hover td { background: var(--dt-row-hover); }
 .card-ai-table tbody td:first-child {
   font-weight: 700;
   border-radius: var(--radius-sm) 0 0 var(--radius-sm);
@@ -1663,47 +1646,74 @@ body.col-resizing * { cursor: col-resize !important; user-select: none; }
   max-height: 62vh;
 }
 
+/* Excel "Format as Table → Medium" treatment in the India Post red theme.
+   Shared by the records, audit, users, activity and tasks tables plus the
+   link-analysis preview table. Text wraps to fit the column width. */
+.data-table,
+.card-ai-table {
+  --dt-header: #DA291C;
+  --dt-header-hover: #C6241A;
+  --dt-header-text: #ffffff;
+  --dt-row-a: #ffffff;
+  --dt-row-b: #FDF0EE;
+  --dt-row-hover: #FBE3E0;
+  --dt-text: #1d2129;
+  --dt-border: #F0CBC6;
+}
+body.dark-mode .data-table,
+body.dark-mode .card-ai-table {
+  --dt-header: #B92317;
+  --dt-header-hover: #A51F14;
+  --dt-row-a: #1F1A1A;
+  --dt-row-b: #2B2020;
+  --dt-row-hover: #3A2A28;
+  --dt-text: #F0E4E2;
+  --dt-border: #4A3330;
+}
+
 .data-table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 13px;
+  font-size: 14px;
+  color: var(--dt-text);
 }
 
 .data-table th, .data-table td {
   padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--dt-border);
   text-align: left;
   vertical-align: top;
   white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .data-table thead th {
   position: sticky;
   top: 0;
   z-index: 5;
-  background: var(--surface-2);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .6px;
-  border-bottom: 1px solid var(--border-strong);
+  background: var(--dt-header);
+  color: var(--dt-header-text);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .3px;
+  border-bottom: 2px solid var(--dt-header);
 }
 
 .data-table thead th.sortable { cursor: pointer; user-select: none; }
-.data-table thead th.sortable:hover { color: var(--text); }
+.data-table thead th.sortable:hover { background: var(--dt-header-hover); color: #fff; }
 .data-table thead th[aria-sort]::after {
   content: '↕';
   margin-left: 6px;
-  opacity: .5;
-  font-size: 11px;
+  opacity: .6;
+  font-size: 12px;
 }
 .data-table thead th[aria-sort="ascending"]::after { content: '↑'; opacity: 1; }
 .data-table thead th[aria-sort="descending"]::after { content: '↓'; opacity: 1; }
 
 .data-table tbody tr { transition: background var(--transition); }
-.data-table tbody tr:hover { background: var(--surface-2); }
+.data-table tbody tr:nth-child(even) td { background: var(--dt-row-b); }
+.data-table tbody tr:hover td { background: var(--dt-row-hover); }
 .data-table tbody tr:last-child td { border-bottom: none; }
 
 .data-table .details-cell { max-width: 320px; }

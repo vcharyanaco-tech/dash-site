@@ -1519,10 +1519,12 @@ function itemHasLink_(item) {
   return Object.keys(links).some(function (k) { return !!links[k]; });
 }
 
-/* Draggable column resize for the link-analysis preview table. A handle is
-   appended to each header cell; dragging sets an explicit pixel width on the
-   whole column (header + every body cell). The first drag snapshots the
-   content-sized widths and switches the table to fixed layout so widths stick. */
+/* Draggable column resize for tables (records, audit, users, tasks, activity
+   and the link-analysis preview). A handle is appended to each header cell;
+   dragging sets an explicit pixel width on the whole column (header + every
+   body cell) with no minimum or maximum — text wraps to fit the new width.
+   The first drag snapshots the content-sized widths and switches the table
+   to fixed layout so the widths stick across re-renders. */
 function makeTableResizable_(table) {
   if (!table || table.getAttribute('data-resizable')) return;
   table.setAttribute('data-resizable', '1');
@@ -1535,6 +1537,8 @@ function makeTableResizable_(table) {
     grip.className = 'col-resizer';
     grip.title = 'Drag to resize column';
     th.appendChild(grip);
+    // Dragging must not trigger the column's sort on mouseup.
+    grip.addEventListener('click', function (e) { e.stopPropagation(); });
 
     let startX = 0;
     let startW = 0;
@@ -1560,7 +1564,7 @@ function makeTableResizable_(table) {
       document.body.classList.add('col-resizing');
 
       function onMove(ev) {
-        const w = Math.max(64, startW + (ev.clientX - startX));
+        const w = startW + (ev.clientX - startX); // no min/max — follow the pointer
         th.style.width = w + 'px';
         const rows = table.querySelectorAll('tbody tr');
         for (let r = 0; r < rows.length; r++) {
@@ -2034,6 +2038,11 @@ function openTab(tabId) {
 function initApp() {
   startLiveClock();
   initDatePicker();
+
+  // Column-resize handles for every static data table (records, audit,
+  // users, activity, tasks). Handlers attach once — the header cells persist
+  // across tbody re-renders, so the widths keep working after any refresh.
+  document.querySelectorAll('.data-table').forEach(function (t) { makeTableResizable_(t); });
 
   const token = getAuthToken();
 
