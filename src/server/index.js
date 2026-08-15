@@ -147,6 +147,9 @@ if (require.main === module) {
   server.listen(PORT, function () {
     console.log('India Post Dashboard server listening on http://localhost:' + PORT);
     console.log('API dispatcher: POST http://localhost:' + PORT + API_PREFIX);
+    // Periodic background sync so the spreadsheet and SQLite stay in step
+    // without manual button clicks (DASH_AUTO_SYNC_MINUTES, default 15).
+    require('./auto-sync').startAutoSync();
   });
 }
 
