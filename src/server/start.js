@@ -19,24 +19,9 @@ process.on('unhandledRejection', fail);
     const dataSync = require('./data-sync');
     await dataSync.restoreData();
 
-    // 2. One-time data import: if a data/export/*.csv set is present (e.g. baked
-    //    into the image for first-boot migration), import it, then it's harmless
-    //    on subsequent boots (INSERT OR IGNORE skips existing rows).
-    const fs = require('fs');
-    const path = require('path');
-    const exportDir = path.join(__dirname, 'migration-export');
-    const needImport = fs.existsSync(exportDir) &&
-      fs.existsSync(path.join(exportDir, 'records.csv'));
-    if (needImport) {
-      try {
-        console.log('[start] found export CSVs — running one-time import...');
-        process.env.DASH_IMPORT_DIR = exportDir;
-        require('./import-from-gas').main();
-        console.log('[start] import complete.');
-      } catch (impErr) {
-        console.error('[start] import warning: ' + (impErr && impErr.message));
-      }
-    }
+    // 2. No first-boot CSV import: the baked-in src/server/migration-export/*
+    //    snapshot is stale and must not feed the dashboard. Restored KV
+    //    snapshot (step 1) or a brand-new empty DB is the source of truth.
 
     // 3. Boot the server.
     const app = require('./index');

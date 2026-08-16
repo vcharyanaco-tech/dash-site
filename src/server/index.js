@@ -20,19 +20,12 @@ const PORT = Number(process.env.PORT || process.env.DASH_PORT || 8787);
 const STATIC_ROOT = process.env.DASH_STATIC_ROOT || path.join(__dirname, '..', '..');
 const API_PREFIX = '/api';
 
-// First-boot data migration: if migration CSVs are baked into the image,
-// import them once (INSERT OR IGNORE keeps reboots idempotent).
-const MIGRATION_DIR = path.join(__dirname, 'migration-export');
-if (fs.existsSync(MIGRATION_DIR) && fs.existsSync(path.join(MIGRATION_DIR, 'records.csv'))) {
-  try {
-    console.log('[migrate] found migration CSVs — importing...');
-    process.env.DASH_IMPORT_DIR = MIGRATION_DIR;
-    require('./import-from-gas').main();
-    console.log('[migrate] import complete.');
-  } catch (migErr) {
-    console.error('[migrate] import warning: ' + (migErr && migErr.message));
-  }
-}
+// NOTE: the baked-in src/server/migration-export/*.csv snapshot is no longer
+// auto-imported on boot. The live SQLite DB (restored from the KV backup
+// bridge by data-sync.js when the local file is absent) is the single source
+// of truth; the CSVs are stale by construction and must not feed the
+// dashboard. Use the manual tools (npm run import/export + adminSyncFromSheet)
+// if a deliberate one-time restore is ever needed.
 
 seedDefaultSettings();
 try {
