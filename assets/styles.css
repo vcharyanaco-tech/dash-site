@@ -1095,23 +1095,35 @@ body.sidebar-collapsed .nav-item.active { box-shadow: inset 0 0 0 2px var(--seco
   border-color: color-mix(in srgb, var(--secondary) 22%, transparent);
 }
 
-/* Action field emphasis: give the action row a stronger, distinct treatment in
-   the card layout so it stands out from other fields. */
+/* Action field emphasis: the review state drives the colour theme — a
+   red/pending tint when the review is due, a green/calm tint when it is not
+   due. The text itself always stays the standard text colour (near-black in
+   light mode) so it remains clearly legible on any tint. */
 .card-field-action {
-  background: var(--warning-soft);
-  border-color: color-mix(in srgb, var(--warning) 26%, transparent);
-  box-shadow: inset 3px 0 0 var(--warning);
+  background: var(--surface-2);
+  border-color: var(--border);
 }
 
-.field-label-action { color: var(--warning); }
+.field-label-action { color: var(--text-strong); }
 
-.card-field-action .field-value { font-weight: 600; color: var(--warning); }
-.card-field-action .field-value a { color: var(--warning); text-decoration: underline; }
+.card-field-action .field-value { font-weight: 600; color: var(--text); }
+.card-field-action .field-value a { color: var(--text); text-decoration: underline; }
 
-/* Keep the action field legible when the whole card is already flagged as
-   review-due (the card background matches the action tint). */
-.card.review-due .card-field-action { background: #fff7e6; }
-body.dark-mode .card.review-due .card-field-action { background: #2a2412; }
+/* Review due → red/pending theme. A surface-mixed tint (not the very pale
+   -soft token) so the red stays clearly visible even on the amber-tinted
+   review-due card. */
+.card-field-action-due {
+  background: color-mix(in srgb, var(--danger) 16%, var(--surface));
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+
+/* Review not due → green/calm theme */
+.card-field-action-ok {
+  background: color-mix(in srgb, var(--success) 13%, var(--surface));
+  border-color: color-mix(in srgb, var(--success) 38%, transparent);
+  box-shadow: inset 3px 0 0 var(--success);
+}
 
 .field-label {
   font-size: 11px;
@@ -1770,13 +1782,16 @@ body.dark-mode .card-ai-table {
 
 .data-table .details-cell { max-width: 320px; }
 
-/* Action cell emphasis in the dashboard table so the action text stands out
-   from the other plain text columns. */
+/* Action cell emphasis in the dashboard table: the review state drives a
+   red/pending tint when due, a green/calm tint when not due; the text always
+   stays the standard text colour for legibility. */
 .data-table td.action-cell {
-  color: var(--warning);
+  color: var(--text);
   font-weight: 600;
 }
-.data-table td.action-cell a { color: var(--warning); text-decoration: underline; }
+.data-table td.action-cell a { color: var(--text); text-decoration: underline; }
+.data-table td.action-cell.action-cell-due { background: color-mix(in srgb, var(--danger) 16%, var(--surface)); }
+.data-table td.action-cell.action-cell-ok { background: color-mix(in srgb, var(--success) 13%, var(--surface)); }
 
 /* Records table: keep the Actions column pinned to the right edge so it is
    always visible even when other columns overflow horizontally. */

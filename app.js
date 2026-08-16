@@ -2748,11 +2748,14 @@ function buildCardHtml(item) {
   }).map(function (field) {
     const isHeaderRowValue = field && field.label && String(field.label).trim() !== '';
     const isActionField = dashboardColumnKey_(field && field.label) === 'action';
+    const actionStateClass = isActionField
+      ? (item.reviewStatus === 'due' ? ' card-field-action-due' : ' card-field-action-ok')
+      : '';
     const valueHtml = field.html
       ? `<div class="field-value preserve-whitespace field-html">${field.html}</div>`
       : `<div class="field-value preserve-whitespace">${escapeHtml(field.value)}</div>`;
     return `
-      <div class="card-field ${isHeaderRowValue ? 'card-field-highlight' : ''}${isActionField ? ' card-field-action' : ''}">
+      <div class="card-field ${isHeaderRowValue ? 'card-field-highlight' : ''}${isActionField ? ' card-field-action' : ''}${actionStateClass}">
         <span class="field-label ${isHeaderRowValue ? 'field-label-highlight' : ''}${isActionField ? ' field-label-action' : ''}">${escapeHtml(field.label || 'Value')}</span>
         ${valueHtml}
       </div>`;
@@ -2948,7 +2951,7 @@ function buildTableRowHtml(item) {
       <td><span class="id-badge">#${escapeHtml(item.id)}</span></td>
       <td class="preserve-whitespace">${escapeHtml(item.sector || '')}</td>
       <td class="details-cell preserve-whitespace">${escapeHtml(item.description || '')}</td>
-      <td class="action-cell preserve-whitespace">${item.actionHtml || renderLinkableText(item.action || '')}</td>
+      <td class="action-cell ${item.reviewStatus === 'due' ? 'action-cell-due' : 'action-cell-ok'} preserve-whitespace">${item.actionHtml || renderLinkableText(item.action || '')}</td>
       <td class="preserve-whitespace">${escapeHtml(item.entryDate || '')}</td>
       <td class="preserve-whitespace">${escapeHtml(item.reviewDate || '')}</td>
       <td>${statusBadge}</td>

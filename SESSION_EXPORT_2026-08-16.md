@@ -60,6 +60,25 @@ dashboard no longer reads them). Working in the **dash-site** repo
 - Table view: Action cell gets `action-cell` class (amber bold text, amber
   links) in `assets/styles.css`.
 
+## 6. Action field review-state colour themes (follow-up commit)
+- User feedback: the amber highlight wasn't clear enough, and it should
+  signal review state. Now the Action field/cell is tinted **by review state**
+  while the text always stays the standard near-black `var(--text)` for
+  legibility:
+  - **Review due** → red/pending theme: `card-field-action-due` (cards) /
+    `action-cell-due` (table). Background is a surface-mixed red
+    (`color-mix(in srgb, var(--danger) 16%, var(--surface))`) so it stays
+    visible even on the amber review-due card, red border + inset 3px red bar.
+  - **Review not due** (done or not-yet-due) → green/calm theme:
+    `card-field-action-ok` / `action-cell-ok` (success mix 13%).
+  - Label colour switched from amber to `var(--text-strong)`; link colour in
+    the field/cell switched to `var(--text)` (still underlined).
+  - Removed the old `.card.review-due .card-field-action { #fff7e6 }`
+    overrides (state classes now win).
+- Where: `buildCardHtml` (`app.js:2752`) adds `actionStateClass`;
+  `buildTableRowHtml` (`app.js:2954`) adds `action-cell-due|ok`; tints in
+  `assets/styles.css` (~1102-1130 cards, ~1788-1794 table).
+
 ## Validation
 - `node --check app.js` clean.
 - `npm test` in `src/server` → **31/31 pass**.
@@ -71,15 +90,15 @@ dashboard no longer reads them). Working in the **dash-site** repo
   - `78b0889` fix: show Action data field column in dashboard table view
   - `09d60d0` feat: add dashboard sort and review-status filter dropdowns plus
     Action field emphasis
+  - (follow-up) feat: tint Action field/cell by review state — red when due,
+    green when not due, text stays black
 - Earlier session: `ef05d64`, `960f4f9` (migration CSVs), `7ca066b` (this file).
 - Working tree clean. Live dashboard deployed (KV backup bridge still the
   source of truth; Render/Railway auto-deploy).
 
 ## Suggested next steps
-1. Deploy the current code to the live worker (GitHub Pages for `docs/`,
-   `clasp push` for Apps Script, Cloudflare Worker) via
-   `deploy-all.ps1 "<msg>"` — not run this session.
-2. Optionally persist sort/filter choices in dashboard prefs (server
+1. Optionally persist sort/filter choices in dashboard prefs (server
    `DASHBOARD_PREF_KEYS` currently stores only viewMode + columns).
-3. Optionally make the "Review not done / not due" option more granular
+2. Optionally make the "Review not done / not due" option more granular
    (split into separate due / not-due filters).
+3. Check the new red/green Action tints in a browser (light + dark mode).
