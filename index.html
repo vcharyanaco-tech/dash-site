@@ -72,6 +72,7 @@
   <div class="cta-row">
     <a class="btn btn-primary btn-lg" href="app.html">Open Dashboard</a>
   </div>
+  <p id="redirectNote" class="redirect-note hidden" role="status">Redirecting to Dashboard, please wait…</p>
 </section>
 
 <section class="stats-grid" aria-label="Dashboard highlights">
@@ -217,6 +218,25 @@
     applyTheme();
   };
   applyTheme();
+
+  /* Auto-redirect: after 6s with no click anywhere on the page, head to the
+     dashboard (app.html). Any click resets the countdown. */
+  var REDIRECT_SECONDS = 6;
+  var REDIRECT_URL = 'app.html';
+  var redirectNote = document.getElementById('redirectNote');
+  var redirectTimer = null;
+
+  function armRedirect() {
+    if (redirectTimer) { clearTimeout(redirectTimer); }
+    if (redirectNote) { redirectNote.classList.add('hidden'); }
+    redirectTimer = setTimeout(function () {
+      if (redirectNote) { redirectNote.classList.remove('hidden'); }
+      setTimeout(function () { window.location.href = REDIRECT_URL; }, 800);
+    }, REDIRECT_SECONDS * 1000);
+  }
+
+  document.addEventListener('click', armRedirect);
+  armRedirect();
 })();
 </script>
 
