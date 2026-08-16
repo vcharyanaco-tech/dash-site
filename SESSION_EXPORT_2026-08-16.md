@@ -167,6 +167,17 @@ dashboard no longer reads them). Working in the **dash-site** repo
   every change, chips appear/clear correctly.
 - Smoke test extended: `notdue` reviewFilter round-trips through prefs.
 
+## Follow-up: "Review not due" still not showing? — stale SW cache fix
+- The repo + live bundles were verified byte-identical and correct: dropdown
+  already says "Review not due" (no "not done"), filter is a true complement
+  (`reviewStatus !== 'due'`), and a browser check against the live data
+  confirms "Review not due" returns the 4 empty-status records (ids 5/8/14/17).
+- Root cause of the user still seeing the old text/behavior: their browser was
+  serving the pre-fix bundle from the service-worker cache. Bumped
+  `SW_VERSION` to `2026.08.16a` (and `?v=` asset strings in `app.html`) so
+  every client re-installs the network-first SW and purges stale caches — the
+  documented cure for this exact problem (see the sw.js comment).
+
 ## Validation
 - `node --check app.js` clean.
 - `npm test` in `src/server` → **31/31 pass**.
