@@ -316,7 +316,10 @@ const DOC_COL = Object.freeze({
 const DASHBOARD_PREF_KEYS = Object.freeze({
   VIEW_MODE: 'viewMode',
   COLUMNS: 'columns',
-  LAYOUT: 'layout'
+  LAYOUT: 'layout',
+  SORT_KEY: 'sortKey',
+  SORT_DIR: 'sortDir',
+  REVIEW_FILTER: 'reviewFilter'
 });
 
 const VIEW_MODES = Object.freeze({

@@ -79,6 +79,22 @@ dashboard no longer reads them). Working in the **dash-site** repo
   `buildTableRowHtml` (`app.js:2954`) adds `action-cell-due|ok`; tints in
   `assets/styles.css` (~1102-1130 cards, ~1788-1794 table).
 
+## 7. Persist sort/filter choices in server-side dashboard prefs (follow-up)
+- `DASHBOARD_PREF_KEYS` (`src/server/config.js`) gained `SORT_KEY`, `SORT_DIR`,
+  `REVIEW_FILTER`. `getDashboardPreferences` now returns `sortKey` (default
+  `id`), `sortDir` (`asc`), `reviewFilter` (`''`); `saveDashboardPreferences`
+  persists them (`!== undefined` so clearing the review filter sticks).
+- Client (`app.js`): `applyDashboardPreferences` restores sort + review filter
+  before the first render and `syncDashSortFilterControls()` reflects them in
+  the dropdowns + chips. New debounced silent save
+  (`scheduleDashboardPrefsSave` → `persistDashboardPrefs`, 800 ms) fires on
+  sort dropdown change, review filter change, table-header `setDashSort`,
+  review-chip removal and `resetFilters` — so choices survive reloads without
+  opening the customize dialog. The customize dialog now also round-trips
+  layout + sort/filter keys.
+- Smoke test extended: saves/reads the new keys and verifies an empty-string
+  reviewFilter persists while other keys survive a partial save.
+
 ## Validation
 - `node --check app.js` clean.
 - `npm test` in `src/server` → **31/31 pass**.
@@ -92,13 +108,12 @@ dashboard no longer reads them). Working in the **dash-site** repo
     Action field emphasis
   - (follow-up) feat: tint Action field/cell by review state — red when due,
     green when not due, text stays black
+  - (follow-up) feat: persist dashboard sort + review filter in server prefs
 - Earlier session: `ef05d64`, `960f4f9` (migration CSVs), `7ca066b` (this file).
 - Working tree clean. Live dashboard deployed (KV backup bridge still the
   source of truth; Render/Railway auto-deploy).
 
 ## Suggested next steps
-1. Optionally persist sort/filter choices in dashboard prefs (server
-   `DASHBOARD_PREF_KEYS` currently stores only viewMode + columns).
-2. Optionally make the "Review not done / not due" option more granular
+1. Optionally make the "Review not done / not due" option more granular
    (split into separate due / not-due filters).
-3. Check the new red/green Action tints in a browser (light + dark mode).
+2. Check the new red/green Action tints in a browser (light + dark mode).

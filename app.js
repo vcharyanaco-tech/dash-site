@@ -2565,12 +2565,14 @@ function handleDashSortSelectChange() {
   appState.dashSortKey = value === 'default' ? 'id' : value;
   appState.dashSortDir = 'asc';
   renderDashboard();
+  scheduleDashboardPrefsSave();
 }
 
 function handleDashReviewFilterChange() {
   appState.dashReviewFilter = getEl('dashReviewFilter').value;
   updateFilterChips();
   renderDashboard();
+  scheduleDashboardPrefsSave();
 }
 
 function resetFilters() {
@@ -2589,6 +2591,7 @@ function resetFilters() {
   appState.dashSortDir = 'asc';
   updateFilterChips();
   renderDashboard();
+  scheduleDashboardPrefsSave();
 }
 
 function updateFilterChips() {
@@ -2622,6 +2625,7 @@ function removeChip(kind) {
   if (reviewFilter) reviewFilter.value = appState.dashReviewFilter;
   updateFilterChips();
   renderDashboard();
+  if (kind === 'review') scheduleDashboardPrefsSave();
 }
 
 /* ---------------------------------- Dashboard: KPI cards ---------------------------------- */
@@ -3019,6 +3023,7 @@ function setDashSort(key) {
     }
   }
   renderDashboard();
+  scheduleDashboardPrefsSave();
 }
 
 function renderPagination() {
@@ -5040,7 +5045,57 @@ function loadDashboardPreferences() {
 
 function applyDashboardPreferences() {
   const prefs = appState.dashboardPrefs || {};
+  // Restore persisted sort + review-status filter before rendering so the
+  // first paint honours them.
+  if (prefs.sortKey) appState.dashSortKey = prefs.sortKey;
+  if (prefs.sortDir === 'asc' || prefs.sortDir === 'desc') appState.dashSortDir = prefs.sortDir;
+  appState.dashReviewFilter = prefs.reviewFilter || '';
+  syncDashSortFilterControls();
   toggleDashboardView(prefs.viewMode === 'table' ? 'table' : 'cards');
+}
+
+/* Reflect the current sort/review-filter state in the dropdowns + chips. */
+function syncDashSortFilterControls() {
+  const sortSelect = getEl('dashSortSelect');
+  if (sortSelect) {
+    const optionValue = appState.dashSortKey === 'id' ? 'default' : appState.dashSortKey;
+    if (sortSelect.querySelector('option[value="' + optionValue + '"]')) {
+      sortSelect.value = optionValue;
+    }
+  }
+  const reviewFilter = getEl('dashReviewFilter');
+  if (reviewFilter) reviewFilter.value = appState.dashReviewFilter;
+  updateFilterChips();
+}
+
+/* Debounced silent save of the dashboard prefs (sort, review filter, view
+   mode, columns) so sort/filter choices survive reloads without a modal. */
+var dashPrefsSaveTimer = null;
+
+function scheduleDashboardPrefsSave() {
+  if (dashPrefsSaveTimer) clearTimeout(dashPrefsSaveTimer);
+  dashPrefsSaveTimer = setTimeout(function () {
+    dashPrefsSaveTimer = null;
+    persistDashboardPrefs();
+  }, 800);
+}
+
+function persistDashboardPrefs() {
+  const current = appState.dashboardPrefs || {};
+  const prefs = {
+    viewMode: current.viewMode || 'cards',
+    columns: current.columns || {},
+    layout: current.layout || {},
+    sortKey: appState.dashSortKey,
+    sortDir: appState.dashSortDir,
+    reviewFilter: appState.dashReviewFilter
+  };
+  ApiService.saveDashboardPreferences(prefs).then(function () {
+    appState.dashboardPrefs = prefs;
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+    // Non-critical persistence failure; the next change will retry.
+  });
 }
 
 function saveDashboardPreferences() {
@@ -5050,7 +5105,14 @@ function saveDashboardPreferences() {
   });
   const modeRadio = document.querySelector('input[name="viewMode"]:checked');
   const viewMode = modeRadio ? modeRadio.value : 'cards';
-  const prefs = { viewMode: viewMode, columns: columns };
+  const prefs = {
+    viewMode: viewMode,
+    columns: columns,
+    layout: (appState.dashboardPrefs && appState.dashboardPrefs.layout) || {},
+    sortKey: appState.dashSortKey,
+    sortDir: appState.dashSortDir,
+    reviewFilter: appState.dashReviewFilter
+  };
   showOverlay('Saving preferences…');
   ApiService.saveDashboardPreferences(prefs).then(function () {
     hideOverlay();

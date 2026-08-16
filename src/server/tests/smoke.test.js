@@ -199,10 +199,18 @@ test('tasks flow', async function () {
 });
 
 test('dashboard preferences', async function () {
-  await post('saveDashboardPreferences', [{ viewMode: 'table', columns: { id: true, sector: false } }, token]);
+  await post('saveDashboardPreferences', [{ viewMode: 'table', columns: { id: true, sector: false }, sortKey: 'sector', sortDir: 'desc', reviewFilter: 'due' }, token]);
   const prefs = await post('getDashboardPreferences', [token]);
   assert.strictEqual(prefs.viewMode, 'table');
   assert.strictEqual(prefs.columns.sector, false);
+  assert.strictEqual(prefs.sortKey, 'sector');
+  assert.strictEqual(prefs.sortDir, 'desc');
+  assert.strictEqual(prefs.reviewFilter, 'due');
+  // Clearing the review filter must persist (empty string is meaningful).
+  await post('saveDashboardPreferences', [{ reviewFilter: '' }, token]);
+  const cleared = await post('getDashboardPreferences', [token]);
+  assert.strictEqual(cleared.reviewFilter, '');
+  assert.strictEqual(cleared.sortKey, 'sector'); // other keys survive a partial save
 });
 
 test('reports: templates, data, xlsx, pdf', async function () {
