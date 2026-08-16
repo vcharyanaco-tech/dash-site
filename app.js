@@ -208,6 +208,7 @@ const appState = {
   dashboardView: 'cards',
   dashSortKey: 'id',
   dashSortDir: 'asc',
+  dashReviewFilter: '',
   permissions: {},
   notifications: { unread: 0, recent: [] }
 };
@@ -2535,10 +2536,16 @@ function generateReviewNotifications() {
 function applyFilters(preservePage) {
   const query = appState.searchQuery.toLowerCase();
   const sector = appState.sector;
+  const review = appState.dashReviewFilter;
   appState.filtered = appState.items.filter(function (item) {
     const haystack = [item.sector, item.id, item.description, item.action, item.responsibility, item.reviewDate]
       .join(' ').toLowerCase();
-    return (!query || haystack.indexOf(query) !== -1) && (!sector || item.sector === sector);
+    const reviewOk = review === 'due'
+      ? item.reviewStatus === 'due'
+      : review === 'pending'
+        ? item.reviewStatus !== 'done'
+        : true;
+    return (!query || haystack.indexOf(query) !== -1) && (!sector || item.sector === sector) && reviewOk;
   });
   // Reset to page 1 only when the filter inputs changed (search/sector); a
   // plain re-render after an edit/update/delete keeps the current page.
@@ -2553,13 +2560,33 @@ function handleSectorFilterChange() {
   renderDashboard();
 }
 
+function handleDashSortSelectChange() {
+  const value = getEl('dashSortSelect').value;
+  appState.dashSortKey = value === 'default' ? 'id' : value;
+  appState.dashSortDir = 'asc';
+  renderDashboard();
+}
+
+function handleDashReviewFilterChange() {
+  appState.dashReviewFilter = getEl('dashReviewFilter').value;
+  updateFilterChips();
+  renderDashboard();
+}
+
 function resetFilters() {
   appState.searchQuery = '';
   appState.sector = '';
+  appState.dashReviewFilter = '';
   const search = getEl('searchInput');
   if (search) search.value = '';
   const filter = getEl('sectorFilter');
   if (filter) filter.value = '';
+  const reviewFilter = getEl('dashReviewFilter');
+  if (reviewFilter) reviewFilter.value = '';
+  const sortSelect = getEl('dashSortSelect');
+  if (sortSelect) sortSelect.value = 'default';
+  appState.dashSortKey = 'id';
+  appState.dashSortDir = 'asc';
   updateFilterChips();
   renderDashboard();
 }
@@ -2574,6 +2601,10 @@ function updateFilterChips() {
   if (appState.sector) {
     parts.push(`<span class="filter-chip">Sector: ${escapeHtml(appState.sector)} <button type="button" aria-label="Remove sector filter" onclick="removeChip('sector')">✕</button></span>`);
   }
+  if (appState.dashReviewFilter) {
+    const reviewLabel = appState.dashReviewFilter === 'due' ? 'Review due' : 'Review not done / not due';
+    parts.push(`<span class="filter-chip">${escapeHtml(reviewLabel)} <button type="button" aria-label="Remove review filter" onclick="removeChip('review')">✕</button></span>`);
+  }
   chips.innerHTML = parts.join('');
   const resetBtn = getEl('resetFiltersBtn');
   if (resetBtn) resetBtn.classList.toggle('hidden', parts.length === 0);
@@ -2582,10 +2613,13 @@ function updateFilterChips() {
 function removeChip(kind) {
   if (kind === 'search') appState.searchQuery = '';
   if (kind === 'sector') appState.sector = '';
+  if (kind === 'review') appState.dashReviewFilter = '';
   const search = getEl('searchInput');
   if (search) search.value = appState.searchQuery;
   const filter = getEl('sectorFilter');
   if (filter) filter.value = appState.sector;
+  const reviewFilter = getEl('dashReviewFilter');
+  if (reviewFilter) reviewFilter.value = appState.dashReviewFilter;
   updateFilterChips();
   renderDashboard();
 }
@@ -2713,12 +2747,13 @@ function buildCardHtml(item) {
     return dashboardColumnVisible_(field && field.label);
   }).map(function (field) {
     const isHeaderRowValue = field && field.label && String(field.label).trim() !== '';
+    const isActionField = dashboardColumnKey_(field && field.label) === 'action';
     const valueHtml = field.html
       ? `<div class="field-value preserve-whitespace field-html">${field.html}</div>`
       : `<div class="field-value preserve-whitespace">${escapeHtml(field.value)}</div>`;
     return `
-      <div class="card-field ${isHeaderRowValue ? 'card-field-highlight' : ''}">
-        <span class="field-label ${isHeaderRowValue ? 'field-label-highlight' : ''}">${escapeHtml(field.label || 'Value')}</span>
+      <div class="card-field ${isHeaderRowValue ? 'card-field-highlight' : ''}${isActionField ? ' card-field-action' : ''}">
+        <span class="field-label ${isHeaderRowValue ? 'field-label-highlight' : ''}${isActionField ? ' field-label-action' : ''}">${escapeHtml(field.label || 'Value')}</span>
         ${valueHtml}
       </div>`;
   }).join('');
@@ -2802,7 +2837,7 @@ function renderDashboardCards() {
   const grid = getEl('dashboardCards');
   if (!grid) return;
   const start = (appState.page - 1) * PAGE_SIZE;
-  const pageItems = appState.filtered.slice(start, start + PAGE_SIZE);
+  const pageItems = sortedItems().slice(start, start + PAGE_SIZE);
 
   if (!pageItems.length) { grid.innerHTML = emptyStateHtml(); teardownDashScroller_(); return; }
 
@@ -2913,7 +2948,7 @@ function buildTableRowHtml(item) {
       <td><span class="id-badge">#${escapeHtml(item.id)}</span></td>
       <td class="preserve-whitespace">${escapeHtml(item.sector || '')}</td>
       <td class="details-cell preserve-whitespace">${escapeHtml(item.description || '')}</td>
-      <td class="preserve-whitespace">${item.actionHtml || renderLinkableText(item.action || '')}</td>
+      <td class="action-cell preserve-whitespace">${item.actionHtml || renderLinkableText(item.action || '')}</td>
       <td class="preserve-whitespace">${escapeHtml(item.entryDate || '')}</td>
       <td class="preserve-whitespace">${escapeHtml(item.reviewDate || '')}</td>
       <td>${statusBadge}</td>
@@ -2972,6 +3007,13 @@ function setDashSort(key) {
   } else {
     appState.dashSortKey = key;
     appState.dashSortDir = 'asc';
+  }
+  const sortSelect = getEl('dashSortSelect');
+  if (sortSelect) {
+    const optionValue = appState.dashSortKey === 'id' ? 'default' : appState.dashSortKey;
+    if (sortSelect.querySelector('option[value="' + optionValue + '"]')) {
+      sortSelect.value = optionValue;
+    }
   }
   renderDashboard();
 }

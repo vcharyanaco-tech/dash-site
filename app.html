@@ -199,6 +199,17 @@
             <div class="filter-chips" id="filterChips" aria-live="polite"></div>
             <div class="filters-controls">
               <button id="resetFiltersBtn" class="btn btn-ghost btn-small hidden" type="button" onclick="resetFilters()">Clear filters</button>
+              <select id="dashSortSelect" class="select" aria-label="Sort records" onchange="handleDashSortSelectChange()">
+                <option value="default">Sort: Default</option>
+                <option value="sector">Sort: Sector</option>
+                <option value="responsibility">Sort: Responsibility</option>
+                <option value="reviewDate">Sort: Review date</option>
+              </select>
+              <select id="dashReviewFilter" class="select" aria-label="Filter by review status" onchange="handleDashReviewFilterChange()">
+                <option value="">All reviews</option>
+                <option value="due">Review due</option>
+                <option value="pending">Review not done / not due</option>
+              </select>
               <select id="sectorFilter" class="select" aria-label="Filter by sector" onchange="handleSectorFilterChange()">
                 <option value="">All sectors</option>
               </select>
