@@ -93,6 +93,16 @@ dashboard no longer reads them). Working in the **dash-site** repo
 - `row-reset-requested` (password-reset requests in Settings) deliberately
   stays amber — separate feature.
 
+## 7e. Record detail modal: 3-1-2 grouped layout (follow-up)
+- Extracted `groupCardFields_(fields)` (app.js) — shared by `buildCardHtml`
+  and `openRecordDetail` — so the record detail dialog now uses the same
+  3-1-2 grouping: Description | Entry Date | Sector → Action block →
+  Responsibility | Review Date. ID excluded (modal title shows the record #).
+- `openRecordDetail` renders `detail-fields-row-top` / Action /
+  `detail-fields-row-bottom` via new `detailRowHtml_` helper.
+- `assets/styles.css`: `.detail-fields-row` (grid, auto-flow column, 4px gap)
+  with grouped rows stacking label-over-value like the card blocks.
+
 ## 7d. Card layout fix: 3-1-2 grouping + default link blue (follow-up)
 - User correction: the first grouping shipped as **4-1-1** instead of the
   requested **3-1-2** — `dashboardColumnKey_` had no `responsibility` case, so

@@ -2074,6 +2074,26 @@ body.modal-open { overflow: hidden; }
 .detail-label { font-weight: 600; color: var(--muted); flex-shrink: 0; }
 .detail-value { text-align: right; color: var(--text); word-break: break-word; }
 
+/* Same 3-1-2 grouping as the dashboard cards: top row = Description | Entry
+   Date | Sector, Action as its own full-width horizontal block, bottom row =
+   Responsibility | Review Date. Grouped blocks stack label-over-value (like
+   the card blocks) so three columns stay compact; compact 4px gaps. */
+.detail-fields-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: var(--sp-0-5);
+}
+
+.detail-fields-row .detail-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.detail-fields-row .detail-value { text-align: left; }
+
 /* ---------------------------------- Confirm dialog (S4) ---------------------------------- */
 .confirm-message { color: var(--text); margin: 0 0 var(--sp-2); font-size: 14px; }
 

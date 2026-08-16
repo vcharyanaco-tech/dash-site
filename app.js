@@ -2765,21 +2765,18 @@ function cardFieldHtml_(item, field) {
       </div>`;
 }
 
-function buildCardHtml(item) {
-  const visibleFields = (item.displayFields || []).filter(function (field) {
-    const key = dashboardColumnKey_(field && field.label);
-    if (key === 'id') return false;
-    return dashboardColumnVisible_(field && field.label);
-  });
-
-  // Group by field key: top row = Description, Entry Date, Sector; the Action
-  // field keeps its own horizontal block; bottom row = Responsibility, Review
-  // Date. Any unrecognised field falls into the top row as a fallback.
+/* Group display fields for the 3-1-2 card layout: top row = Description,
+   Entry Date, Sector; the Action field keeps its own horizontal block;
+   bottom row = Responsibility, Review Date. The id field is excluded (the
+   card title / modal heading already shows the record number). Any
+   unrecognised field falls into the top row as a fallback. */
+function groupCardFields_(fields) {
   const topFields = [];
   const actionFields = [];
   const bottomFields = [];
-  visibleFields.forEach(function (field) {
+  (fields || []).forEach(function (field) {
     const key = dashboardColumnKey_(field && field.label);
+    if (key === 'id') return;
     if (key === 'action') {
       actionFields.push(field);
     } else if (key === 'responsibility' || key === 'reviewDate') {
@@ -2797,15 +2794,25 @@ function buildCardHtml(item) {
     const ob = topOrder[kb] !== undefined ? topOrder[kb] : 9;
     return oa - ob;
   });
+  return { top: topFields, action: actionFields, bottom: bottomFields };
+}
 
-  const topRowHtml = topFields.length
-    ? `<div class="card-fields-row card-fields-row-top">${topFields.map(function (f) { return cardFieldHtml_(item, f); }).join('')}</div>`
+function buildCardHtml(item) {
+  const visibleFields = (item.displayFields || []).filter(function (field) {
+    const key = dashboardColumnKey_(field && field.label);
+    if (key === 'id') return false;
+    return dashboardColumnVisible_(field && field.label);
+  });
+
+  const groups = groupCardFields_(visibleFields);
+  const topRowHtml = groups.top.length
+    ? `<div class="card-fields-row card-fields-row-top">${groups.top.map(function (f) { return cardFieldHtml_(item, f); }).join('')}</div>`
     : '';
-  const actionRowHtml = actionFields.length
-    ? actionFields.map(function (f) { return cardFieldHtml_(item, f); }).join('')
+  const actionRowHtml = groups.action.length
+    ? groups.action.map(function (f) { return cardFieldHtml_(item, f); }).join('')
     : '';
-  const bottomRowHtml = bottomFields.length
-    ? `<div class="card-fields-row card-fields-row-bottom">${bottomFields.map(function (f) { return cardFieldHtml_(item, f); }).join('')}</div>`
+  const bottomRowHtml = groups.bottom.length
+    ? `<div class="card-fields-row card-fields-row-bottom">${groups.bottom.map(function (f) { return cardFieldHtml_(item, f); }).join('')}</div>`
     : '';
   const fieldsHtml = topRowHtml + actionRowHtml + bottomRowHtml;
 
@@ -4407,19 +4414,32 @@ function resetUserPassword(email) {
 /* Read-only drill-down for any record (S8): shows every display field plus the
    review status and submission count, with contextual actions. */
 
-function openRecordDetail(row) {
-  const item = appState.items.find(function (i) { return String(i.row) === String(row); });
-  if (!item) return;
-  const fieldsHtml = (item.displayFields || []).map(function (field) {
-    const valueHtml = field.html
-      ? `<div class="detail-value preserve-whitespace field-html">${field.html}</div>`
-      : `<div class="detail-value preserve-whitespace">${escapeHtml(field.value)}</div>`;
-    return `
+/* One read-only detail row in the record detail dialog. */
+function detailRowHtml_(field) {
+  const valueHtml = field.html
+    ? `<div class="detail-value preserve-whitespace field-html">${field.html}</div>`
+    : `<div class="detail-value preserve-whitespace">${escapeHtml(field.value)}</div>`;
+  return `
       <div class="about-row detail-row">
         <span class="detail-label">${escapeHtml(field.label || 'Value')}</span>
         ${valueHtml}
       </div>`;
-  }).join('');
+}
+
+function openRecordDetail(row) {
+  const item = appState.items.find(function (i) { return String(i.row) === String(row); });
+  if (!item) return;
+  // Same 3-1-2 grouping as the dashboard cards: top row = Description, Entry
+  // Date, Sector; Action its own horizontal block; bottom = Responsibility,
+  // Review Date.
+  const groups = groupCardFields_(item.displayFields);
+  const fieldsHtml = (groups.top.length
+    ? `<div class="detail-fields-row detail-fields-row-top">${groups.top.map(detailRowHtml_).join('')}</div>`
+    : '') + (groups.action.length
+    ? groups.action.map(detailRowHtml_).join('')
+    : '') + (groups.bottom.length
+    ? `<div class="detail-fields-row detail-fields-row-bottom">${groups.bottom.map(detailRowHtml_).join('')}</div>`
+    : '');
 
   const subCount = (appState.submissionCounts || {})[item.row] || 0;
   const statusBadge = item.reviewStatus === 'due'
