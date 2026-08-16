@@ -2733,6 +2733,7 @@ function dashboardColumnKey_(label) {
   if (l === 'description') return 'description';
   if (l.indexOf('entry') !== -1) return 'entryDate';
   if (l.indexOf('review') !== -1) return 'reviewDate';
+  if (l === 'responsibility') return 'responsibility';
   if (l === 'action') return 'action';
   if (l.indexOf('actions') !== -1) return 'actions';
   return '';

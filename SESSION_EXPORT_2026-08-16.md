@@ -93,6 +93,17 @@ dashboard no longer reads them). Working in the **dash-site** repo
 - `row-reset-requested` (password-reset requests in Settings) deliberately
   stays amber — separate feature.
 
+## 7d. Card layout fix: 3-1-2 grouping + default link blue (follow-up)
+- User correction: the first grouping shipped as **4-1-1** instead of the
+  requested **3-1-2** — `dashboardColumnKey_` had no `responsibility` case, so
+  the 'Responsibility' field fell into the top-row fallback. Added
+  `responsibility` mapping; verified grouping now = Description | Entry Date |
+  Sector (3) → Action block (1) → Responsibility | Review Date (2).
+- User request: hyperlinks in the Action field/cell should keep the default
+  hyperlink blue in both red (due) and green (ok) tints. Changed
+  `.card-field-action .field-value a` and `.data-table td.action-cell a` from
+  `var(--text)` to `var(--accent)` in `assets/styles.css`.
+
 ## 7c. Card field layout redesign (follow-up)
 - User request: per card, group the fields instead of one block per row.
   Chosen layout: **top row = Description | Entry Date | Sector** (3 vertical
