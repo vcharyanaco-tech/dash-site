@@ -2695,7 +2695,8 @@ function dashboardColumnKey_(label) {
   if (l === 'description') return 'description';
   if (l.indexOf('entry') !== -1) return 'entryDate';
   if (l.indexOf('review') !== -1) return 'reviewDate';
-  if (l.indexOf('action') !== -1) return 'actions';
+  if (l === 'action') return 'action';
+  if (l.indexOf('actions') !== -1) return 'actions';
   return '';
 }
 
@@ -2904,14 +2905,15 @@ function buildTableRowHtml(item) {
     </div>`;
   let persistedPanels = '';
   const aiPanel = aiPanelHtmlFromCache_(item.row);
-  if (aiPanel) persistedPanels += '<tr class="ai-insight-tr"><td colspan="7">' + aiPanel + '</td></tr>';
+  if (aiPanel) persistedPanels += '<tr class="ai-insight-tr"><td colspan="8">' + aiPanel + '</td></tr>';
   const linkPanel = linkPanelHtmlFromCache_(item.row);
-  if (linkPanel) persistedPanels += '<tr class="ai-link-tr"><td colspan="7">' + linkPanel + '</td></tr>';
+  if (linkPanel) persistedPanels += '<tr class="ai-link-tr"><td colspan="8">' + linkPanel + '</td></tr>';
   return `
     <tr class="row-clickable ${item.reviewStatus === 'due' ? 'row-flagged' : ''}" data-row="${escAttr(item.row)}" tabindex="0">
       <td><span class="id-badge">#${escapeHtml(item.id)}</span></td>
       <td class="preserve-whitespace">${escapeHtml(item.sector || '')}</td>
       <td class="details-cell preserve-whitespace">${escapeHtml(item.description || '')}</td>
+      <td class="preserve-whitespace">${item.actionHtml || renderLinkableText(item.action || '')}</td>
       <td class="preserve-whitespace">${escapeHtml(item.entryDate || '')}</td>
       <td class="preserve-whitespace">${escapeHtml(item.reviewDate || '')}</td>
       <td>${statusBadge}</td>
@@ -2937,7 +2939,7 @@ function renderDashboardTable() {
 
   table.querySelector('tbody').innerHTML = pageItems.length
     ? pageItems.map(buildTableRowHtml).join('')
-    : '<tr><td colspan="7">No records found.</td></tr>';
+    : '<tr><td colspan="8">No records found.</td></tr>';
 
   const summaryEl = getEl('dashboardTableSummary');
   if (summaryEl) summaryEl.textContent = appState.filtered.length + ' record' + (appState.filtered.length === 1 ? '' : 's') + ' found';
