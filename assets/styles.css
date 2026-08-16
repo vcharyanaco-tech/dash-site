@@ -1062,7 +1062,7 @@ body.sidebar-collapsed .nav-item.active { box-shadow: inset 0 0 0 2px var(--seco
 
 .card:hover { box-shadow: var(--shadow-md); border-color: var(--border-strong); }
 
-.card.review-due { background: var(--warning-soft); border-color: color-mix(in srgb, var(--warning) 45%, transparent); }
+.card.review-due { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
 
 .card-title { display: flex; align-items: center; }
 
@@ -1110,11 +1110,11 @@ body.sidebar-collapsed .nav-item.active { box-shadow: inset 0 0 0 2px var(--seco
 .card-field-action .field-value a { color: var(--text); text-decoration: underline; }
 
 /* Review due → red/pending theme. A surface-mixed tint (not the very pale
-   -soft token) so the red stays clearly visible even on the amber-tinted
+   -soft token) so the red stays clearly visible even on the red-tinted
    review-due card. */
 .card-field-action-due {
-  background: color-mix(in srgb, var(--danger) 16%, var(--surface));
-  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 22%, var(--surface));
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
   box-shadow: inset 3px 0 0 var(--danger);
 }
 
@@ -1542,7 +1542,7 @@ body.col-resizing * { cursor: col-resize !important; user-select: none; }
   letter-spacing: .3px;
 }
 
-.review-due.review-badge { background: var(--warning); color: #fff; box-shadow: var(--shadow-sm); }
+.review-due.review-badge { background: var(--danger); color: #fff; box-shadow: var(--shadow-sm); }
 .review-done.review-badge { background: var(--success); color: #fff; box-shadow: var(--shadow-sm); }
 
 .review-dropdown { position: relative; display: inline-flex; }
@@ -1790,7 +1790,7 @@ body.dark-mode .card-ai-table {
   font-weight: 600;
 }
 .data-table td.action-cell a { color: var(--text); text-decoration: underline; }
-.data-table td.action-cell.action-cell-due { background: color-mix(in srgb, var(--danger) 16%, var(--surface)); }
+.data-table td.action-cell.action-cell-due { background: color-mix(in srgb, var(--danger) 22%, var(--surface)); }
 .data-table td.action-cell.action-cell-ok { background: color-mix(in srgb, var(--success) 13%, var(--surface)); }
 
 /* Records table: keep the Actions column pinned to the right edge so it is
@@ -2040,8 +2040,8 @@ body.modal-resizing * { cursor: nwse-resize !important; user-select: none; }
 .view-toggle { display: inline-flex; gap: 4px; }
 .view-toggle .btn.active { background: var(--secondary); border-color: var(--secondary); color: #fff; }
 .data-table tbody tr.row-clickable { cursor: pointer; }
-.data-table tbody tr.row-flagged { background: var(--warning-soft); }
-.data-table tbody tr.row-flagged:hover { background: color-mix(in srgb, var(--warning-soft) 72%, var(--surface-2)); }
+.data-table tbody tr.row-flagged { background: var(--danger-soft); }
+.data-table tbody tr.row-flagged:hover { background: color-mix(in srgb, var(--danger-soft) 72%, var(--surface-2)); }
 .data-table tbody tr.row-reset-requested { background: var(--warning-soft); box-shadow: inset 3px 0 0 var(--warning); }
 .data-table tbody tr.row-reset-requested:hover { background: color-mix(in srgb, var(--warning-soft) 72%, var(--surface-2)); }
 .data-table .dash-actions-col { width: 240px; }

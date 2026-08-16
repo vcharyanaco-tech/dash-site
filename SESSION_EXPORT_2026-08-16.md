@@ -79,6 +79,20 @@ dashboard no longer reads them). Working in the **dash-site** repo
   `buildTableRowHtml` (`app.js:2954`) adds `action-cell-due|ok`; tints in
   `assets/styles.css` (~1102-1130 cards, ~1788-1794 table).
 
+## 7b. Review-due card red-tinted (follow-up)
+- User follow-up: "Make the whole review-due card red-tinted instead of amber
+  so the due state reads stronger." Changed in `assets/styles.css`:
+  - `.card.review-due` background `--warning-soft` → `--danger-soft`, border
+    warning mix → danger mix (line ~1065).
+  - `.review-due.review-badge` background `--warning` → `--danger` (line
+    ~1545).
+  - Table `.data-table tbody tr.row-flagged` (+ hover) `--warning-soft` →
+    `--danger-soft` (lines ~2043-2044) so card + table stay consistent.
+  - Bumped the Action field/cell due tint from 16% to 22% danger mix so it
+    still reads as a distinct field on the now-red card.
+- `row-reset-requested` (password-reset requests in Settings) deliberately
+  stays amber — separate feature.
+
 ## 7. Persist sort/filter choices in server-side dashboard prefs (follow-up)
 - `DASHBOARD_PREF_KEYS` (`src/server/config.js`) gained `SORT_KEY`, `SORT_DIR`,
   `REVIEW_FILTER`. `getDashboardPreferences` now returns `sortKey` (default
