@@ -208,13 +208,15 @@
               <select id="dashReviewFilter" class="select" aria-label="Filter by review status" onchange="handleDashReviewFilterChange()">
                 <option value="">All reviews</option>
                 <option value="due">Review due</option>
-                <option value="pending">Review not done / not due</option>
+                <option value="notdue">Review not due</option>
               </select>
               <select id="sectorFilter" class="select" aria-label="Filter by sector" onchange="handleSectorFilterChange()">
                 <option value="">All sectors</option>
               </select>
             </div>
           </div>
+
+          <div class="cards-summary" id="dashboardCardsSummary" aria-live="polite"></div>
 
           <div id="dashboardCards" class="cards-grid"></div>
 

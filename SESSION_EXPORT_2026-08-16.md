@@ -146,6 +146,27 @@ dashboard no longer reads them). Working in the **dash-site** repo
 - Smoke test extended: saves/reads the new keys and verifies an empty-string
   reviewFilter persists while other keys survive a partial save.
 
+## 8. Fix review filters appearing broken (visible count + true "not due")
+- Root cause (verified in a headless browser against a local server): the
+  filter *computation* worked (`appState.filtered` changed 21 → 18 → 21) but
+  card view showed **zero visible feedback** — page 1 always renders
+  PAGE_SIZE (10) cards, so when the excluded records sit on pages 2+, the
+  user sees the same 10 cards. Also, the old "Review not done / not due"
+  option (`reviewStatus !== 'done'`) matched *everything* in the live dataset
+  (no record is `done`), so it was identical to "All reviews".
+- `app.js`: the second option is now a true complement — `notdue` filters
+  `reviewStatus !== 'due'`. New `renderDashboardCount()` shows a live
+  count above the cards: "21 records found" (no filter) vs "Showing 18 of
+  21 records" (due) vs "Showing 3 of 21 records" (not due). Legacy
+  `pending` pref values map to `notdue` on restore.
+- `app.html`: dropdown option renamed to "Review not due" (`value="notdue"`);
+  new `#dashboardCardsSummary` line above the cards grid.
+- `assets/styles.css`: `.cards-summary` (muted, caption-size, bold).
+- Verified in browser: due → 18 records (distinct pagination), notdue → 3
+  records (cards 11/20/17 — clearly different set), summary line updates on
+  every change, chips appear/clear correctly.
+- Smoke test extended: `notdue` reviewFilter round-trips through prefs.
+
 ## Validation
 - `node --check app.js` clean.
 - `npm test` in `src/server` → **31/31 pass**.
@@ -165,6 +186,6 @@ dashboard no longer reads them). Working in the **dash-site** repo
   source of truth; Render/Railway auto-deploy).
 
 ## Suggested next steps
-1. Optionally make the "Review not done / not due" option more granular
-   (split into separate due / not-due filters).
-2. Check the new red/green Action tints in a browser (light + dark mode).
+1. Check the new red/green Action tints in a browser (light + dark mode).
+2. Consider whether "Review not due" should also be reflected in the KPI
+   "Review due" tile when a filter is active.

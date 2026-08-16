@@ -2542,8 +2542,8 @@ function applyFilters(preservePage) {
       .join(' ').toLowerCase();
     const reviewOk = review === 'due'
       ? item.reviewStatus === 'due'
-      : review === 'pending'
-        ? item.reviewStatus !== 'done'
+      : review === 'notdue'
+        ? item.reviewStatus !== 'due'
         : true;
     return (!query || haystack.indexOf(query) !== -1) && (!sector || item.sector === sector) && reviewOk;
   });
@@ -2605,7 +2605,7 @@ function updateFilterChips() {
     parts.push(`<span class="filter-chip">Sector: ${escapeHtml(appState.sector)} <button type="button" aria-label="Remove sector filter" onclick="removeChip('sector')">✕</button></span>`);
   }
   if (appState.dashReviewFilter) {
-    const reviewLabel = appState.dashReviewFilter === 'due' ? 'Review due' : 'Review not done / not due';
+    const reviewLabel = appState.dashReviewFilter === 'due' ? 'Review due' : 'Review not due';
     parts.push(`<span class="filter-chip">${escapeHtml(reviewLabel)} <button type="button" aria-label="Remove review filter" onclick="removeChip('review')">✕</button></span>`);
   }
   chips.innerHTML = parts.join('');
@@ -3014,6 +3014,20 @@ function buildTableRowHtml(item) {
     </tr>` + persistedPanels;
 }
 
+/* Visible result count above the cards so filter changes are obvious even
+   when page 1 stays full (PAGE_SIZE caps the rendered cards). */
+function renderDashboardCount() {
+  const el = getEl('dashboardCardsSummary');
+  if (!el) return;
+  const total = appState.items.length;
+  const shown = appState.filtered.length;
+  const filtering = !!(appState.searchQuery || appState.sector || appState.dashReviewFilter);
+  const plural = function (n) { return n === 1 ? 'record' : 'records'; };
+  el.textContent = filtering
+    ? 'Showing ' + shown + ' of ' + total + ' ' + plural(total)
+    : shown + ' ' + plural(shown) + ' found';
+}
+
 function renderDashboardTable() {
   const wrap = getEl('dashboardTableWrap');
   const table = getEl('dashboardTable');
@@ -3113,6 +3127,7 @@ function renderDashboard(preservePage) {
   applyFilters(preservePage);
   renderKpiCards();
   updateFilterChips();
+  renderDashboardCount();
   const grid = getEl('dashboardCards');
   const tableWrap = getEl('dashboardTableWrap');
   const viewCardsBtn = getEl('viewCardsBtn');
@@ -5113,7 +5128,8 @@ function applyDashboardPreferences() {
   // first paint honours them.
   if (prefs.sortKey) appState.dashSortKey = prefs.sortKey;
   if (prefs.sortDir === 'asc' || prefs.sortDir === 'desc') appState.dashSortDir = prefs.sortDir;
-  appState.dashReviewFilter = prefs.reviewFilter || '';
+  // Legacy 'pending' (old "not done / not due" value) maps to 'notdue'.
+  appState.dashReviewFilter = prefs.reviewFilter === 'pending' ? 'notdue' : (prefs.reviewFilter || '');
   syncDashSortFilterControls();
   toggleDashboardView(prefs.viewMode === 'table' ? 'table' : 'cards');
 }

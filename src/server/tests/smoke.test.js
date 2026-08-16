@@ -206,6 +206,10 @@ test('dashboard preferences', async function () {
   assert.strictEqual(prefs.sortKey, 'sector');
   assert.strictEqual(prefs.sortDir, 'desc');
   assert.strictEqual(prefs.reviewFilter, 'due');
+  // The "not due" filter value round-trips too.
+  await post('saveDashboardPreferences', [{ reviewFilter: 'notdue' }, token]);
+  const notdue = await post('getDashboardPreferences', [token]);
+  assert.strictEqual(notdue.reviewFilter, 'notdue');
   // Clearing the review filter must persist (empty string is meaningful).
   await post('saveDashboardPreferences', [{ reviewFilter: '' }, token]);
   const cleared = await post('getDashboardPreferences', [token]);
