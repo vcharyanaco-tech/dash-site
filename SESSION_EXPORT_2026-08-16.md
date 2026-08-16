@@ -93,6 +93,22 @@ dashboard no longer reads them). Working in the **dash-site** repo
 - `row-reset-requested` (password-reset requests in Settings) deliberately
   stays amber — separate feature.
 
+## 7c. Card field layout redesign (follow-up)
+- User request: per card, group the fields instead of one block per row.
+  Chosen layout: **top row = Description | Entry Date | Sector** (3 vertical
+  blocks), **Action as its own full-width horizontal block** below, then
+  **Responsibility | Review Date** (2 vertical blocks) at the bottom. Compact
+  gaps; colour theme untouched.
+- `app.js`: extracted `cardFieldHtml_(item, field)` from `buildCardHtml`;
+  `buildCardHtml` now filters visible fields, groups them by key (action →
+  own block; responsibility/reviewDate → bottom row; everything else → top
+  row, sorted Description | Entry Date | Sector), and emits
+  `.card-fields-row-top` / Action block / `.card-fields-row-bottom`.
+- `assets/styles.css`: `.card-fields-row` = `grid-auto-flow: column` with
+  `minmax(0, 1fr)` auto columns and compact `--sp-0-5` (4px) gap; rows stack
+  vertically under 520px. Hidden columns don't leave empty cells
+  (grid-auto-flow: column sizes to present fields).
+
 ## 7. Persist sort/filter choices in server-side dashboard prefs (follow-up)
 - `DASHBOARD_PREF_KEYS` (`src/server/config.js`) gained `SORT_KEY`, `SORT_DIR`,
   `REVIEW_FILTER`. `getDashboardPreferences` now returns `sortKey` (default

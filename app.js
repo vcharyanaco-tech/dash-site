@@ -2744,26 +2744,69 @@ function dashboardColumnVisible_(label) {
   return key ? columns[key] !== false : true;
 }
 
-function buildCardHtml(item) {
-  const fieldsHtml = (item.displayFields || []).filter(function (field) {
-    const key = dashboardColumnKey_(field && field.label);
-    if (key === 'id') return false;
-    return dashboardColumnVisible_(field && field.label);
-  }).map(function (field) {
-    const isHeaderRowValue = field && field.label && String(field.label).trim() !== '';
-    const isActionField = dashboardColumnKey_(field && field.label) === 'action';
-    const actionStateClass = isActionField
-      ? (item.reviewStatus === 'due' ? ' card-field-action-due' : ' card-field-action-ok')
-      : '';
-    const valueHtml = field.html
-      ? `<div class="field-value preserve-whitespace field-html">${field.html}</div>`
-      : `<div class="field-value preserve-whitespace">${escapeHtml(field.value)}</div>`;
-    return `
+/* Renders one dashboard field as a card block. Groups are assembled in
+   buildCardHtml so the card reads: Description | Entry Date | Sector on the
+   top row, the Action field as its own full-width horizontal block below, and
+   Responsibility | Review Date on the bottom row. */
+function cardFieldHtml_(item, field) {
+  const isHeaderRowValue = field && field.label && String(field.label).trim() !== '';
+  const isActionField = dashboardColumnKey_(field && field.label) === 'action';
+  const actionStateClass = isActionField
+    ? (item.reviewStatus === 'due' ? ' card-field-action-due' : ' card-field-action-ok')
+    : '';
+  const valueHtml = field.html
+    ? `<div class="field-value preserve-whitespace field-html">${field.html}</div>`
+    : `<div class="field-value preserve-whitespace">${escapeHtml(field.value)}</div>`;
+  return `
       <div class="card-field ${isHeaderRowValue ? 'card-field-highlight' : ''}${isActionField ? ' card-field-action' : ''}${actionStateClass}">
         <span class="field-label ${isHeaderRowValue ? 'field-label-highlight' : ''}${isActionField ? ' field-label-action' : ''}">${escapeHtml(field.label || 'Value')}</span>
         ${valueHtml}
       </div>`;
-  }).join('');
+}
+
+function buildCardHtml(item) {
+  const visibleFields = (item.displayFields || []).filter(function (field) {
+    const key = dashboardColumnKey_(field && field.label);
+    if (key === 'id') return false;
+    return dashboardColumnVisible_(field && field.label);
+  });
+
+  // Group by field key: top row = Description, Entry Date, Sector; the Action
+  // field keeps its own horizontal block; bottom row = Responsibility, Review
+  // Date. Any unrecognised field falls into the top row as a fallback.
+  const topFields = [];
+  const actionFields = [];
+  const bottomFields = [];
+  visibleFields.forEach(function (field) {
+    const key = dashboardColumnKey_(field && field.label);
+    if (key === 'action') {
+      actionFields.push(field);
+    } else if (key === 'responsibility' || key === 'reviewDate') {
+      bottomFields.push(field);
+    } else {
+      topFields.push(field);
+    }
+  });
+  // Top row reads Description | Entry Date | Sector (user-specified order).
+  const topOrder = { description: 0, entryDate: 1, sector: 2 };
+  topFields.sort(function (a, b) {
+    const ka = dashboardColumnKey_(a && a.label);
+    const kb = dashboardColumnKey_(b && b.label);
+    const oa = topOrder[ka] !== undefined ? topOrder[ka] : 9;
+    const ob = topOrder[kb] !== undefined ? topOrder[kb] : 9;
+    return oa - ob;
+  });
+
+  const topRowHtml = topFields.length
+    ? `<div class="card-fields-row card-fields-row-top">${topFields.map(function (f) { return cardFieldHtml_(item, f); }).join('')}</div>`
+    : '';
+  const actionRowHtml = actionFields.length
+    ? actionFields.map(function (f) { return cardFieldHtml_(item, f); }).join('')
+    : '';
+  const bottomRowHtml = bottomFields.length
+    ? `<div class="card-fields-row card-fields-row-bottom">${bottomFields.map(function (f) { return cardFieldHtml_(item, f); }).join('')}</div>`
+    : '';
+  const fieldsHtml = topRowHtml + actionRowHtml + bottomRowHtml;
 
   const subCount = (appState.submissionCounts || {})[item.row] || 0;
   const subFlash = !!(appState.submissionFlash || {})[item.row];
