@@ -70,8 +70,29 @@ committed it, and pushed.
   `npm test` 32/32 pass; client ask-block and CSS block byte-identical
   across the web + GAS bundles. Pushed to `origin/main`.
 
+## Bugfix: "Session expired" when opening Meeting Notes (commit `e2e5d63`)
+- **Reported:** opening the Meeting Notes modal immediately showed
+  "Session expired. Please log in again." and logged the user out.
+- **Root cause:** client/server argument-order mismatch on the three
+  meeting-file API calls in `app.js` — `listMeetingFiles`,
+  `getMeetingFile`, `deleteMeetingFile` sent `({}, token)` /
+  `({name}, token)` (payload first, token last), but the Node dispatch
+  reads the token as `args[0]` (`enterprise.listMeetingFiles(A(args,0))`).
+  The server got `{}` as the auth token, `requireAdmin({})` threw
+  "Login required…", and the client's `handleServerFailure` matched that
+  as an auth error → forced logout + "Session expired" toast.
+- **Fix:** client now sends the token first — `('listMeetingFiles',
+  getAuthToken())`, `('getMeetingFile', getAuthToken(), name)`, same for
+  delete — matching the server contract (like `getCardAiInsight`/
+  `askLinkAi` already did). The GAS bundle doesn't carry these three
+  calls (saved-files list is Node-only), so only `app.js` changed.
+- **Verified end-to-end:** dispatch with old args `[{}, 'tok']` throws
+  "Login required"; with new args `['tok']` / `['tok', name]` returns
+  `success: true` (list total + markdown download). `node --check` clean;
+  `npm test` 32/32 pass. Pushed to `origin/main`.
+
 ## Where things stand
-- `1224d5f`, `a61bf48` committed + pushed to `origin/main`. Working tree clean.
+- `1224d5f`, `a61bf48`, `e2e5d63` committed + pushed to `origin/main`. Working tree clean.
 - Render/Railway auto-deploy picks up the push; the Apps Script bundle is
   in the same commit (deployed on next `clasp push` if the GAS side is
   still the live backend — see AGENTS.md deploy notes).
