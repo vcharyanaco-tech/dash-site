@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Server tests + syntax checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/server/package-lock.json
+
+      - name: Install server deps
+        working-directory: src/server
+        run: npm ci
+
+      - name: Server test suite
+        working-directory: src/server
+        run: npm test
+
+      - name: Syntax check app.js
+        run: node --check app.js
+
+      - name: Syntax check worker
+        run: node --check src/worker/worker.js
+
+      - name: Syntax check server sources
+        run: |
+          for f in app.js src/worker/worker.js src/server/*.js src/server/tests/*.js src/scripts/*.cjs scripts/*.cjs; do
+            [ -f "$f" ] && node --check "$f"
+          done
+        shell: bash
