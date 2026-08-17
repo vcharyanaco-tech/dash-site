@@ -106,9 +106,27 @@ committed it, and pushed.
 - Negative check: reverting to the old shape throws "Login required" —
   the test catches the regression. Full suite: 34/34 pass.
 
+## Arg-order audit — all-clear + auto-test (commit `a62711b`)
+- Ran a full audit of every client call: parsed the REAL `ApiService`
+  block from app.js (75 entries), evaluated each call's args with a
+  param-value map (token position included), replayed through
+  `index-dispatch`. **Result: 75/75 authenticate correctly — no other
+  token-position mismatches exist.** (Earlier audit runs falsely
+  flagged everything: replaying the block in order hits `logout`, which
+  deletes the session — re-created the session per call to model a
+  freshly logged-in user.)
+- Replaced the hand-maintained table in `dispatch-args.test.js` with
+  `dispatch-client-args.test.js`: it parses app.js at test time, so it
+  can't drift — new client calls are audited automatically, and any
+  call whose token position diverges from the dispatch fails the suite.
+  Kept the strict meeting-file trio assertions (list/get/delete +
+  old-shape `assert.throws`). Async endpoints are awaited so late
+  rejections can't escape; `adminSyncFromSheet`/`adminPreviewSyncFromSheet`
+  skipped (covered by sync tests). Full suite: 34/34.
+
 ## Where things stand
-- `1224d5f`, `a61bf48`, `e2e5d63`, `b27ca18` committed + pushed to
-  `origin/main`. Working tree clean.
+- `1224d5f`, `a61bf48`, `e2e5d63`, `b27ca18`, `a62711b` committed +
+  pushed to `origin/main`. Working tree clean.
 - Render/Railway auto-deploy picks up the push; the Apps Script bundle is
   in the same commit (deployed on next `clasp push` if the GAS side is
   still the live backend — see AGENTS.md deploy notes).
