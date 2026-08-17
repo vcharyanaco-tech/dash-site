@@ -232,12 +232,42 @@ export default {
     // the dashboard at night pays one cold start (~30-60s, auto-retried by
     // the frontend) — an accepted tradeoff.
     const istMs = Date.now() + ((5 * 60 + 30) * 60000);
-    const istHour = new Date(istMs).getUTCHours();
+    const istDate = new Date(istMs);
+    const istHour = istDate.getUTCHours();
     if (istHour >= 21 || istHour < 6) return;
     const origin = env.SERVER_ORIGIN;
     if (!origin) return;
+    const base = origin.replace(/\/+$/, '');
+
+    // Daily jobs — replacements for the decommissioned GAS time-driven
+    // triggers. The cron ticks every 10 min, so a tick lands at :00 of the
+    // target hour (or a few minutes late after a cold start); istMin < 10
+    // catches both. Fired directly against SERVER_ORIGIN (like the keep-alive
+    // ping below) so the Node backend runs them with DB access; gated by the
+    // shared WORKER_API_TOKEN.
+    const istMin = istDate.getUTCMinutes();
+    if (istMin < 10) {
+      const job = istHour === 9 ? 'review-reminders' : (istHour === 10 ? 'archive-audit' : '');
+      if (job) {
+        try {
+          await fetch(base + '/api/internal/daily-jobs', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + (env.WORKER_API_TOKEN || ''),
+              'User-Agent': 'Mozilla/5.0 (compatible; dashv1-dailyjobs)',
+            },
+            body: JSON.stringify({ job }),
+          });
+        } catch (err) {
+          // Transient failure — sendReviewReminders dedupes per day, so the
+          // next run won't double-send; the next day's tick retries.
+        }
+      }
+    }
+
     try {
-      await fetch(origin.replace(/\/+$/, '') + '/api/health', {
+      await fetch(base + '/api/health', {
         method: 'GET',
         headers: { 'User-Agent': 'Mozilla/5.0 (compatible; dashv1-keepalive)' },
       });

@@ -106,6 +106,17 @@ CREATE TABLE IF NOT EXISTS audit (
   details TEXT NOT NULL DEFAULT ''
 );
 
+-- Archived audit rows (moved out of `audit` after 90 days by the daily
+-- internal job; replaces the GAS 'Audit Archive' sheet).
+CREATE TABLE IF NOT EXISTS audit_archive (
+  id INTEGER PRIMARY KEY,
+  timestamp INTEGER,
+  user TEXT NOT NULL DEFAULT '',
+  action TEXT NOT NULL DEFAULT '',
+  record_id TEXT NOT NULL DEFAULT '',
+  details TEXT NOT NULL DEFAULT ''
+);
+
 -- Documents (mirrors the hidden 'Documents' sheet). File bytes live on disk
 -- under data/uploads/<file_key>; file_key is a UUID used by GET /files/:key.
 CREATE TABLE IF NOT EXISTS documents (

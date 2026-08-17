@@ -109,6 +109,41 @@ app.post(API_PREFIX, async function (req, res) {
   }
 });
 
+// Internal daily jobs (replaces the decommissioned GAS time-driven triggers:
+// 9am review-reminder emails, 10am audit archival). Not part of the public
+// dispatch — gated by the shared WORKER_API_TOKEN that the Worker uses for its
+// own internal endpoints (/api/send-email etc.). The Worker cron fires this
+// directly against SERVER_ORIGIN. sendReviewReminders is deliberately NOT in
+// the public dispatch: its `if (token) auth.requireAdmin(token)` guard skips
+// auth when called token-less (as GAS's trigger did), which would be a spam
+// vector if exposed.
+app.post(API_PREFIX + '/internal/daily-jobs', async function (req, res) {
+  const authHeader = req.headers['authorization'] || '';
+  const m = authHeader.match(/^Bearer\s+(.+)$/i);
+  const token = m ? m[1].trim() : '';
+  const expected = process.env.WORKER_API_TOKEN || '';
+  if (!expected || token !== expected) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+  try {
+    const body = await readBodyJson(req);
+    const job = body && body.job;
+    let result;
+    if (job === 'review-reminders') {
+      result = require('./records').sendReviewReminders(undefined);
+    } else if (job === 'archive-audit') {
+      result = require('./audit').archiveAuditLog();
+    } else {
+      res.json({ error: 'Unknown job: ' + job });
+      return;
+    }
+    res.json({ result: result === undefined ? null : result });
+  } catch (err) {
+    res.json({ error: (err && err.message) || String(err) });
+  }
+});
+
 app.get(API_PREFIX + '/files/:key', function (req, res) {
   const documents = require('./documents');
   const found = documents.resolveDocumentFile(req.params.key);
