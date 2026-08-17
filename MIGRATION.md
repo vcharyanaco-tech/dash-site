@@ -95,19 +95,29 @@ is kept per owner decision, but Pages stays pinned to the `*.github.io` URL).
 > `/api/ai-insights` and `/api/notify-whatsapp` are token-gated but
 > unconfigured (no `GEMINI_API_KEY` / WhatsApp secrets yet).
 
-### Phase 5 — Decommission GAS 🔄 PENDING SOAK (mirror removed 2026-08-17)
-> GAS is the manual fallback while the Node backend soaks. It is deployed at
-> version **@243** (`AKfycbxPwINC…` — the URL the old dashv1 bundle called)
-> and **has not been modified** (the stale in-repo `src/gas/` mirror was
-> removed 2026-08-17 — the live Apps Script project lives in `dashv1` and
-> was never pushed from this repo).
-1. Soak: keep GAS as fallback while the Node server runs the equivalent jobs
-   (reminders, AI cache). Re-run `verify-browser.cjs` against the live domain
-   after any change.
-2. When the owner declares the soak complete, stop the time-driven GAS
-   triggers (reminders, reports).
-3. Archive the spreadsheet; revoke the Apps Script OAuth scopes if no longer
-   needed.
+### Phase 5 — Decommission GAS ✅ DONE 2026-08-17 (owner-declared)
+> The soak was declared complete on 2026-08-17 and the Apps Script backend
+> was decommissioned. What was executed (script `1QYwVDQGWPL…`, the dashv1
+> GAS project):
+> - **Node took over the daily jobs first** — the 9am review-reminder emails
+>   and 10am audit archival (GAS triggers) now run on Node via the internal
+>   `/api/internal/daily-jobs` route (gated by `WORKER_API_TOKEN`), fired by
+>   the Worker cron at 09:00/10:00 IST. `archiveAuditLog` moved rows to the
+>   new `audit_archive` table (was the GAS sheet archival).
+> - **Web-app deployments undeployed** (3 of 4; the read-only HEAD
+>   deployment dies with the project) — the old `script.google.com/macros/s/…/exec`
+>   URLs now return 404.
+> - **Trigger handlers neutralized** — the live project's `Triggers` file was
+>   overwritten with no-ops (`dailyDateUpdate`/`sendReviewReminders`/
+>   `archiveAuditLog`/`warmup`), so any still-installed time-driven triggers
+>   cannot send emails or touch data. The real code remains in the `dashv1`
+>   repo for re-creation.
+> - **Remaining manual step (owner, Apps Script UI):** delete the project
+>   from `script.google.com` — there is no REST API for project deletion and
+>   the clasp token lacks the `script.scriptapp` scope needed for `scripts.run`.
+>   Deleting it also removes the read-only HEAD deployment and any remaining
+>   triggers. The origin spreadsheet was **kept** (it is still the manual
+>   "Sync from Google Sheet" source; archive it in Drive at the owner's call).
 
 > Note: file uploads live on disk under `data/uploads/` on the Railway volume.
 > On serverless hosts, move them to R2 / object storage and update

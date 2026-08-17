@@ -154,11 +154,52 @@ committed it, and pushed.
   (`emailReport`). The removed GAS bundle was the only `MailApp`-based
   copy; the Node mailer is unaffected.
 
+## GAS decommission — owner-declared soak complete (commits `0aec6bf` + docs)
+
+**Decision:** soak declared complete; full decommission of the Apps Script
+project (`1QYwVDQGWPL…`, lives in `dashv1`). Because the 9am review-reminder
+emails were still sent **only by GAS triggers** (Node had the function but
+nothing scheduled it), the daily jobs were moved to Node **first**:
+
+1. **Node internal daily-jobs route** (`src/server/index.js`) —
+   `/api/internal/daily-jobs` gated by `WORKER_API_TOKEN` (deliberately **not**
+   in the public dispatch — `sendReviewReminders` skips auth when called
+   token-less, which would be a spam vector). Runs `sendReviewReminders`
+   (9am) and the new `archiveAuditLog` (10am).
+2. **Worker cron** (`src/worker/worker.js`) — fires both jobs at 09:00 / 10:00
+   IST (tick window `istMin < 10`), direct to `SERVER_ORIGIN` with the bearer
+   token; the reminder job's per-day dedupe prevents double-sends.
+3. **`audit_archive` table** (schema.sql) + `archiveAuditLog` in audit.js —
+   bounded batch (400), moves rows older than 90 days, idempotent,
+   never throws. Tests: `tests/audit-archive.test.js` (2 new tests).
+
+**Verified:** `node --check` clean; suite now **37/37**; live smoke — route
+401 without token, `archive-audit` returns `{archived:0…}`, `review-reminders`
+returns `{success:true,sent:0…}`, unknown job errors; real archival moved an
+old row (`archived:1`) while keeping the fresh row; the internal route is
+**live in production** (401 via `dashboardharyana.site` without token).
+
+**Then the GAS decommission itself** (via the Apps Script REST API, clasp
+OAuth token — owner `vcharyanaco@gmail.com`):
+- 3 of 4 web-app deployments undeployed; the live `…/exec` URL now 404s.
+- The live project's `Triggers` file overwritten with **no-ops** so the
+  still-installed time-driven triggers can't send reminder emails or touch
+  data (real code stays in the `dashv1` repo for re-creation).
+- **Not possible via API:** trigger deletion + project deletion.
+  `scripts.run` returns 403 (token lacks `script.scriptapp`/
+  `external_request` scopes; refresh-token re-consent needs a browser login)
+  and the Apps Script REST API has **no project-delete method**. The owner's
+  one manual step: delete the project at `script.google.com` (also removes
+  the read-only HEAD deployment + remaining triggers).
+- The origin spreadsheet was **kept** — it's still the manual "Sync from
+  Google Sheet" source (`DASH_AUTO_SYNC_MINUTES=0`); archive it in Drive
+  at the owner's call. No Drive scope on the clasp token to move it.
+
 ## Where things stand
-- Commits `1224d5f` … `ada8ec4` pushed to `origin/main`. Working tree clean.
-- Render/Railway auto-deploy picks up the push; the Apps Script bundle is
-  in the same commit (deployed on next `clasp push` if the GAS side is
-  still the live backend — see AGENTS.md deploy notes).
+- Commits `1224d5f` … `0aec6bf` pushed to `origin/main`. Working tree clean.
+- Render/Railway auto-deploy picks up the push; GAS is fully retired —
+  no `clasp push` should be run against the dash-site repo anymore (the
+  live Apps Script project is decommissioned; dashv1 holds the rollback code).
 
 ## Suggested next steps
 1. Browser-test the Ask-AI bar (light + dark mode): type a question on a
