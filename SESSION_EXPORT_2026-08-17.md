@@ -207,17 +207,43 @@ search + ellipsis) applied to every header + row cell; regression tests in
 `tests/reports.test.js` (4 tests: boundary, ellipsis, unchanged-short, and a
 full `buildPdfBuffer_` render with 300-word cells). Suite now **41/41**.
 
+## Email delivery — relay verified working, Render env pending
+- Emails were falling through to the outbox because the Node mailer only
+  uses the HTTP relay when Render has `MAIL_TRANSPORT=http` +
+  `MAIL_HTTP_URL=https://dashboardharyana.site/api/send-email` +
+  `WORKER_API_TOKEN` (matching the Worker secret). The `SMTP_*` vars on
+  Render are irrelevant — **Render free blocks SMTP ports 25/465/587**
+  (Render changelog, Sept 2025), which is why the Worker relay exists.
+- **Verified end-to-end:** owner pasted the `WORKER_API_TOKEN`; a live
+  `POST /api/send-email` (bearer token) returned `{ok:true}` HTTP 200 and
+  delivered a test email to the owner's inbox. So the Worker side (SMTP
+  secrets) is healthy — the break is purely Render's env vars.
+- **Open:** set the three vars on Render (dashboard steps or via a Render
+  API key the owner can provide). Token value NOT recorded in this file.
+- **Proposed hardening (not done):** `sendMail_`/`sendViaHttp_` swallow
+  relay failures silently (fire-and-forget); make `emailReport` report
+  real delivery status so this class of failure is visible.
+
 ## Where things stand
-- Commits `1224d5f` … `41c857e` pushed to `origin/main` (history rewritten
-  2026-08-17: `9a5287e` split into `1cff489` + `5845a50` — content identical).
-  Working tree clean.
+- Commits `1224d5f` … `6b2a50f` pushed to `origin/main` (history rewritten
+  2026-08-17: mixed `9a5287e` split into `1cff489` (KPI) + `5845a50`
+  (src/gas removal) — trees identical, verified empty diff). Working tree clean.
 - Render/Railway auto-deploy picks up the push; GAS is fully retired —
   no `clasp push` should be run against the dash-site repo anymore (the
   live Apps Script project is decommissioned; dashv1 holds the rollback code).
+- The live Cloudflare Worker is deployed from `dash-site/src/worker/` via
+  `node src/worker/deploy-worker-api.js` (NOT the stale dashv1 one — see
+  AGENTS.md).
 
 ## Suggested next steps
-1. Browser-test the Ask-AI bar (light + dark mode): type a question on a
-   record with a linked file, confirm the answer box appears above the
-   table and survives a background refresh.
-2. Consider a "clear answer" affordance or question history in
-   `appState.linkAskQa` (currently one answer per row, replaced on re-ask).
+1. **Email:** set `MAIL_TRANSPORT=http`, `MAIL_HTTP_URL`, and
+   `WORKER_API_TOKEN` (owner's pasted value) on the Render `dash-site`
+   service → re-test a report email; optionally harden the mailer to
+   surface delivery failures.
+2. **GAS (owner, manual):** delete the retired Apps Script project at
+   script.google.com (`1QYwVDQGWPL…`) — the only remaining decommission step.
+3. Confirm tomorrow's 9am IST review-reminder email fires from Node (Worker
+   cron → `/api/internal/daily-jobs`) and audit archival ran (audit_archive).
+4. Browser-test the Ask-AI bar + persisted Q&A history (survives reload).
+5. Optional: archive the origin spreadsheet in Drive (manual sync source,
+   currently button-only).
