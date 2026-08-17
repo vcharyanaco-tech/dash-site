@@ -26,15 +26,15 @@ Pages on every push to `main`.
 
 | Path | What it is |
 | --- | --- |
-| `src/gas/` | Google Apps Script backend (CRUD, auth, reports, notifications) — push with `clasp` |
+| `src/server/` | Node + SQLite backend (CRUD, auth, reports, notifications, AI, meetings) |
 | `src/worker/` | Cloudflare Worker proxy (routes `/api/*`, static `/app.html`) |
 | `src/tests/` | Node unit tests (`node --test src/tests`) |
 | `src/scripts/` | Deploy / build PowerShell scripts |
 | `src/docs/` | Architecture, deployment, developer + admin guides |
 
-The live deployment uses the Apps Script backend and Cloudflare Worker from
-the original `dashv1` repo; this repo mirrors that stack in a self-contained,
-deployable layout.
+The live deployment runs the self-contained Node backend (`src/server/`) and
+Cloudflare Worker (`src/worker/`). The original Apps Script project lives in
+the separate `dashv1` repo; the stale in-repo `src/gas/` mirror was removed.
 
 > **Migration base:** `src/server/` is a complete SQLite-backed Node port of the
 > GAS backend (see `MIGRATION.md`). It already serves the app via

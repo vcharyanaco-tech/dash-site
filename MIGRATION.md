@@ -95,11 +95,12 @@ is kept per owner decision, but Pages stays pinned to the `*.github.io` URL).
 > `/api/ai-insights` and `/api/notify-whatsapp` are token-gated but
 > unconfigured (no `GEMINI_API_KEY` / WhatsApp secrets yet).
 
-### Phase 5 — Decommission GAS 🔄 PENDING SOAK (current phase)
+### Phase 5 — Decommission GAS 🔄 PENDING SOAK (mirror removed 2026-08-17)
 > GAS is the manual fallback while the Node backend soaks. It is deployed at
 > version **@243** (`AKfycbxPwINC…` — the URL the old dashv1 bundle called)
-> and **has not been modified** (the repo `src/gas/` mirror is stale relative
-> to the live project, so no push was made).
+> and **has not been modified** (the stale in-repo `src/gas/` mirror was
+> removed 2026-08-17 — the live Apps Script project lives in `dashv1` and
+> was never pushed from this repo).
 1. Soak: keep GAS as fallback while the Node server runs the equivalent jobs
    (reminders, AI cache). Re-run `verify-browser.cjs` against the live domain
    after any change.
