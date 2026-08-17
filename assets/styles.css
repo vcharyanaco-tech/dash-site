@@ -1324,6 +1324,45 @@ body.col-resizing * { cursor: col-resize !important; user-select: none; }
   border-radius: var(--radius-xs);
   display: inline-block;
 }
+
+/* Ask-AI bar above the linked-file table: input + Ask button, with the
+   answer box directly below the bar and still above the table. */
+.card-ai-ask { margin-top: 6px; display: grid; gap: 6px; min-width: 0; }
+.card-ai-ask-bar { display: flex; gap: 6px; align-items: center; }
+.card-ai-ask-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  outline: none;
+}
+.card-ai-ask-input:focus { border-color: var(--accent); }
+.card-ai-ask-result {
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  min-width: 0;
+  word-break: break-word;
+}
+.card-ai-ask-result[hidden] { display: none; }
+.card-ai-ask-q {
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+.card-ai-ask-a { white-space: pre-wrap; }
+.card-ai-ask-loading { color: var(--muted); font-style: italic; }
+.card-ai-ask-error { color: var(--danger); }
 .meeting-notes-hint {
   margin: 0 0 var(--sp-2);
   padding: 10px 12px;

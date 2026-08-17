@@ -95,6 +95,7 @@ const dispatch = {
   getAiInsights: function (args) { return enterprise.getAiInsights(A(args, 0)); },
   getCardAiInsight: function (args) { return enterprise.getCardAiInsight(A(args, 0), A(args, 1)); },
   getLinkContentAiInsight: function (args) { return enterprise.getLinkContentAiInsight(A(args, 0), A(args, 1)); },
+  askLinkAi: function (args) { return enterprise.askLinkAi(A(args, 0), A(args, 1), A(args, 2)); },
   processMeetingRecording: function (args) { return enterprise.processMeetingRecording(A(args, 0), A(args, 1)); },
   transcribeMeetingSegment: function (args) { return enterprise.transcribeMeetingSegment(A(args, 0), A(args, 1)); },
   generateMeetingMinutes: function (args) { return enterprise.generateMeetingMinutes(A(args, 0), A(args, 1)); },

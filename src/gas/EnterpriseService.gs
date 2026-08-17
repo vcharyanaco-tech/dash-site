@@ -34,6 +34,10 @@ var ENTERPRISE_AI_RECORD_SYSTEM_PROMPT = 'You are a concise data-analytics assis
   'The user gives one dashboard record and optionally the text of its linked file. Respond ONLY with exactly 3 short bullet ' +
   'points of concrete follow-up actions derived from that record and link. Do not describe India, ' +
   'its geography, history, or culture.';
+var ENTERPRISE_AI_ASK_SYSTEM_PROMPT = 'You are a helpful data-analytics assistant for the India Post Haryana dashboard. ' +
+  'The user gives one dashboard record, optionally the text of its linked file, and a question. ' +
+  'Answer the question concisely and accurately using only that record and link content. ' +
+  'Do not describe India, its geography, history, or culture.';
 var ENTERPRISE_AI_LINK_MAX_CHARS = 25000;
 var ENTERPRISE_AI_PREVIEW_MAX_ROWS = 50;
 var ENTERPRISE_AI_PREVIEW_MAX_CELLS = 30;
@@ -524,6 +528,52 @@ function getLinkContentAiInsight(token, row) {
       });
       result.previewRowTotal = previewRowTotal;
     }
+  }
+  return result;
+}
+
+/* Editor/admin-gated: answers a user's question about a record and its
+   linked file content via the configured AI provider (Groq by default). */
+function askLinkAi(token, row, question) {
+  requireEditor_(token);
+  if (!aiEnabled_()) {
+    return { success: false, message: 'AI insights are not enabled.' };
+  }
+  question = String(question || '').trim();
+  if (!question) return { success: false, message: 'Enter a question first.' };
+  if (question.length > 1000) return { success: false, message: 'Question too long (max 1000 characters).' };
+  var item = findItemByRow_(row);
+  if (!item) return { success: false, message: 'Record not found.' };
+  var url = firstLinkUrl_(item);
+  var text = '';
+  var contentRead = false;
+  if (url) {
+    if (!isSafeLinkUrl_(url)) return { success: false, message: 'Unsafe link rejected.' };
+    var fetched;
+    if (isSheetsLink_(url)) {
+      var table = fetchLinkTable_(url);
+      fetched = table.text || fetchLinkText_(url);
+    } else {
+      fetched = fetchLinkText_(url);
+    }
+    text = String(fetched || '').replace(/\s+/g, ' ').trim();
+    if (text.length > ENTERPRISE_AI_LINK_MAX_CHARS) text = text.substring(0, ENTERPRISE_AI_LINK_MAX_CHARS);
+    contentRead = text.length > 40;
+  }
+  var prompt = 'India Post dashboard record #' + (item.id || '') + ' (sector: ' + (item.sector || '') + '):\n' +
+    'Description: ' + (item.description || '') + '\n' +
+    'Action: ' + (item.action || '') + '\n' +
+    'Responsibility: ' + (item.responsibility || '') + '\n' +
+    'Review date: ' + (item.reviewDate || '') + '\n' +
+    (url ? 'Linked file URL: ' + url + '\n' : '') +
+    (contentRead
+      ? 'Linked file content: ' + text + '\n'
+      : (url ? 'The linked file content could not be read (private, blocked, or unreadable). Base your answer on the record and URL only.\n' : '')) +
+    'Question: ' + question;
+  var result = generateAiText_(prompt, ENTERPRISE_AI_ASK_SYSTEM_PROMPT);
+  if (result.success === true) {
+    result.row = item.row;
+    result.id = item.id;
   }
   return result;
 }

@@ -402,6 +402,11 @@ const ENTERPRISE_AI_RECORD_SYSTEM_PROMPT =
   'The user gives one dashboard record and optionally the text of its linked file. Respond ONLY with exactly 3 short bullet ' +
   'points of concrete follow-up actions derived from that record and link. Do not describe India, ' +
   'its geography, history, or culture.';
+const ENTERPRISE_AI_ASK_SYSTEM_PROMPT =
+  'You are a helpful data-analytics assistant for the India Post Haryana dashboard. ' +
+  'The user gives one dashboard record, optionally the text of its linked file, and a question. ' +
+  'Answer the question concisely and accurately using only that record and link content. ' +
+  'Do not describe India, its geography, history, or culture.';
 const ENTERPRISE_AI_LINK_MAX_CHARS = 25000;
 const ENTERPRISE_AI_PREVIEW_MAX_ROWS = 50;
 const ENTERPRISE_AI_PREVIEW_MAX_CELLS = 30;
@@ -456,6 +461,7 @@ module.exports = {
   ENTERPRISE_AI_MEETING_SYSTEM_PROMPT,
   ENTERPRISE_AI_SYSTEM_PROMPT,
   ENTERPRISE_AI_RECORD_SYSTEM_PROMPT,
+  ENTERPRISE_AI_ASK_SYSTEM_PROMPT,
   ENTERPRISE_AI_LINK_MAX_CHARS,
   ENTERPRISE_AI_PREVIEW_MAX_ROWS,
   ENTERPRISE_AI_PREVIEW_MAX_CELLS,

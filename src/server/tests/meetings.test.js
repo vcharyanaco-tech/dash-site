@@ -14,8 +14,8 @@ const { db } = require('../db');
 const enterprise = require('../enterprise');
 
 function setup() {
-  db.prepare("INSERT INTO users (email, role, salt, password_hash, must_change, created_by, created_at, username) VALUES ('a@x.com', 'ADMIN', 'salt', 'x', 0, '', 0, 'admin')").run();
-  db.prepare("INSERT INTO sessions (token, email, created_at, expires_at) VALUES ('tok', 'a@x.com', 0, " + (Date.now() + 3600000) + ")").run();
+  db.prepare("INSERT OR IGNORE INTO users (email, role, salt, password_hash, must_change, created_by, created_at, username) VALUES ('a@x.com', 'ADMIN', 'salt', 'x', 0, '', 0, 'admin')").run();
+  db.prepare("INSERT OR IGNORE INTO sessions (token, email, created_at, expires_at) VALUES ('tok', 'a@x.com', 0, " + (Date.now() + 3600000) + ")").run();
 }
 
 test('meeting library: list, download, delete saved files', function () {
@@ -62,4 +62,20 @@ test('generateAiText_ accepts a provider override (groq first, graceful failure 
   assert.strictEqual(typeof r.success, 'boolean');
   // Without a Groq key the primary provider fails and the Kilo free fallback
   // may kick in — either way it must not throw.
+});
+
+test('askLinkAi validates input before ever calling the AI provider', async function () {
+  setup();
+  // Empty/whitespace question is rejected without hitting the network.
+  let r = await enterprise.askLinkAi('tok', 1, '   ');
+  assert.strictEqual(r.success, false);
+  assert.match(r.message, /question/i);
+  // Over-long question is rejected.
+  r = await enterprise.askLinkAi('tok', 1, 'x'.repeat(1001));
+  assert.strictEqual(r.success, false);
+  assert.match(r.message, /too long/i);
+  // Unknown record is reported cleanly.
+  r = await enterprise.askLinkAi('tok', 99999, 'Summarize this record');
+  assert.strictEqual(r.success, false);
+  assert.strictEqual(r.message, 'Record not found.');
 });

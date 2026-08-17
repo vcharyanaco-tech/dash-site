@@ -154,6 +154,7 @@ const ApiService = {
   getAiInsights: function () { return apiCall_('getAiInsights', getAuthToken()); },
   getCardAiInsight: function (row) { return apiCall_('getCardAiInsight', getAuthToken(), row); },
   getLinkContentAiInsight: function (row) { return apiCall_('getLinkContentAiInsight', getAuthToken(), row); },
+  askLinkAi: function (row, question) { return apiCall_('askLinkAi', getAuthToken(), row, question); },
   processMeetingRecording: function (payload) { return apiCall_('processMeetingRecording', payload, getAuthToken()); },
   transcribeMeetingSegment: function (payload) { return apiCall_('transcribeMeetingSegment', payload, getAuthToken()); },
   generateMeetingMinutes: function (payload) { return apiCall_('generateMeetingMinutes', payload, getAuthToken()); },
@@ -176,6 +177,8 @@ const appState = {
   linkAnalysis: {},
   // Persisted "AI insight" panels — same persistence as the link panels.
   aiAnalysis: {},
+  // Persisted Ask-AI answers for the linked-file panels: row -> { question, answer }.
+  linkAskQa: {},
   // Bumped on every submission mutation (add/update/delete/read-all) so a
   // background refresh that started BEFORE the mutation can be detected as
   // stale and discarded instead of reverting the card's submission state.
@@ -1832,6 +1835,7 @@ function linkAiResultHtml_(data, wrapH) {
     const wrapStyle = wrapH ? ' style="max-height:none;height:' + wrapH + 'px;"' : '';
     html += '<details class="card-ai-preview" open><summary>Linked file preview</summary>' +
       (title ? '<div class="card-ai-table-title">' + escapeHtml(title) + '</div>' : '') +
+      linkAskHtml_(data.row) +
       '<div class="card-ai-table-wrap"' + wrapStyle + '><table class="card-ai-table">' + thead + tbody + '</table></div>' +
       note + '</details>';
   } else if (data.preview) {
@@ -1839,6 +1843,61 @@ function linkAiResultHtml_(data, wrapH) {
       '<div class="card-ai-preview-text">' + escapeHtml(data.preview) + '</div></details>';
   }
   return html;
+}
+
+/* Ask-AI bar shown above the linked-file table: type a question, hit Enter
+   or Ask, and the configured AI provider (Groq by default) answers in the
+   result box below the bar — still above the table. Answers are kept in
+   appState.linkAskQa so they survive background refreshes. */
+function linkAskHtml_(row) {
+  const qa = appState.linkAskQa && appState.linkAskQa[String(row)];
+  const result = qa
+    ? '<div class="card-ai-ask-result"><div class="card-ai-ask-q">' + escapeHtml(qa.question) + '</div>' +
+      '<div class="card-ai-ask-a">' + escapeHtml(qa.answer) + '</div></div>'
+    : '<div class="card-ai-ask-result" hidden></div>';
+  return '<div class="card-ai-ask">' +
+    '<div class="card-ai-ask-bar">' +
+    '<input class="card-ai-ask-input" type="text" placeholder="Ask AI…" ' +
+    'data-row="' + escAttr(row) + '" ' +
+    'onkeydown="if(event.key===\'Enter\'){askLinkAi(this);}">' +
+    '<button class="btn btn-small btn-primary card-ai-ask-btn" type="button" onclick="askLinkAi(this)">Ask</button>' +
+    '</div>' + result + '</div>';
+}
+
+function askLinkAi(elm) {
+  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
+  const ask = elm.closest('.card-ai-ask');
+  if (!ask) return;
+  const input = ask.querySelector('.card-ai-ask-input');
+  const result = ask.querySelector('.card-ai-ask-result');
+  const askBtn = ask.querySelector('.card-ai-ask-btn');
+  const question = (input.value || '').trim();
+  if (!question) { input.focus(); return; }
+  const row = input.getAttribute('data-row');
+  if (!row) return;
+  askBtn.disabled = true;
+  result.hidden = false;
+  result.className = 'card-ai-ask-result card-ai-ask-loading';
+  result.textContent = 'Asking AI…';
+  ApiService.askLinkAi(row, question).then(function (data) {
+    if (!data || data.success !== true) {
+      const msg = (data && data.message) || 'Could not get an answer.';
+      result.className = 'card-ai-ask-result card-ai-ask-error';
+      result.textContent = msg;
+      askBtn.disabled = false;
+      return;
+    }
+    appState.linkAskQa[String(row)] = { question: question, answer: data.insights || '' };
+    result.className = 'card-ai-ask-result';
+    result.innerHTML = '<div class="card-ai-ask-q">' + escapeHtml(question) + '</div>' +
+      '<div class="card-ai-ask-a">' + escapeHtml(data.insights || '') + '</div>';
+    askBtn.disabled = false;
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+    result.className = 'card-ai-ask-result card-ai-ask-error';
+    result.textContent = (err && err.message) ? err.message : String(err || 'Unknown error');
+    askBtn.disabled = false;
+  });
 }
 
 /* ---------------------------------- In-page link preview ---------------------------------- */

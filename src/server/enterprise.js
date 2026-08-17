@@ -31,6 +31,7 @@ const {
   ENTERPRISE_AI_MEETING_SYSTEM_PROMPT,
   ENTERPRISE_AI_SYSTEM_PROMPT,
   ENTERPRISE_AI_RECORD_SYSTEM_PROMPT,
+  ENTERPRISE_AI_ASK_SYSTEM_PROMPT,
   ENTERPRISE_AI_LINK_MAX_CHARS,
   ENTERPRISE_AI_PREVIEW_MAX_ROWS,
   ENTERPRISE_AI_PREVIEW_MAX_CELLS,
@@ -692,6 +693,48 @@ async function getLinkContentAiInsight(token, row) {
   return result;
 }
 
+/* Editor/admin-gated: answers a user's question about a record and its
+   linked file content via the configured AI provider (Groq by default). */
+async function askLinkAi(token, row, question) {
+  auth.requireEditor(token);
+  if (!aiEnabled_()) {
+    return { success: false, message: 'AI insights are not enabled.' };
+  }
+  question = String(question || '').trim();
+  if (!question) return { success: false, message: 'Enter a question first.' };
+  if (question.length > 1000) return { success: false, message: 'Question too long (max 1000 characters).' };
+  const item = findItemByRow_(row);
+  if (!item) return { success: false, message: 'Record not found.' };
+  const url = firstLinkUrl_(item);
+  let text = '';
+  let contentRead = false;
+  if (url) {
+    if (!helpers.isSafeLinkUrl_(url)) return { success: false, message: 'Unsafe link rejected.' };
+    const fetched = isSheetsLink_(url)
+      ? await fetchLinkTable_(url).then(function (t) { return t.text || fetchLinkText_(url); })
+      : await fetchLinkText_(url);
+    text = String(fetched || '').replace(/\s+/g, ' ').trim();
+    if (text.length > ENTERPRISE_AI_LINK_MAX_CHARS) text = text.substring(0, ENTERPRISE_AI_LINK_MAX_CHARS);
+    contentRead = text.length > 40;
+  }
+  const prompt = 'India Post dashboard record #' + (item.id || '') + ' (sector: ' + (item.sector || '') + '):\n' +
+    'Description: ' + (item.description || '') + '\n' +
+    'Action: ' + (item.action || '') + '\n' +
+    'Responsibility: ' + (item.responsibility || '') + '\n' +
+    'Review date: ' + (item.reviewDate || '') + '\n' +
+    (url ? 'Linked file URL: ' + url + '\n' : '') +
+    (contentRead
+      ? 'Linked file content: ' + text + '\n'
+      : (url ? 'The linked file content could not be read (private, blocked, or unreadable). Base your answer on the record and URL only.\n' : '')) +
+    'Question: ' + question;
+  const result = await generateAiText_(prompt, ENTERPRISE_AI_ASK_SYSTEM_PROMPT);
+  if (result.success === true) {
+    result.row = item.row;
+    result.id = item.id;
+  }
+  return result;
+}
+
 /* ============================================================
  * API key setters (admin-gated, stored in settings, never echoed)
  * ============================================================ */
@@ -1270,6 +1313,7 @@ module.exports = {
   getAIInsights,
   getCardAiInsight,
   getLinkContentAiInsight,
+  askLinkAi,
   setOpenRouterApiKey,
   setGeminiApiKey,
   setGroqApiKey,
