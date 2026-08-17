@@ -91,8 +91,24 @@ committed it, and pushed.
   `success: true` (list total + markdown download). `node --check` clean;
   `npm test` 32/32 pass. Pushed to `origin/main`.
 
+## Arg-order lock test (commit `b27ca18`)
+- New `src/server/tests/dispatch-args.test.js` replays every ApiService
+  call **exactly as app.js sends it** (token position included) through
+  `index-dispatch` and fails if the auth token lands in the wrong slot
+  (the bug class that made Meeting Notes throw "Login required" and log
+  the user out).
+- `CLIENT_CALLS` table mirrors the ApiService block in app.js (39 entries),
+  with a comment to keep it in sync. The meeting-file trio
+  (`listMeetingFiles`/`getMeetingFile`/`deleteMeetingFile`) is asserted
+  strictly: list/get/delete succeed with `[token]` / `[token, name]`, and
+  the old buggy `({}, token)` / `({name}, token)` shapes are asserted to
+  still fail auth (`assert.throws`).
+- Negative check: reverting to the old shape throws "Login required" —
+  the test catches the regression. Full suite: 34/34 pass.
+
 ## Where things stand
-- `1224d5f`, `a61bf48`, `e2e5d63` committed + pushed to `origin/main`. Working tree clean.
+- `1224d5f`, `a61bf48`, `e2e5d63`, `b27ca18` committed + pushed to
+  `origin/main`. Working tree clean.
 - Render/Railway auto-deploy picks up the push; the Apps Script bundle is
   in the same commit (deployed on next `clasp push` if the GAS side is
   still the live backend — see AGENTS.md deploy notes).
