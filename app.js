@@ -155,6 +155,8 @@ const ApiService = {
   getCardAiInsight: function (row) { return apiCall_('getCardAiInsight', getAuthToken(), row); },
   getLinkContentAiInsight: function (row) { return apiCall_('getLinkContentAiInsight', getAuthToken(), row); },
   askLinkAi: function (row, question) { return apiCall_('askLinkAi', getAuthToken(), row, question); },
+  getAllAskLinkHistory: function () { return apiCall_('getAllAskLinkHistory', getAuthToken()); },
+  saveAskLinkHistory: function (row, history) { return apiCall_('saveAskLinkHistory', getAuthToken(), row, history); },
   processMeetingRecording: function (payload) { return apiCall_('processMeetingRecording', payload, getAuthToken()); },
   transcribeMeetingSegment: function (payload) { return apiCall_('transcribeMeetingSegment', payload, getAuthToken()); },
   generateMeetingMinutes: function (payload) { return apiCall_('generateMeetingMinutes', payload, getAuthToken()); },
@@ -1885,8 +1887,8 @@ function linkAskResultHtml_(row) {
   return html + '</div>';
 }
 
-/* Dismisses a row's Ask-AI answer history (client-side cache only — the
-   record's data is untouched and no server call is made). */
+/* Dismisses a row's Ask-AI answer history. Clears the local cache and the
+   server copy so the history is gone after a reload too. */
 function clearLinkAsk(elm) {
   const ask = elm.closest('.card-ai-ask');
   if (!ask) return;
@@ -1895,6 +1897,32 @@ function clearLinkAsk(elm) {
   delete appState.linkAskQa[String(row)];
   const result = ask.querySelector('.card-ai-ask-result');
   if (result) result.outerHTML = linkAskResultHtml_(row);
+  persistAskLinkHistory(row, []);
+}
+
+/* Persists one record's Ask-AI Q&A history to the server (fire-and-forget;
+   failures are non-fatal — the local cache still works for the session). */
+function persistAskLinkHistory(row, hist) {
+  if (!appState.isEditor) return;
+  if (!ApiService.saveAskLinkHistory) return;
+  ApiService.saveAskLinkHistory(row, hist).catch(function (err) {
+    if (handleServerFailure(err)) return;
+  });
+}
+
+/* Loads every record's persisted Ask-AI Q&A history into appState.linkAskQa
+   so questions survive a page reload. Called once after login. */
+function loadAskLinkHistory() {
+  if (!appState.isEditor) return;
+  if (!ApiService.getAllAskLinkHistory) return;
+  ApiService.getAllAskLinkHistory().then(function (data) {
+    if (!data || data.success !== true || !data.history) return;
+    const merged = Object.assign({}, data.history, appState.linkAskQa || {});
+    appState.linkAskQa = merged;
+    EventBus.emit('AskLinkHistoryLoaded');
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+  });
 }
 
 function askLinkAi(elm) {
@@ -1931,6 +1959,7 @@ function askLinkAi(elm) {
     if (hist.length > 10) hist.splice(0, hist.length - 10);
     result.outerHTML = linkAskResultHtml_(row);
     askBtn.disabled = false;
+    persistAskLinkHistory(row, hist);
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
     result.className = 'card-ai-ask-result card-ai-ask-error';
@@ -2488,6 +2517,7 @@ function loadApp() {
     refreshCounts();
     generateReviewNotifications();
     loadDashboardPreferences();
+    loadAskLinkHistory();
     EventBus.emit('DataRefreshed');
     EventBus.emit('UserLoggedIn');
     startAutoRefresh();
@@ -2760,7 +2790,14 @@ function renderKpiCards() {
   const hasCounts = !!appState.counts;
   const sectorCount = Object.keys(summary.sectors || {}).length;
   const total = hasCounts && counts.totalRecords !== undefined ? counts.totalRecords : (summary.total || 0);
-  const flagged = hasCounts && counts.flaggedRecords !== undefined ? counts.flaggedRecords : (summary.flagged || 0);
+  // When a review-status filter is active, the Review due tile reflects the
+  // filtered set instead of the global count, so the KPI stays consistent
+  // with the cards/table on screen.
+  const reviewFilter = appState.dashReviewFilter;
+  const flaggedInView = appState.filtered.filter(function (i) { return i.reviewStatus === 'due'; }).length;
+  const flagged = reviewFilter
+    ? flaggedInView
+    : (hasCounts && counts.flaggedRecords !== undefined ? counts.flaggedRecords : (summary.flagged || 0));
   const openTasks = counts.openTasks;
   const dueToday = counts.dueToday;
   const trend = trendPill();
@@ -2782,7 +2819,7 @@ function renderKpiCards() {
       </div>
       <div class="kpi-label">Review due</div>
       <div class="kpi-value">${flagged}</div>
-      <div class="kpi-subtitle">Flagged for follow-up</div>
+      <div class="kpi-subtitle">${reviewFilter ? 'Within current filter' : 'Flagged for follow-up'}</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-top">
