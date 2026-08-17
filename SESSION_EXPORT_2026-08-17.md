@@ -53,8 +53,25 @@ committed it, and pushed.
   `isSheetsLink_`, `fetchLinkTable_`, `fetchLinkText_`) all verified
   present in both the GAS and Node sides.
 
+## Follow-up: clear-answer affordance + question history (commit `a61bf48`)
+- `appState.linkAskQa` is now a per-row **history array** `[{question, answer}]`
+  (newest last) instead of a single `{question, answer}`.
+- `linkAskResultHtml_(row)` renders just the result box: latest Q&A on top
+  with a ✕ **clear button** (`clearLinkAsk` — client-side only, deletes the
+  row's cached history, no server call), and older Q&As collapsed under a
+  `Previous questions (N)` `<details>` toggle (`linkAskHistoryHtml_`).
+- `askLinkAi` success now pushes into the history; re-asking the same
+  question moves it to the top instead of duplicating; history capped at
+  10 entries per row. `linkAskHtml_` delegates to `linkAskResultHtml_`.
+- New styles: `.card-ai-ask-result-head`, `.card-ai-ask-clear` (ghost ✕,
+  danger on hover), `.card-ai-ask-history` (+ `summary`, `-item`) in both
+  `assets/styles.css` and `src/gas/styles.html`.
+- Verified: `node --check` clean on app.js + extracted script.html JS;
+  `npm test` 32/32 pass; client ask-block and CSS block byte-identical
+  across the web + GAS bundles. Pushed to `origin/main`.
+
 ## Where things stand
-- `1224d5f` committed + pushed to `origin/main`. Working tree clean.
+- `1224d5f`, `a61bf48` committed + pushed to `origin/main`. Working tree clean.
 - Render/Railway auto-deploy picks up the push; the Apps Script bundle is
   in the same commit (deployed on next `clasp push` if the GAS side is
   still the live backend — see AGENTS.md deploy notes).
