@@ -19,6 +19,7 @@ const settings = require('./settings');
 const {
   CONFIG,
   ENTERPRISE_SETTINGS,
+  ASK_LINK_HISTORY_MAX,
   ENTERPRISE_AI_DEFAULT_ENDPOINT,
   ENTERPRISE_AI_OPENROUTER_ENDPOINT,
   ENTERPRISE_AI_GROQ_ENDPOINT,
@@ -735,6 +736,45 @@ async function askLinkAi(token, row, question) {
   return result;
 }
 
+/* Editor/admin-gated: returns the Ask-AI Q&A history for every record that
+   has one, as a map row -> [{ question, answer }, ...] (newest last). The
+   client merges this into appState.linkAskQa on load so questions survive
+   page reloads, not just background refreshes. */
+function getAllAskLinkHistory(token) {
+  auth.requireEditor(token);
+  const rows = db.prepare('SELECT record_row, history FROM ask_ai_history').all();
+  const out = {};
+  rows.forEach(function (r) {
+    try {
+      const parsed = JSON.parse(r.history || '[]');
+      if (Array.isArray(parsed)) out[String(r.record_row)] = parsed;
+    } catch (e) { /* skip corrupt rows */ }
+  });
+  return { success: true, history: out };
+}
+
+/* Editor/admin-gated: upserts one record's Ask-AI Q&A history (JSON array,
+   capped at ASK_LINK_HISTORY_MAX entries per row, mirroring the client cap). */
+function saveAskLinkHistory(token, row, history) {
+  auth.requireEditor(token);
+  const rowNum = Number(row);
+  if (!isFinite(rowNum) || rowNum <= 0) return { success: false, message: 'Invalid record row.' };
+  if (!Array.isArray(history)) return { success: false, message: 'Invalid history.' };
+  // Keep the NEWEST entries (the client splices from the front, so the tail
+  // is most recent — mirror that so reload shows the same history).
+  const clean = history.slice(Math.max(0, history.length - ASK_LINK_HISTORY_MAX)).map(function (e) {
+    return {
+      question: String((e && e.question) || '').slice(0, 1000),
+      answer: String((e && e.answer) || '').slice(0, 20000)
+    };
+  }).filter(function (e) { return e.question; });
+  db.prepare(
+    'INSERT INTO ask_ai_history (record_row, history, updated_at) VALUES (?, ?, ?) ' +
+    'ON CONFLICT(record_row) DO UPDATE SET history = excluded.history, updated_at = excluded.updated_at'
+  ).run(rowNum, JSON.stringify(clean), Date.now());
+  return { success: true, history: clean };
+}
+
 /* ============================================================
  * API key setters (admin-gated, stored in settings, never echoed)
  * ============================================================ */
@@ -1314,6 +1354,8 @@ module.exports = {
   getCardAiInsight,
   getLinkContentAiInsight,
   askLinkAi,
+  getAllAskLinkHistory,
+  saveAskLinkHistory,
   setOpenRouterApiKey,
   setGeminiApiKey,
   setGroqApiKey,

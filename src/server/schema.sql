@@ -155,6 +155,15 @@ CREATE TABLE IF NOT EXISTS dedupe (
   created_at INTEGER
 );
 
+-- Ask-AI Q&A history for the linked-file panels: one row per record, JSON
+-- array of { question, answer } (newest last). Survives page reloads so a
+-- user's questions are not lost when the in-memory appState cache clears.
+CREATE TABLE IF NOT EXISTS ask_ai_history (
+  record_row INTEGER PRIMARY KEY,
+  history TEXT NOT NULL DEFAULT '[]',
+  updated_at INTEGER
+);
+
 CREATE INDEX IF NOT EXISTS idx_records_row ON records(row);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_submissions_card_row ON submissions(card_row);
