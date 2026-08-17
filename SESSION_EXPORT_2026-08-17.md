@@ -124,9 +124,38 @@ committed it, and pushed.
   rejections can't escape; `adminSyncFromSheet`/`adminPreviewSyncFromSheet`
   skipped (covered by sync tests). Full suite: 34/34.
 
+## Feature batch (commits `9a5287e`, `db3b171`, `31f10b6`, `ada8ec4`)
+1. **KPI tile respects review filter** — when a review-status filter is
+   active, the Review due KPI counts due records within the filtered set
+   (subtitle "Within current filter") instead of the global count.
+2. **Ask-AI history persisted server-side** — new `ask_ai_history` table
+   + `getAllAskLinkHistory`/`saveAskLinkHistory` (editor-gated). Client
+   loads the full map into `appState.linkAskQa` after login and saves on
+   every ask/clear, so Q&As survive page reloads. Server mirrors the
+   newest-10 cap and truncates oversized fields. New test covers
+   save/reload/cap/clear + viewer rejection. (`ASK_LINK_HISTORY_MAX` in
+   config.)
+3. **CI test gate** — `.github/workflows/ci.yml` runs `npm test`
+   (src/server) + `node --check` across app.js / worker / server sources
+   on push to main and PRs, so a breaking change can't auto-deploy
+   silently.
+4. **Removed stale `src/gas/` bundle** — deprecated mirror, never pushed
+   from this repo (live Apps Script lives in dashv1). 28 files deleted;
+   README source table + MIGRATION Phase 5 note updated (soak itself
+   remains pending-owner-call).
+
+## Email direction (owner decision: KEEP)
+- dash-site's Node server owns all email via `src/server/mailer.js`
+  (SMTP via nodemailer when `SMTP_*` set, HTTP relay via Worker
+  `/api/send-email`, local outbox fallback). Email features kept and
+  untouched: password-reset-request notice to admins (Auth.js),
+  `adminEmailAllUsers`, task assign/completion emails (tasks.js),
+  review-date reminder emails (records.js), report PDF emails
+  (`emailReport`). The removed GAS bundle was the only `MailApp`-based
+  copy; the Node mailer is unaffected.
+
 ## Where things stand
-- `1224d5f`, `a61bf48`, `e2e5d63`, `b27ca18`, `a62711b` committed +
-  pushed to `origin/main`. Working tree clean.
+- Commits `1224d5f` … `ada8ec4` pushed to `origin/main`. Working tree clean.
 - Render/Railway auto-deploy picks up the push; the Apps Script bundle is
   in the same commit (deployed on next `clasp push` if the GAS side is
   still the live backend — see AGENTS.md deploy notes).
