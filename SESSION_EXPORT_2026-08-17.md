@@ -124,7 +124,11 @@ committed it, and pushed.
   rejections can't escape; `adminSyncFromSheet`/`adminPreviewSyncFromSheet`
   skipped (covered by sync tests). Full suite: 34/34.
 
-## Feature batch (commits `9a5287e`, `db3b171`, `31f10b6`, `ada8ec4`)
+## Feature batch (commits `1cff489`, `5845a50`, `231e58e`, `1be8190`, `347533c`)
+> Note: the mixed `9a5287e` was later split (2026-08-17) into `1cff489` (KPI
+> tile, `app.js` only) + `5845a50` (src/gas mirror removal) for a clean
+> history; the remaining batch commits were replayed as `231e58e` (Ask-AI
+> persistence), `1be8190` (CI gate), `347533c` (src/gas docs).
 1. **KPI tile respects review filter** — when a review-status filter is
    active, the Review due KPI counts due records within the filtered set
    (subtitle "Within current filter") instead of the global count.
@@ -154,7 +158,7 @@ committed it, and pushed.
   (`emailReport`). The removed GAS bundle was the only `MailApp`-based
   copy; the Node mailer is unaffected.
 
-## GAS decommission — owner-declared soak complete (commits `0aec6bf` + docs)
+## GAS decommission — owner-declared soak complete (commits `74a53aa` + docs)
 
 **Decision:** soak declared complete; full decommission of the Apps Script
 project (`1QYwVDQGWPL…`, lives in `dashv1`). Because the 9am review-reminder
@@ -196,7 +200,9 @@ OAuth token — owner `vcharyanaco@gmail.com`):
   at the owner's call. No Drive scope on the clasp token to move it.
 
 ## Where things stand
-- Commits `1224d5f` … `0aec6bf` pushed to `origin/main`. Working tree clean.
+- Commits `1224d5f` … `41c857e` pushed to `origin/main` (history rewritten
+  2026-08-17: `9a5287e` split into `1cff489` + `5845a50` — content identical).
+  Working tree clean.
 - Render/Railway auto-deploy picks up the push; GAS is fully retired —
   no `clasp push` should be run against the dash-site repo anymore (the
   live Apps Script project is decommissioned; dashv1 holds the rollback code).
