@@ -1363,6 +1363,35 @@ body.col-resizing * { cursor: col-resize !important; user-select: none; }
 .card-ai-ask-a { white-space: pre-wrap; }
 .card-ai-ask-loading { color: var(--muted); font-style: italic; }
 .card-ai-ask-error { color: var(--danger); }
+.card-ai-ask-result-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.card-ai-ask-clear {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+.card-ai-ask-clear:hover { color: var(--danger); border-color: var(--danger); }
+.card-ai-ask-history {
+  margin-top: var(--sp-1);
+  padding-top: var(--sp-1);
+  border-top: 1px dashed var(--border);
+  font-size: 12.5px;
+}
+.card-ai-ask-history summary { cursor: pointer; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+.card-ai-ask-history-item { padding: 6px 0 0; }
+.card-ai-ask-history-item + .card-ai-ask-history-item { margin-top: 10px; }
 .meeting-notes-hint {
   margin: 0 0 var(--sp-2);
   padding: 10px 12px;

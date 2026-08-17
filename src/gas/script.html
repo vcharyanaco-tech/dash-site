@@ -141,7 +141,7 @@ const appState = {
   filtered: [],
   summary: {},
   analytics: {},
-  // Persisted Ask-AI answers for the linked-file panels: row -> { question, answer }.
+  // Persisted Ask-AI history for the linked-file panels: row -> [{ question, answer }] (newest last).
   linkAskQa: {},
   audit: [],
   user: {},
@@ -1388,21 +1388,54 @@ function linkAiResultHtml_(data) {
 
 /* Ask-AI bar shown above the linked-file table: type a question, hit Enter
    or Ask, and the configured AI provider (Groq by default) answers in the
-   result box below the bar — still above the table. Answers are kept in
-   appState.linkAskQa so they survive background refreshes. */
+   result box below the bar — still above the table. Each row keeps a Q&A
+   history in appState.linkAskQa (row -> [{question, answer}, ...], newest
+   last) so answers survive background refreshes; the ✕ button clears a
+   row's history (client-side only). */
 function linkAskHtml_(row) {
-  const qa = appState.linkAskQa && appState.linkAskQa[String(row)];
-  const result = qa
-    ? '<div class="card-ai-ask-result"><div class="card-ai-ask-q">' + escapeHtml(qa.question) + '</div>' +
-      '<div class="card-ai-ask-a">' + escapeHtml(qa.answer) + '</div></div>'
-    : '<div class="card-ai-ask-result" hidden></div>';
   return '<div class="card-ai-ask">' +
     '<div class="card-ai-ask-bar">' +
     '<input class="card-ai-ask-input" type="text" placeholder="Ask AI…" ' +
     'data-row="' + escAttr(row) + '" ' +
     'onkeydown="if(event.key===\'Enter\'){askLinkAi(this);}">' +
     '<button class="btn btn-small btn-primary card-ai-ask-btn" type="button" onclick="askLinkAi(this)">Ask</button>' +
-    '</div>' + result + '</div>';
+    '</div>' + linkAskResultHtml_(row) + '</div>';
+}
+
+/* Renders just the result box for a row: latest Q&A on top with a ✕ clear
+   button, older Q&As collapsed under a "Previous questions" toggle. */
+function linkAskResultHtml_(row) {
+  const hist = (appState.linkAskQa && appState.linkAskQa[String(row)]) || [];
+  if (!hist.length) return '<div class="card-ai-ask-result" hidden></div>';
+  const latest = hist[hist.length - 1];
+  let html = '<div class="card-ai-ask-result">' +
+    '<div class="card-ai-ask-result-head">' +
+    '<div class="card-ai-ask-q">' + escapeHtml(latest.question) + '</div>' +
+    '<button class="card-ai-ask-clear" type="button" title="Clear answer history" ' +
+    'data-row="' + escAttr(row) + '" onclick="clearLinkAsk(this)">✕</button>' +
+    '</div>' +
+    '<div class="card-ai-ask-a">' + escapeHtml(latest.answer) + '</div>';
+  if (hist.length > 1) {
+    html += '<details class="card-ai-ask-history"><summary>Previous questions (' + (hist.length - 1) + ')</summary>';
+    for (let i = hist.length - 2; i >= 0; i--) {
+      html += '<div class="card-ai-ask-history-item"><div class="card-ai-ask-q">' + escapeHtml(hist[i].question) + '</div>' +
+        '<div class="card-ai-ask-a">' + escapeHtml(hist[i].answer) + '</div></div>';
+    }
+    html += '</details>';
+  }
+  return html + '</div>';
+}
+
+/* Dismisses a row's Ask-AI answer history (client-side cache only — the
+   record's data is untouched and no server call is made). */
+function clearLinkAsk(elm) {
+  const ask = elm.closest('.card-ai-ask');
+  if (!ask) return;
+  const row = elm.getAttribute('data-row');
+  if (!row) return;
+  delete appState.linkAskQa[String(row)];
+  const result = ask.querySelector('.card-ai-ask-result');
+  if (result) result.outerHTML = linkAskResultHtml_(row);
 }
 
 function askLinkAi(elm) {
@@ -1428,10 +1461,16 @@ function askLinkAi(elm) {
       askBtn.disabled = false;
       return;
     }
-    appState.linkAskQa[String(row)] = { question: question, answer: data.insights || '' };
-    result.className = 'card-ai-ask-result';
-    result.innerHTML = '<div class="card-ai-ask-q">' + escapeHtml(question) + '</div>' +
-      '<div class="card-ai-ask-a">' + escapeHtml(data.insights || '') + '</div>';
+    const hist = appState.linkAskQa[String(row)] || (appState.linkAskQa[String(row)] = []);
+    // Re-asking the same question moves it to the top instead of duplicating.
+    let dup = -1;
+    for (let i = 0; i < hist.length; i++) {
+      if (hist[i].question === question) { dup = i; break; }
+    }
+    if (dup !== -1) hist.splice(dup, 1);
+    hist.push({ question: question, answer: data.insights || '' });
+    if (hist.length > 10) hist.splice(0, hist.length - 10);
+    result.outerHTML = linkAskResultHtml_(row);
     askBtn.disabled = false;
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
