@@ -42,6 +42,24 @@ function getReportData(token, templateKey) {
   };
 }
 
+/* Truncates text so it fits within maxWidth, appending an ellipsis when it
+ * doesn't. `widthFn(s)` measures a string at the current font/size (the PDF
+ * table renders cells with lineBreak:false, so any text wider than its
+ * column would overflow into the neighboring column — the "overlapping
+ * text" bug in emailed report PDFs). Binary search keeps it O(log n)
+ * widthFn calls. */
+function truncateToWidth_(text, maxWidth, widthFn) {
+  const raw = String(text === null || text === undefined ? '' : text);
+  if (!raw || widthFn(raw) <= maxWidth) return raw;
+  let lo = 0;
+  let hi = raw.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (widthFn(raw.slice(0, mid) + '…') <= maxWidth) lo = mid; else hi = mid - 1;
+  }
+  return raw.slice(0, lo) + '…';
+}
+
 async function exportToSpreadsheet(token) {
   auth.requireLogin(token);
   const report = getPrintableReport();
@@ -96,7 +114,7 @@ function buildPdfBuffer_(report) {
       doc.save();
       let x = doc.page.margins.left;
       headers.forEach(function (h, i) {
-        doc.text(h, x + 2, y + 2, { width: colWidths[i] - 4, lineBreak: false });
+        doc.text(truncateToWidth_(h, colWidths[i] - 4, function (s) { return doc.widthOfString(s); }), x + 2, y + 2, { width: colWidths[i] - 4, lineBreak: false });
         x += colWidths[i];
       });
       doc.restore();
@@ -117,7 +135,7 @@ function buildPdfBuffer_(report) {
       ];
       let x = doc.page.margins.left;
       values.forEach(function (v, i) {
-        doc.text(v, x + 2, y + 2, { width: colWidths[i] - 4, lineBreak: false });
+        doc.text(truncateToWidth_(v, colWidths[i] - 4, function (s) { return doc.widthOfString(s); }), x + 2, y + 2, { width: colWidths[i] - 4, lineBreak: false });
         x += colWidths[i];
       });
       y += rowHeight;
@@ -182,5 +200,7 @@ module.exports = {
   getReportData,
   exportToSpreadsheet,
   createPdfReport,
-  emailReport
+  emailReport,
+  buildPdfBuffer_,
+  truncateToWidth_
 };

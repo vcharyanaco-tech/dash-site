@@ -199,6 +199,14 @@ OAuth token — owner `vcharyanaco@gmail.com`):
   Google Sheet" source (`DASH_AUTO_SYNC_MINUTES=0`); archive it in Drive
   at the owner's call. No Drive scope on the clasp token to move it.
 
+## Report-PDF overlap fix
+Emailed report PDFs had overlapping text: the table rendered every cell with
+`lineBreak:false` and no width check, so long descriptions/actions overflowed
+into the next column. Fixed in `reports.js` with `truncateToWidth_` (binary
+search + ellipsis) applied to every header + row cell; regression tests in
+`tests/reports.test.js` (4 tests: boundary, ellipsis, unchanged-short, and a
+full `buildPdfBuffer_` render with 300-word cells). Suite now **41/41**.
+
 ## Where things stand
 - Commits `1224d5f` … `41c857e` pushed to `origin/main` (history rewritten
   2026-08-17: `9a5287e` split into `1cff489` + `5845a50` — content identical).
