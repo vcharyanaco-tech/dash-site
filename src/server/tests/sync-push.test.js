@@ -32,7 +32,7 @@ function seedRecords() {
       responsibility: 'Ravi Kumar',
       review_date: '15.08.2026',
       links: JSON.stringify({
-        action: [{ url: 'https://indiapost.gov.in/track', text: 'Track here' }]
+        action: [{ url: 'https://indiapost.gov.in/track', text: 'tracking API' }]
       }),
       source: 'sheet'
     },
@@ -169,7 +169,9 @@ test('pushToSheet sends correct values to the spreadsheet', async () => {
   assert.ok(row1ActionLink, 'row 1 action link update exists');
   const row1ActionValue = row1ActionLink.updateCells.rows[0].values[0];
   assert.strictEqual(row1ActionValue.userEnteredValue.stringValue, 'Investigate tracking API');
-  assert.ok(row1ActionValue.textFormatRuns.length >= 2, 'has at least 2 text runs (plain + link)');
+  // 'tracking API' is found in the text → base run + link run
+  assert.strictEqual(row1ActionValue.textFormatRuns.length, 2, 'has base run + link run');
+  assert.strictEqual(row1ActionValue.textFormatRuns[1].format.link.uri, 'https://indiapost.gov.in/track');
 
   // Check the links for row 3 sector and description
   const row3SectorLink = requests.find(function (r) {
@@ -234,4 +236,52 @@ test('pushToSheet handles empty database', async () => {
   assert.strictEqual(result.ok, true);
   assert.strictEqual(result.rows, 0);
   assert.strictEqual(result.reason, 'no records to push');
+});
+
+test('buildTextRuns_ skips links with empty label (no whole-cell hyperlink)', () => {
+  // When label is empty the link should NOT create a hyperlink at all.
+  const runs = sync._buildTextRuns('Some text here', [
+    { url: 'https://example.com', text: '' }
+  ]);
+  // Should only have the base plain run — no link run.
+  assert.strictEqual(runs.length, 1, 'only base run when label is empty');
+  assert.deepStrictEqual(runs[0], { startIndex: 0, format: {} });
+});
+
+test('buildTextRuns_ skips links whose label is not found in the text', () => {
+  // When label text does not appear in the cell text, the link must be
+  // skipped — otherwise it would hyperlink the entire cell from index 0.
+  const runs = sync._buildTextRuns('Investigate tracking API', [
+    { url: 'https://example.com', text: 'nonexistent label' }
+  ]);
+  assert.strictEqual(runs.length, 1, 'only base run when label not found');
+  assert.deepStrictEqual(runs[0], { startIndex: 0, format: {} });
+});
+
+test('buildTextRuns_ creates correct runs when label is found', () => {
+  const runs = sync._buildTextRuns('Investigate tracking API', [
+    { url: 'https://indiapost.gov.in/track', text: 'tracking API' }
+  ]);
+  // 2 runs: base plain run + link run starting at 'tracking API' position
+  assert.strictEqual(runs.length, 2, 'base run + link run');
+  assert.deepStrictEqual(runs[0], { startIndex: 0, format: {} });
+  // 'tracking API' starts at index 12 in 'Investigate tracking API'
+  assert.strictEqual(runs[1].startIndex, 12, 'link starts where label begins');
+  assert.strictEqual(runs[1].format.link.uri, 'https://indiapost.gov.in/track');
+});
+
+test('buildTextRuns_ handles multiple links correctly', () => {
+  const runs = sync._buildTextRuns('Part A and Part B end', [
+    { url: 'https://a.com', text: 'Part A' },
+    { url: 'https://b.com', text: 'Part B' },
+    { url: 'https://c.com', text: 'missing' }
+  ]);
+  // 3 runs: base + Part A link + Part B link (missing label is skipped)
+  assert.strictEqual(runs.length, 3, 'base + 2 link runs (3rd skipped)');
+  assert.strictEqual(runs[0].startIndex, 0);
+  assert.strictEqual(runs[1].startIndex, 0);   // 'Part A' starts at 0
+  assert.strictEqual(runs[1].format.link.uri, 'https://a.com');
+  // 'Part B' starts at index 11 in 'Part A and Part B end'
+  assert.strictEqual(runs[2].startIndex, 11, 'link starts where label begins');
+  assert.strictEqual(runs[2].format.link.uri, 'https://b.com');
 });

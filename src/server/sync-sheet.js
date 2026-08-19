@@ -501,13 +501,9 @@ function buildTextRuns_(text, links) {
   links.forEach(function (link) {
     const uri = String(link.url || '');
     const label = String(link.text || '').trim();
-    if (!uri) return;
-    let start = -1;
-    if (label) {
-      start = t.indexOf(label);
-    }
-    if (start < 0) start = 0;
-    if (start >= t.length && t.length) start = 0;
+    if (!uri || !label) return;          // skip empty labels entirely
+    const start = t.indexOf(label);
+    if (start < 0) return;               // label not in text → skip this link
     runs.push({ startIndex: start, format: { link: { uri: uri } } });
   });
   runs.sort(function (a, b) { return a.startIndex - b.startIndex; });
@@ -629,5 +625,6 @@ module.exports = {
   writeCredentialConfigured,
   pushToSheetEnabled,
   _parseGviz: parseGviz,
-  _gvizRows: gvizRows
+  _gvizRows: gvizRows,
+  _buildTextRuns: buildTextRuns_
 };
