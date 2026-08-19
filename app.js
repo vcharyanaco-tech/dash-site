@@ -4777,9 +4777,13 @@ function renderTaskList() {
         actionButtons += '<button class="btn btn-ghost btn-small" type="button" onclick="deleteTaskConfirm(\'' + escAttr(t.id) + '\')" style="margin-left:4px;color:var(--danger,#dc3545);">Delete</button>';
       }
       
+      // Display a friendly label for the 'All Divisional Heads' group marker.
+      var assigneeDisplay = t.assignee || '';
+      if (assigneeDisplay === 'group:all-divisional-heads') assigneeDisplay = 'All Divisional Heads';
+
       return '<tr data-task-id="' + escAttr(t.id) + '">' +
         '<td class="preserve-whitespace">' + escapeHtml(t.title || '') + '</td>' +
-        '<td>' + escapeHtml(t.assignee || '') + '</td>' +
+        '<td>' + escapeHtml(assigneeDisplay) + '</td>' +
         '<td><span class="badge ' + statusClass + '" id="task-status-' + escAttr(t.id) + '">' + escapeHtml(t.status || '') + '</span></td>' +
         '<td><span class="badge ' + priorityClass + '">' + escapeHtml(t.priority || '') + '</span></td>' +
         '<td>' + (t.dueDate ? escapeHtml(formatDate(t.dueDate)) : '') + '</td>' +
@@ -4797,7 +4801,11 @@ function populateTaskAssigneeDropdown() {
   const users = appState.allUsers || [];
   select.innerHTML = '<option value="">Select assignee...</option>' +
     users.map(function (u) {
-      return '<option value="' + escAttr(u.email) + '">' + escapeHtml(u.email) + (u.username ? ' (' + escapeHtml(u.username) + ')' : '') + '</option>';
+      // Use the friendly label for the 'All Divisional Heads' group entry.
+      var displayLabel = u.email === 'group:all-divisional-heads'
+        ? 'All Divisional Heads'
+        : u.email + (u.username ? ' (' + u.username + ')' : '');
+      return '<option value="' + escAttr(u.email) + '">' + escapeHtml(displayLabel) + '</option>';
     }).join('');
 }
 

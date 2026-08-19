@@ -27,6 +27,18 @@ const FIELD_KEYS = ['id', 'sector', 'description', 'entryDate', 'action', 'respo
 
 let dataCache = null;
 
+/* Notify all Divisional Head users (do_* username) when a record with
+   'All Divisional Heads' responsibility is created or updated. */
+function notifyDivisionalHeads_(type, title, body, link, excludeEmail) {
+  const exclude = String(excludeEmail || '').toLowerCase().trim();
+  const emails = auth.getDivisionalHeadEmails_();
+  const notify = require('./notifications');
+  emails.forEach(function (email) {
+    if (exclude && email === exclude) return;
+    try { notify.notify_(email, type, title, body, link); } catch (err) {}
+  });
+}
+
 function bumpDataGeneration_() {
   dataCache = null;
   // Persist promptly: the KV bridge snapshot is what Render restores on the
@@ -355,6 +367,12 @@ function responsibilityMatchesUser_(responsibility, user) {
 function getDistinctResponsibilities_(items, users) {
   const seen = {};
   const out = [];
+
+  // Always include the 'All Divisional Heads' virtual group so it appears
+  // as a selectable option even if no records currently reference it.
+  seen['All Divisional Heads'] = 1;
+  out.push('All Divisional Heads');
+
   (items || []).forEach(function (item) {
     const v = String(item.responsibility || '').trim();
     if (!v || seen[v]) return;
@@ -483,6 +501,16 @@ function addRecord_(item, token) {
       require('./notifications').notifyStaffLocked_('record', 'New item added', 'Record #' + id + ' · ' + (normalized.sector || '') + (normalized.description ? ' — ' + normalized.description : ''), '', editor.email);
     } catch (err) {}
 
+    // When the record targets 'All Divisional Heads', fan out an in-app
+    // notification to every do_* user so they are individually aware.
+    try {
+      if (String(normalized.responsibility || '').trim().toLowerCase() === 'all divisional heads') {
+        notifyDivisionalHeads_(NOTIFICATION_TYPES.RECORD, 'New item for you',
+          'Record #' + id + ' · ' + (normalized.sector || '') + (normalized.description ? ' — ' + normalized.description : ''),
+          '', editor.email);
+      }
+    } catch (err) {}
+
     return getData();
   });
 }
@@ -515,6 +543,16 @@ function updateRecord_(item, token) {
 
     try {
       require('./notifications').notifyStaffLocked_('record', 'Record updated', 'Record #' + normalized.id + ' · ' + (normalized.sector || '') + (normalized.description ? ' — ' + normalized.description : ''), '', editor.email);
+    } catch (err) {}
+
+    // When the record targets 'All Divisional Heads', fan out an in-app
+    // notification to every do_* user so they are individually aware.
+    try {
+      if (String(normalized.responsibility || '').trim().toLowerCase() === 'all divisional heads') {
+        notifyDivisionalHeads_(NOTIFICATION_TYPES.RECORD, 'Record updated for you',
+          'Record #' + normalized.id + ' · ' + (normalized.sector || '') + (normalized.description ? ' — ' + normalized.description : ''),
+          '', editor.email);
+      }
     } catch (err) {}
 
     return getData();

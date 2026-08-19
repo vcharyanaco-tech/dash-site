@@ -11,6 +11,34 @@ const { NOTIFICATION_TYPES, TASK_STATUS, TASK_PRIORITY } = require('./config');
 const { uuid_, now_, formatDate_, runWithLock_ } = require('./helpers');
 const auth = require('./auth');
 
+/* Helper: check if an assignee value is the 'All Divisional Heads' group */
+function isGroupAssignee_(assignee) {
+  return String(assignee || '').toLowerCase().trim() === auth.ALL_DIVISIONAL_HEADS_MARKER;
+}
+
+/* Helper: resolve an assignee value to a list of email addresses.
+   Group markers are expanded to the individual emails of every member.
+   Plain emails are returned as a single-element list. */
+function resolveAssigneeEmails_(assignee) {
+  if (isGroupAssignee_(assignee)) {
+    return auth.getDivisionalHeadEmails_();
+  }
+  const email = String(assignee || '').toLowerCase().trim();
+  return email ? [email] : [];
+}
+
+/* Helper: send notification + email to one or more recipients */
+function notifyRecipients_(emails, type, title, body, mailSubject, mailBody) {
+  const notify = require('./notifications');
+  const { sendMail_ } = require('./mailer');
+  emails.forEach(function (email) {
+    try { notify.notify_(email, type, title, body, ''); } catch (err) {}
+    if (mailSubject && mailBody) {
+      try { sendMail_(email, mailSubject, mailBody); } catch (err) {}
+    }
+  });
+}
+
 function taskRecordFromRow_(row) {
   return {
     id: String(row.id || ''),
@@ -69,29 +97,26 @@ function createTask(params, token) {
       null
     );
 
-    const recipientEmail = assignee || user.email;
+    const recipientEmails = resolveAssigneeEmails_(assignee);
     const dueDateStr = dueDate ? ' (due ' + formatDate_(dueDate, 'dd.MM.yyyy') + ')' : '';
+    const isGroup = isGroupAssignee_(assignee);
+    const notifyTitle = 'Task assigned';
+    const notifyBody = 'You were assigned: ' + title + dueDateStr;
+    const mailSubject = '[India Post Dashboard] New task assigned: ' + title;
+    const mailBody = 'Hello,\n\n' +
+      'A new task has been assigned to you on the India Post Dashboard.\n\n' +
+      'Task: ' + title + '\n' +
+      (String(params.description || '').trim() ? 'Description: ' + String(params.description || '').trim() + '\n' : '') +
+      'Priority: ' + priority + '\n' +
+      (dueDate ? 'Due date: ' + formatDate_(dueDate, 'dd.MM.yyyy') + '\n' : '') +
+      'Assigned by: ' + user.email + '\n\n' +
+      'Please log in to the dashboard to view and update this task.\n\n' +
+      '- India Post Dashboard, Circle Office Haryana';
 
-    try {
-      require('./notifications').notify_(recipientEmail, NOTIFICATION_TYPES.USER, 'Task assigned', 'You were assigned: ' + title + dueDateStr, '');
-    } catch (err) {}
-
-    try {
-      if (recipientEmail) {
-        const subject = '[India Post Dashboard] New task assigned: ' + title;
-        const body = 'Hello,\n\n' +
-          'A new task has been assigned to you on the India Post Dashboard.\n\n' +
-          'Task: ' + title + '\n' +
-          (String(params.description || '').trim() ? 'Description: ' + String(params.description || '').trim() + '\n' : '') +
-          'Priority: ' + priority + '\n' +
-          (dueDate ? 'Due date: ' + formatDate_(dueDate, 'dd.MM.yyyy') + '\n' : '') +
-          'Assigned by: ' + user.email + '\n\n' +
-          'Please log in to the dashboard to view and update this task.\n\n' +
-          '- India Post Dashboard, Circle Office Haryana';
-        require('./mailer').sendMail_(recipientEmail, subject, body);
-      }
-    } catch (emailErr) {
-      console.error('Task assignment email failed: ' + emailErr.message);
+    notifyRecipients_(recipientEmails.length ? recipientEmails : [user.email],
+      NOTIFICATION_TYPES.USER, notifyTitle, notifyBody, mailSubject, mailBody);
+    if (isGroup && !recipientEmails.length) {
+      console.error('All Divisional Heads group: no do_* users found for notification.');
     }
 
     return {
@@ -169,25 +194,26 @@ function updateTask(id, fields, token) {
 
     if (updates.assignee && updates.assignee !== existing.assignee) {
       const taskTitle = updates.title || existing.title;
-      try { require('./notifications').notify_(updates.assignee, NOTIFICATION_TYPES.USER, 'Task reassigned', 'Task "' + taskTitle + '" was reassigned to you.', ''); } catch (err) {}
-      try {
-        require('./mailer').sendMail_(
-          updates.assignee,
-          '[India Post Dashboard] Task reassigned to you: ' + taskTitle,
-          'Hello,\n\nThe task "' + taskTitle + '" has been reassigned to you by ' + user.email + '.\n\nPlease log in to the dashboard to view and update this task.\n\n- India Post Dashboard, Circle Office Haryana'
-        );
-      } catch (emailErr) { console.error('Reassign email failed: ' + emailErr.message); }
+      const reassignEmails = resolveAssigneeEmails_(updates.assignee);
+      const reassignNotifyBody = 'Task "' + taskTitle + '" was reassigned to you.';
+      const reassignMailSubject = '[India Post Dashboard] Task reassigned to you: ' + taskTitle;
+      const reassignMailBody = 'Hello,\n\nThe task "' + taskTitle + '" has been reassigned to you by ' + user.email + '.\n\nPlease log in to the dashboard to view and update this task.\n\n- India Post Dashboard, Circle Office Haryana';
+      notifyRecipients_(reassignEmails, NOTIFICATION_TYPES.USER, 'Task reassigned', reassignNotifyBody, reassignMailSubject, reassignMailBody);
     }
     if (updates.status && updates.status !== existing.status) {
-      try { require('./notifications').notify_(existing.assignee, NOTIFICATION_TYPES.USER, 'Task status changed', 'Task "' + existing.title + '" is now ' + updates.status + '.', ''); } catch (err) {}
+      // For status-change notifications, resolve the existing assignee (which
+      // may be a group marker) so every member learns about the change.
+      const statusEmails = resolveAssigneeEmails_(existing.assignee);
+      const statusBody = 'Task "' + existing.title + '" is now ' + updates.status + '.';
+      notifyRecipients_(statusEmails, NOTIFICATION_TYPES.USER, 'Task status changed', statusBody, '', '');
+
       if (updates.status === TASK_STATUS.DONE && existing.assignee) {
-        try {
-          require('./mailer').sendMail_(
-            existing.createdBy || existing.assignee,
-            '[India Post Dashboard] Task completed: ' + existing.title,
-            'Hello,\n\nThe task "' + existing.title + '" assigned to ' + existing.assignee + ' has been marked as completed.\n\n- India Post Dashboard, Circle Office Haryana'
-          );
-        } catch (emailErr) { console.error('Completion email failed: ' + emailErr.message); }
+        const completedBy = existing.createdBy || existing.assignee;
+        const completionEmails = resolveAssigneeEmails_(completedBy);
+        const completionMailSubject = '[India Post Dashboard] Task completed: ' + existing.title;
+        const completionMailBody = 'Hello,\n\nThe task "' + existing.title + '" assigned to ' + existing.assignee + ' has been marked as completed.\n\n- India Post Dashboard, Circle Office Haryana';
+        notifyRecipients_(completionEmails.length ? completionEmails : [existing.createdBy],
+          NOTIFICATION_TYPES.USER, 'Task completed', 'Task "' + existing.title + '" has been completed.', completionMailSubject, completionMailBody);
       }
     }
 
@@ -196,12 +222,21 @@ function updateTask(id, fields, token) {
 }
 
 function getTasks(filters, token) {
-  auth.requireLogin(token);
+  const caller = auth.requireLogin(token);
   filters = filters || {};
   const rows = db.prepare('SELECT * FROM tasks').all().map(taskRecordFromRow_);
   const out = [];
   rows.forEach(function (rec) {
-    if (filters.assignee && rec.assignee !== String(filters.assignee).toLowerCase()) return;
+    if (filters.assignee) {
+      const filterEmail = String(filters.assignee).toLowerCase();
+      if (isGroupAssignee_(rec.assignee)) {
+        // Tasks assigned to 'All Divisional Heads' match any do_* user
+        const callerUser = auth.findUserRecord_(caller.email);
+        if (!callerUser || !auth.isDivisionalHeadUser_(callerUser)) return;
+      } else if (rec.assignee !== filterEmail) {
+        return;
+      }
+    }
     if (filters.status && rec.status !== String(filters.status).toUpperCase()) return;
     if (filters.recordRow && rec.recordRow !== Number(filters.recordRow)) return;
     if (filters.recordId && rec.recordId !== String(filters.recordId)) return;

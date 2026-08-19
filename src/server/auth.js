@@ -617,11 +617,39 @@ function adminGetUsers(token) {
   return listUserRecords_();
 }
 
+/* ============================================================
+ * All Divisional Heads virtual group
+ * Users whose username starts with 'do_' belong to this group.
+ * ============================================================ */
+
+const ALL_DIVISIONAL_HEADS_MARKER = 'group:all-divisional-heads';
+
+function isDivisionalHeadUser_(user) {
+  const username = String((user && user.username) || '').trim().toLowerCase();
+  return username.indexOf('do_') === 0;
+}
+
+function getDivisionalHeadEmails_() {
+  return listUserRecords_()
+    .filter(function (u) { return isDivisionalHeadUser_(u); })
+    .map(function (u) { return (u.primaryEmail || u.email || '').toLowerCase().trim(); })
+    .filter(function (e) { return !!e; });
+}
+
 function getAssignableUsers(token) {
   requireEditor_(token);
-  return listUserRecords_().map(function (u) {
+  const users = listUserRecords_().map(function (u) {
     return { email: u.email, username: u.username || '', role: u.role };
   });
+  // Prepend the 'All Divisional Heads' virtual group so it appears at the
+  // top of the task-assignee dropdown.
+  users.unshift({
+    email: ALL_DIVISIONAL_HEADS_MARKER,
+    username: 'all-divisional-heads',
+    role: 'GROUP',
+    label: 'All Divisional Heads'
+  });
+  return users;
 }
 
 function adminAddUser(email, username, role, password, group, department, office, token) {
@@ -1056,5 +1084,8 @@ module.exports = {
   adminDeleteUser,
   adminResetPassword,
   adminEmailAllUsers,
-  getCurrentUserInfo
+  getCurrentUserInfo,
+  ALL_DIVISIONAL_HEADS_MARKER,
+  isDivisionalHeadUser_,
+  getDivisionalHeadEmails_
 };
