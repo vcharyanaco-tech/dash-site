@@ -77,12 +77,14 @@ async function runAutoSyncOnce() {
 
 /**
  * Current auto-sync configuration + most recent run (for the Settings UI).
+ * Auto-sync is disabled at the code level (no startAutoSync call), so
+ * this always reports enabled:false regardless of the env var.
  * @returns {{enabled: boolean, intervalMinutes: number, lastRun: Object|null}}
  */
 function getSyncStatus() {
   return {
-    enabled: intervalMinutes() > 0,
-    intervalMinutes: intervalMinutes(),
+    enabled: false,
+    intervalMinutes: 0,
     lastRun: lastRun
   };
 }
