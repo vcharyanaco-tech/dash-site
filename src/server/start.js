@@ -38,12 +38,8 @@ process.on('unhandledRejection', fail);
         try { dataSync.startAutoSync(); } catch (syncErr) {
           console.error('[start] data-sync start warning: ' + (syncErr && syncErr.message));
         }
-        // 5. Periodic spreadsheet <-> SQLite sync (auto-sync.js). index.js only
-        //    starts it when run directly (require.main === module); production
-        //    boots via this launcher, so start it here.
-        try { require('./auto-sync').startAutoSync(); } catch (syncErr) {
-          console.error('[start] sheet auto-sync start warning: ' + (syncErr && syncErr.message));
-        }
+        // 5. Spreadsheet sync is BUTTON-ONLY: no auto-sync timer. Admin clicks
+        //    "Sync from Google Sheet" or "Push all to spreadsheet" in Settings.
       });
     }
   } catch (err) {
