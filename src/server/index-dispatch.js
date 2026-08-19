@@ -144,6 +144,12 @@ const dispatch = {
     return require('./sync-sheet').previewPullFromSheet();
   },
 
+  // Push all DB records back to the spreadsheet. Admin only.
+  adminPushToSheet: function (args) {
+    auth.requireAdmin(A(args, 0));
+    return require('./sync-sheet').pushToSheet();
+  },
+
   // Auto-sync configuration + last run (periodic background sync). Public —
   // non-sensitive operational info (interval + most recent run summary).
   getSyncStatus: function () {

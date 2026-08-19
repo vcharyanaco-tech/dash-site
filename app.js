@@ -113,6 +113,7 @@ const ApiService = {
   adminResetPassword: function (email, newPassword) { return apiCall_('adminResetPassword', email, newPassword, getAuthToken()); },
   adminEmailAllUsers: function (subject, body) { return apiCall_('adminEmailAllUsers', subject, body, getAuthToken()); },
   adminSyncFromSheet: function () { return apiCall_('adminSyncFromSheet', getAuthToken()); },
+  adminPushToSheet: function () { return apiCall_('adminPushToSheet', getAuthToken()); },
   adminPreviewSyncFromSheet: function () { return apiCall_('adminPreviewSyncFromSheet', getAuthToken()); },
   exportFullBackup: function () { return apiCall_('exportFullBackup', getAuthToken()); },
   getSyncStatus: function () { return apiCall_('getSyncStatus'); },
@@ -4228,6 +4229,37 @@ function cancelSyncPreview() {
   syncPreviewData = null;
   const status = getEl('syncSheetStatus');
   if (status) { status.textContent = 'Sync cancelled — no changes applied.'; status.className = 'form-status'; }
+}
+
+/** Push: send all DB records back to the Google Spreadsheet. */
+function pushAllToSheet() {
+  if (!appState.isAdmin) { showToast('Admin access required', 'warning'); return; }
+  if (!confirm('This will overwrite the Google Spreadsheet with the current database records. Continue?')) return;
+  const btn = getEl('pushSheetBtn');
+  const status = getEl('syncSheetStatus');
+  if (btn) btn.disabled = true;
+  if (status) { status.textContent = 'Pushing records to spreadsheet…'; status.className = 'form-status'; }
+  showOverlay('Pushing to spreadsheet…');
+  ApiService.adminPushToSheet().then(function (result) {
+    hideOverlay();
+    if (btn) btn.disabled = false;
+    if (!result || result.pushed === false) {
+      const msg = (result && result.reason) || 'Push failed';
+      if (status) { status.textContent = msg; status.className = 'form-status error'; }
+      showToast(msg, 'error');
+      return;
+    }
+    const msg = 'Pushed ' + (result.rows || 0) + ' records to the spreadsheet' + (result.linkedCells ? ' (' + result.linkedCells + ' linked cells).' : '.');
+    if (status) { status.textContent = msg; status.className = 'form-status success'; }
+    showToast(msg, 'success');
+  }).catch(function (err) {
+    hideOverlay();
+    if (btn) btn.disabled = false;
+    if (handleServerFailure(err)) return;
+    const msg = 'Push failed: ' + (err.message || err);
+    if (status) { status.textContent = msg; status.className = 'form-status error'; }
+    showToast(msg, 'error');
+  });
 }
 
 // Shows the periodic auto-sync configuration + last run in the Settings card.
