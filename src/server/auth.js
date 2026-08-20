@@ -528,6 +528,13 @@ function login(identifier, password) {
     return { success: false, message: 'Invalid email, username or password.' };
   }
 
+  // Auto-migrate legacy SHA-256 hash to scrypt on successful login.
+  // The next login will use the stronger hash silently.
+  if (isLegacyHash_(rec.passwordHash)) {
+    rec.plainPassword = password;
+    maybeUpgradeHash_(rec.email, rec);
+  }
+
   clearAttempts_(identifier);
 
   const email = rec.email;
@@ -623,19 +630,20 @@ function changePassword(currentPassword, newPassword, token) {
   const pwError = validatePassword_(newPassword);
   if (pwError) return { success: false, message: pwError };
 
-  runWithLock_(function () {
+  return runWithLock_(function () {
     const salt = generateSalt_();
     setUserField_(user.email, 'salt', salt);
     setUserField_(user.email, 'passwordHash', hashPassword_(newPassword, salt));
     setUserField_(user.email, 'mustChange', false);
     setUserField_(user.email, 'resetToken', '');
     setUserField_(user.email, 'resetExpires', null);
-    setUserField_(user.email, 'resetRequested', null);
-  });
+    setUserField_(user.email, 'resetRequested', '');
 
-  try { logAudit_(require('./audit'), 'CHANGE_PASSWORD', '', '', user.email); } catch (err) {}
-  try { require('./notifications').notify_(user.email, 'user', 'Password changed', 'Your dashboard password was changed successfully.', ''); } catch (err) {}
-  return { success: true, message: 'Password updated.' };
+    try { logAudit_(require('./audit'), 'CHANGE_PASSWORD', '', '', user.email); } catch (err) {}
+    try { require('./notifications').notify_(user.email, 'user', 'Password changed', 'Your dashboard password was changed successfully.', ''); } catch (err) {}
+
+    return { success: true, message: 'Password updated.' };
+  });
 }
 
 /* ============================================================
