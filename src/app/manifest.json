@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "modules": [
+    {
+      "name": "core",
+      "file": "core.js",
+      "startLine": 1,
+      "endLine": 478,
+      "lineCount": 478
+    },
+    {
+      "name": "meetings",
+      "file": "meetings.js",
+      "startLine": 479,
+      "endLine": 1238,
+      "lineCount": 760
+    },
+    {
+      "name": "recording",
+      "file": "recording.js",
+      "startLine": 1239,
+      "endLine": 1480,
+      "lineCount": 242
+    },
+    {
+      "name": "ai",
+      "file": "ai.js",
+      "startLine": 1481,
+      "endLine": 2100,
+      "lineCount": 620
+    },
+    {
+      "name": "session",
+      "file": "session.js",
+      "startLine": 2101,
+      "endLine": 2635,
+      "lineCount": 535
+    },
+    {
+      "name": "dashboard",
+      "file": "dashboard.js",
+      "startLine": 2636,
+      "endLine": 3379,
+      "lineCount": 744
+    },
+    {
+      "name": "audit",
+      "file": "audit.js",
+      "startLine": 3380,
+      "endLine": 3680,
+      "lineCount": 301
+    },
+    {
+      "name": "reports",
+      "file": "reports.js",
+      "startLine": 3681,
+      "endLine": 4042,
+      "lineCount": 362
+    },
+    {
+      "name": "settings",
+      "file": "settings.js",
+      "startLine": 4043,
+      "endLine": 4601,
+      "lineCount": 559
+    },
+    {
+      "name": "detail",
+      "file": "detail.js",
+      "startLine": 4602,
+      "endLine": 4741,
+      "lineCount": 140
+    },
+    {
+      "name": "tasks",
+      "file": "tasks.js",
+      "startLine": 4742,
+      "endLine": 5026,
+      "lineCount": 285
+    },
+    {
+      "name": "utils",
+      "file": "utils.js",
+      "startLine": 5027,
+      "endLine": 5294,
+      "lineCount": 268
+    },
+    {
+      "name": "studio",
+      "file": "studio.js",
+      "startLine": 5295,
+      "endLine": 5493,
+      "lineCount": 199
+    },
+    {
+      "name": "edit",
+      "file": "edit.js",
+      "startLine": 5494,
+      "endLine": 5878,
+      "lineCount": 385
+    },
+    {
+      "name": "submissions",
+      "file": "submissions.js",
+      "startLine": 5879,
+      "endLine": 6121,
+      "lineCount": 243
+    },
+    {
+      "name": "init",
+      "file": "init.js",
+      "startLine": 6122,
+      "endLine": 6472,
+      "lineCount": 351
+    }
+  ]
+}
