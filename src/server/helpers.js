@@ -130,12 +130,45 @@ function sha256Hex_(input) {
   return crypto.createHash('sha256').update(String(input), 'utf8').digest('hex');
 }
 
-function hashPassword_(password, salt) {
+/* ── Password hashing ─────────────────────────────────────────────────────
+ * v1: iterated SHA-256 (500 rounds) — legacy, kept for migration.
+ * v2: scrypt (N=16384, r=8, p=1) — modern, memory-hard KDF.
+ * Stored as 'scrypt$<hex>' so old 'plain hex' hashes are auto-detected.
+ * On successful login with a v1 hash the password is re-hashed as v2.
+ * ────────────────────────────────────────────────────────────────────────── */
+const SCRYPT_KEYLEN = 64;
+const SCRYPT_COST = 16384; // N parameter (CPU/memory cost)
+const SCRYPT_BLOCK_SIZE = 8; // r parameter
+const SCRYPT_PARALLELIZATION = 1; // p parameter
+
+function hashPasswordLegacy_(password, salt) {
   let hash = sha256Hex_((salt || '') + '|' + (password || ''));
   for (let i = 0; i < 500; i++) {
     hash = sha256Hex_(hash + '|' + (salt || ''));
   }
   return hash;
+}
+
+function hashPasswordSync_(password, salt) {
+  const derived = crypto.scryptSync(
+    String(password || ''),
+    String(salt || ''),
+    SCRYPT_KEYLEN,
+    { N: SCRYPT_COST, r: SCRYPT_BLOCK_SIZE, p: SCRYPT_PARALLELIZATION, maxmem: 128 * 1024 * 1024 }
+  );
+  return 'scrypt$' + derived.toString('hex');
+}
+
+function hashPassword_(password, salt) {
+  return hashPasswordSync_(password, salt);
+}
+
+function isLegacyHash_(hash) {
+  return typeof hash === 'string' && /^[0-9a-f]{64}$/i.test(hash);
+}
+
+function isScryptHash_(hash) {
+  return typeof hash === 'string' && hash.startsWith('scrypt$');
 }
 
 function safeCacheKey_(value) {
@@ -628,6 +661,10 @@ module.exports = {
   generateSalt_,
   sha256Hex_,
   hashPassword_,
+  hashPasswordLegacy_,
+  hashPasswordSync_,
+  isLegacyHash_,
+  isScryptHash_,
   safeCacheKey_,
   isValidEmail_,
   emailList_,

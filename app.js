@@ -167,7 +167,15 @@ const ApiService = {
   getFathomStatus: function () { return apiCall_('getFathomStatus', getAuthToken()); },
   setFathomApiKey: function (apiKey) { return apiCall_('setFathomApiKey', getAuthToken(), apiKey); },
   listFathomMeetings: function (opts) { return apiCall_('listFathomMeetings', getAuthToken(), opts || {}); },
-  getFathomMeetingContent: function (recordingId) { return apiCall_('getFathomMeetingContent', getAuthToken(), recordingId); }
+  getFathomMeetingContent: function (recordingId) { return apiCall_('getFathomMeetingContent', getAuthToken(), recordingId); },
+  // Push notifications
+  subscribePush: function (subscription) { return apiCall_('subscribePush', subscription, getAuthToken()); },
+  unsubscribePush: function (endpoint) { return apiCall_('unsubscribePush', endpoint, getAuthToken()); },
+  sendReviewDeadlinePushNotifications: function () { return apiCall_('sendReviewDeadlinePushNotifications', getAuthToken()); },
+  // Weekly reports
+  sendWeeklyReport: function () { return apiCall_('sendWeeklyReport', getAuthToken()); },
+  // i18n
+  getTranslations: function (lang) { return apiCall_('getTranslations', lang); }
 };
 
 const appState = {
@@ -6377,3 +6385,88 @@ function wireEnterpriseButtons() {
 }
 
 wireEnterpriseButtons();
+
+/* ---------------------------------- Push Notifications ---------------------------------- */
+/* Registers the service worker for Web Push and subscribes to review
+   deadline notifications. Push is opt-in: the user must click the bell
+   icon in Settings to enable it. Requires VAPID_PUBLIC_KEY env var on
+   the server. */
+
+function initPushNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    return; // Browser doesn't support push
+  }
+  navigator.serviceWorker.ready.then(function (reg) {
+    return reg.pushManager.getSubscription();
+  }).then(function (sub) {
+    if (sub) {
+      appState.pushSubscription = sub;
+    }
+  }).catch(function () {});
+}
+
+function subscribeToPushNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    showToast('Push notifications are not supported in this browser.', 'warning');
+    return;
+  }
+  if (!('Notification' in window)) {
+    showToast('Notifications API is not available.', 'warning');
+    return;
+  }
+  Notification.requestPermission().then(function (perm) {
+    if (perm !== 'granted') {
+      showToast('Notification permission denied.', 'warning');
+      return;
+    }
+    navigator.serviceWorker.ready.then(function (reg) {
+      return reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: getVapidPublicKey_()
+      });
+    }).then(function (sub) {
+      appState.pushSubscription = sub;
+      ApiService.subscribePush(getAuthToken(), sub.toJSON()).then(function () {
+        showToast('Push notifications enabled!', 'success');
+      }).catch(function (err) {
+        showToast('Could not save push subscription: ' + (err.message || err), 'error');
+      });
+    }).catch(function (err) {
+      showToast('Push subscription failed: ' + (err.message || err), 'error');
+    });
+  });
+}
+
+function unsubscribeFromPushNotifications() {
+  if (appState.pushSubscription) {
+    var endpoint = appState.pushSubscription.endpoint;
+    appState.pushSubscription.unsubscribe().then(function () {
+      appState.pushSubscription = null;
+      return ApiService.unsubscribePush(getAuthToken(), endpoint);
+    }).then(function () {
+      showToast('Push notifications disabled.', 'info');
+    }).catch(function () {});
+  }
+}
+
+function getVapidPublicKey_() {
+  // The VAPID public key must be configured on the server.
+  // This is a placeholder — replace with the actual key.
+  var keyEl = getEl('vapidPublicKey');
+  if (keyEl) return new Uint8Array(JSON.parse(keyEl.textContent));
+  return null;
+}
+
+/* ---------------------------------- Hindi / English toggle ---------------------------------- */
+/* Adds a language toggle to the Settings tab. When switched, all [data-i18n]
+   elements are re-translated and the preference is persisted in localStorage. */
+
+function toggleLanguage() {
+  var current = (typeof i18n !== 'undefined') ? i18n.getLanguage() : 'en';
+  var next = current === 'en' ? 'hi' : 'en';
+  if (typeof i18n !== 'undefined') {
+    i18n.setLanguage(next);
+    i18n.applyTranslations();
+  }
+  showToast(next === 'hi' ? 'भाषा हिन्दी में बदली' : 'Language set to English', 'success');
+}

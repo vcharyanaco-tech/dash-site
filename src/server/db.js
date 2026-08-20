@@ -81,6 +81,9 @@ if (!docColumns.some(function (c) { return String(c.name) === 'keep'; })) {
   db.exec('ALTER TABLE documents ADD COLUMN keep INTEGER NOT NULL DEFAULT 0');
 }
 
+/* ---- Migration: username index ---- */
+db.exec("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username != ''");
+
 settings.setDb(db);
 
 /* ============================================================

@@ -247,7 +247,12 @@ export default {
     // shared WORKER_API_TOKEN.
     const istMin = istDate.getUTCMinutes();
     if (istMin < 10) {
-      const job = istHour === 9 ? 'review-reminders' : (istHour === 10 ? 'archive-audit' : '');
+      let job = istHour === 9 ? 'review-reminders' : (istHour === 10 ? 'archive-audit' : '');
+      // Weekly report: Monday at 09:05 IST (istHour === 9, istDay === 1)
+      const istDay = istDate.getUTCDay(); // 0=Sun, 1=Mon
+      if (istHour === 9 && istDay === 1) job = 'weekly-report';
+      // Push notifications for review deadlines: daily at 08:05 IST
+      if (istHour === 8) job = 'review-push-notifications';
       if (job) {
         try {
           await fetch(base + '/api/internal/daily-jobs', {

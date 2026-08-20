@@ -87,3 +87,54 @@ self.addEventListener('fetch', function (event) {
     })
   );
 });
+
+/* ── Push Notifications ──────────────────────────────────────────────────
+ * Handles incoming push messages and displays native notifications.
+ * Used for review deadline reminders and weekly report alerts.
+ * ────────────────────────────────────────────────────────────────────────── */
+self.addEventListener('push', function (event) {
+  var data = { title: 'India Post Dashboard', body: '', tag: 'dashboard', url: '/app.html' };
+  try {
+    if (event.data) {
+      var payload = event.data.json();
+      data.title = payload.title || data.title;
+      data.body = payload.body || data.body;
+      data.tag = payload.tag || data.tag;
+      data.url = payload.url || data.url;
+      data.icon = payload.icon || data.icon;
+      data.badge = payload.badge || data.badge;
+      data.timestamp = payload.timestamp || Date.now();
+    }
+  } catch (e) {
+    try { data.body = event.data.text(); } catch (e2) {}
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: data.icon || '/assets/icon-192.png',
+      badge: data.badge || '/assets/icon-72.png',
+      tag: data.tag,
+      timestamp: data.timestamp,
+      requireInteraction: data.tag && data.tag.indexOf('review') === 0,
+      data: { url: data.url }
+    })
+  );
+});
+
+self.addEventListener('notificationclick', function (event) {
+  event.notification.close();
+  var url = (event.notification.data && event.notification.data.url) || '/app.html';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clients) {
+      // Focus existing tab if already open
+      for (var i = 0; i < clients.length; i++) {
+        if (clients[i].url.indexOf(self.location.origin) === 0 && 'focus' in clients[i]) {
+          return clients[i].focus();
+        }
+      }
+      // Otherwise open a new tab
+      return self.clients.openWindow(url);
+    })
+  );
+});

@@ -154,7 +154,18 @@ const dispatch = {
   // non-sensitive operational info (interval + most recent run summary).
   getSyncStatus: function () {
     return require('./auto-sync').getSyncStatus();
-  }
+  },
+
+  // Push notifications (Web Push for review deadlines)
+  subscribePush: function (args) { return require('./push-notifications').subscribePush(A(args, 0), A(args, 1)); },
+  unsubscribePush: function (args) { return require('./push-notifications').unsubscribePush(A(args, 0), A(args, 1)); },
+  sendReviewDeadlinePushNotifications: function (args) { return require('./push-notifications').sendReviewDeadlinePushNotifications(A(args, 0)); },
+
+  // Weekly automated report delivery
+  sendWeeklyReport: function (args) { return require('./weekly-reports').sendWeeklyReport(A(args, 0)); },
+
+  // i18n translations endpoint
+  getTranslations: function (args) { return require('./i18n-server').getTranslations(A(args, 0)); }
 };
 
 module.exports = dispatch;

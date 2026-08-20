@@ -9,7 +9,7 @@
     "seed": "node seed.js",
     "export": "node export-from-gas.js",
     "import": "node import-from-gas.js",
-    "test": "node --test"
+    "test": "node --test --experimental-test-coverage"
   },
   "engines": {
     "node": ">=22"

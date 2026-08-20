@@ -29,6 +29,9 @@ const {
   isValidUsername_,
   validatePassword_,
   hashPassword_,
+  hashPasswordLegacy_,
+  isLegacyHash_,
+  isScryptHash_,
   generateSalt_,
   safeCacheKey_,
   uuid_,
@@ -255,11 +258,12 @@ function listUserRecords() {
   return listUserRecords_();
 }
 
-// True when a stored hash was produced by this app's hashPassword_ (64-char
-// sha256 hex). The users.csv bake-in carries the sheet's `pbkdf2$...` hashes,
-// which this app cannot verify — those need re-seeding so login works.
+// True when a stored hash was produced by this app (either legacy 64-char
+// sha256 hex or modern scrypt$... format). The users.csv bake-in carries the
+// sheet's `pbkdf2$...` hashes, which this app cannot verify — those need
+// re-seeding so login works.
 function isAppFormatHash_(hash) {
-  return typeof hash === 'string' && /^[0-9a-f]{64}$/i.test(hash);
+  return isLegacyHash_(hash) || isScryptHash_(hash);
 }
 
 function ensureUserRecord_(email) {
@@ -302,11 +306,37 @@ function ensureBootstrapAdmin(email) {
 
 function verifyPasswordRecord_(rec, password) {
   if (!rec || !rec.salt || !rec.passwordHash) return false;
-  return hashPassword_(password, rec.salt) === rec.passwordHash;
+  if (isScryptHash_(rec.passwordHash)) {
+    return hashPassword_(password, rec.salt) === rec.passwordHash;
+  }
+  // Legacy SHA-256 hash — verify with the old algorithm
+  return hashPasswordLegacy_(password, rec.salt) === rec.passwordHash;
+}
+
+/* Re-hash a password with the modern scrypt algorithm. Called after a
+   successful login with a legacy SHA-256 hash so the user's stored hash
+   is silently upgraded. The salt is re-generated to keep things fresh. */
+function maybeUpgradeHash_(email, rec) {
+  if (!rec || !rec.passwordHash || isScryptHash_(rec.passwordHash)) return;
+  if (!isLegacyHash_(rec.passwordHash)) return;
+  try {
+    const newSalt = generateSalt_();
+    setUserField_(email, 'salt', newSalt);
+    setUserField_(email, 'passwordHash', hashPassword_(rec.plainPassword || '', newSalt));
+  } catch (err) {
+    // Non-fatal: the old hash still works, upgrade will retry on next login
+  }
 }
 
 function verifyPassword_(email, password) {
-  return verifyPasswordRecord_(findUserRecord_(email), password);
+  const rec = findUserRecord_(email);
+  const ok = verifyPasswordRecord_(rec, password);
+  if (ok && rec && isLegacyHash_(rec.passwordHash)) {
+    // Stash password temporarily so maybeUpgradeHash_ can re-hash it
+    rec.plainPassword = password;
+    maybeUpgradeHash_(email, rec);
+  }
+  return ok;
 }
 
 /* ============================================================

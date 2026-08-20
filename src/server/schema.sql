@@ -182,3 +182,4 @@ CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee);
 CREATE INDEX IF NOT EXISTS idx_notifications_email ON notifications(email);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit(timestamp);
 CREATE INDEX IF NOT EXISTS idx_documents_record_row ON documents(record_row);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username != '';
