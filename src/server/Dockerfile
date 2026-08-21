@@ -15,7 +15,7 @@ RUN npm install --omit=dev=false
 COPY . .
 
 # Persist the SQLite DB + uploads outside the container layer.
-# On Railway/Render mount a volume at /app/data, or use the host path below.
+# On Render mount a volume at /app/data, or use the host path below.
 ENV DASH_DATA_DIR=/app/data
 ENV PORT=8787
 EXPOSE 8787

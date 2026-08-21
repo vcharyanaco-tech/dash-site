@@ -1,6 +1,6 @@
-# Root Dockerfile — Railway builds from repo root but the app lives in src/server.
+# Root Dockerfile — Render builds from repo root but the app lives in src/server.
 # We copy that directory in as the build context so the existing
-# src/server/Dockerfile content is reproduced here at the root path Railway expects.
+# src/server/Dockerfile content is reproduced here at the root path Render expects.
 # Node 22 matches better-sqlite3@13's engine requirement (>=22).
 FROM node:22-bookworm-slim
 
@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy the server sources from src/server into /app
 COPY src/server/ ./
 
-# Bundle the frontend website (repo root) so one Railway container serves
+# Bundle the frontend website (repo root) so the container serves
 # both the API and the site. The server reads DASH_STATIC_ROOT and serves
 # index.html at "/" and all static assets/app.js/sw.js/PWA from /app/www.
 COPY index.html app.html app.js offline-queue.js sw.js manifest.json \

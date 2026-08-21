@@ -6,7 +6,7 @@
 # Free-tier constraints are worked around via the Cloudflare Worker
 # (dashv1-proxy, already fronting dashboardharyana.site):
 #   - Ephemeral filesystem  → start.js restores dashboard.db + uploads from
-#     the worker's DATA_BACKUP_KV bridge on boot (src/server/data-sync.js),
+#     the Cloudflare Worker's DATA_BACKUP_KV bridge on boot (src/server/data-sync.js),
 #     and pushes a fresh snapshot every 10 min + on SIGTERM, so redeploys
 #     lose at most a few minutes of deltas instead of everything.
 #   - SMTP ports blocked    → MAIL_TRANSPORT=http posts messages over HTTPS
