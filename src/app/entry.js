@@ -45,6 +45,7 @@ const MODULES = [
   'studio.js',       // Dashboard Studio, Command Palette
   'edit.js',         // Edit modal, review badge
   'submissions.js',  // Submissions modal
+  'realtime.js',     // SSE real-time, session refresh, keyboard shortcuts
   'init.js',         // About, offline, push, language toggle (loads last)
 ];
 

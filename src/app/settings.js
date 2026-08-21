@@ -4,6 +4,11 @@
 function renderSettings() {
   getEl('mustChangeBanner').classList.toggle('hidden', !appState.mustChange);
 
+  // CSV import drop zone — editors and admins
+  var csvImportCard = getEl('csvImportCard');
+  if (csvImportCard) csvImportCard.classList.toggle('hidden', !appState.isEditor);
+  wireCsvImportDropZone();
+
   // Google Sheet sync + full backup — admin only.
   const sheetSyncCard = getEl('sheetSyncCard');
   if (sheetSyncCard) sheetSyncCard.classList.toggle('hidden', !appState.isAdmin);
@@ -556,4 +561,92 @@ function resetUserPassword(email) {
     if (handleServerFailure(err)) return;
     showToast('Reset failed: ' + (err.message || err), 'error');
   });
+}
+
+/* ---------------------------------- CSV Import (drag-and-drop) ---------------------------------- */
+/* Admin/editor can drag a CSV file onto the drop zone (or click to browse).
+   The file is parsed, sent to the server, and records are imported. */
+
+function wireCsvImportDropZone() {
+  var dropZone = getEl('csvImportDropZone');
+  if (!dropZone) return; // not on this page
+
+  dropZone.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.add('drag-over');
+  });
+
+  dropZone.addEventListener('dragleave', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.remove('drag-over');
+  });
+
+  dropZone.addEventListener('drop', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.remove('drag-over');
+    var files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length) handleCsvFileImport(files[0]);
+  });
+
+  // Click to browse
+  dropZone.addEventListener('click', function (e) {
+    if (e.target.tagName === 'INPUT') return; // don't double-trigger
+    var fileInput = getEl('csvImportFileInput');
+    if (fileInput) fileInput.click();
+  });
+}
+
+function handleCsvFileImport(file) {
+  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
+  if (!file) return;
+  if (!file.name.match(/\.csv$/i)) {
+    showToast('Please select a .csv file.', 'error');
+    return;
+  }
+  var status = getEl('csvImportStatus');
+  if (status) { status.textContent = 'Reading file…'; status.className = 'form-status'; }
+  var reader = new FileReader();
+  reader.onload = function (e) {
+    var csvText = e.target.result;
+    if (!csvText || !csvText.trim()) {
+      if (status) { status.textContent = 'File is empty.'; status.className = 'form-status error'; }
+      return;
+    }
+    if (status) { status.textContent = 'Importing records…'; status.className = 'form-status'; }
+    showOverlay('Importing CSV…');
+    ApiService.adminImportCsv(csvText).then(function (result) {
+      hideOverlay();
+      if (!result || !result.success) {
+        var msg = (result && result.message) || 'Import failed.';
+        if (status) { status.textContent = msg; status.className = 'form-status error'; }
+        showToast(msg, 'error');
+        return;
+      }
+      var lines = [result.added + ' record(s) imported successfully.'];
+      if (result.errors && result.errors.length) {
+        lines.push(result.errors.length + ' error(s): ' + result.errors.slice(0, 3).join('; '));
+      }
+      var msg = lines.join(' ');
+      if (status) { status.textContent = msg; status.className = 'form-status success'; }
+      showToast(msg, result.errors && result.errors.length ? 'warning' : 'success');
+      refreshData();
+    }).catch(function (err) {
+      hideOverlay();
+      if (handleServerFailure(err)) return;
+      var msg = 'Import failed: ' + (err.message || err);
+      if (status) { status.textContent = msg; status.className = 'form-status error'; }
+      showToast(msg, 'error');
+    });
+  };
+  reader.readAsText(file);
+}
+
+function handleCsvFileInputChange(e) {
+  var file = e.target && e.target.files && e.target.files[0];
+  if (file) handleCsvFileImport(file);
+  // Reset the input so the same file can be re-selected
+  e.target.value = '';
 }

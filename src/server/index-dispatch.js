@@ -38,6 +38,7 @@ const dispatch = {
   login: function (args) { return auth.login(A(args, 0), A(args, 1)); },
   logout: function (args) { return auth.logout(A(args, 0)); },
   validateSession: function (args) { return auth.validateSession(A(args, 0)); },
+  refreshSession: function (args) { return auth.refreshSession(A(args, 0)); },
   requestPasswordReset: function (args) { return auth.requestPasswordReset(A(args, 0)); },
   changePassword: function (args) { return auth.changePassword(A(args, 0), A(args, 1), A(args, 2)); },
 
@@ -166,7 +167,10 @@ const dispatch = {
   sendWeeklyReport: function (args) { return require('./weekly-reports').sendWeeklyReport(A(args, 0)); },
 
   // i18n translations endpoint
-  getTranslations: function (args) { return require('./i18n-server').getTranslations(A(args, 0)); }
+  getTranslations: function (args) { return require('./i18n-server').getTranslations(A(args, 0)); },
+
+  // Admin CSV import (drag-and-drop records import)
+  adminImportCsv: function (args) { return auth.adminImportCsv(A(args, 0), A(args, 1)); }
 };
 
 module.exports = dispatch;

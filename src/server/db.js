@@ -111,6 +111,15 @@ function destroySession_(token) {
   if (token) db.prepare('DELETE FROM sessions WHERE token = ?').run(String(token));
 }
 
+function refreshSession_(token) {
+  if (!token) return false;
+  const row = db.prepare('SELECT email FROM sessions WHERE token = ? AND expires_at > ?').get(String(token), Date.now());
+  if (!row) return false;
+  const ttl = CONFIG.USERS.SESSION_TTL_SECONDS * 1000;
+  db.prepare('UPDATE sessions SET expires_at = ? WHERE token = ?').run(Date.now() + ttl, String(token));
+  return true;
+}
+
 function destroySessionsForEmail_(email) {
   db.prepare('DELETE FROM sessions WHERE email = ?').run(String(email).toLowerCase());
 }
@@ -213,6 +222,7 @@ module.exports = {
   createSession_,
   sessionEmail_,
   destroySession_,
+  refreshSession_,
   destroySessionsForEmail_,
   cacheGet,
   cachePut,

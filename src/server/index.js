@@ -16,6 +16,9 @@ const crypto = require('crypto');
 const { db, seedDefaultSettings } = require('./db');
 const auth = require('./auth');
 const dispatch = require('./index-dispatch');
+const { rateLimiter } = require('./rate-limiter');
+const { registerSseRoute, broadcast } = require('./events');
+const { cspMiddleware } = require('./csp');
 
 const PORT = Number(process.env.PORT || process.env.DASH_PORT || 8787);
 const STATIC_ROOT = process.env.DASH_STATIC_ROOT || path.join(__dirname, '..', '..');
@@ -33,24 +36,10 @@ if (process.env.NODE_ENV !== 'production') {
   TRUSTED_ORIGINS.add('http://localhost:8787');
 }
 
-// ── Content-Security-Policy ───────────────────────────────────────────────
-const CSP = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: https:",
-  "font-src 'self'",
-  "connect-src 'self'",
-  "frame-ancestors 'self'",
-  "form-action 'self'",
-  "base-uri 'self'",
-  "object-src 'none'"
-].join('; ');
-
-// NOTE: Per-IP rate limiting is handled by the Cloudflare Worker
-// (dashv1-proxy) which fronts this server. The Worker enforces
-// 60 POST/min + 240 GET/min per IP, so no duplicate server-side
-// limiter is needed here.
+// NOTE: Per-IP rate limiting is applied server-side as well as by
+// the Cloudflare Worker. Local dev has no Cloudflare, so the
+// server-side limiter is the only protection.
+const RATE_LIMIT_ENABLED = process.env.RATE_LIMIT_DISABLED !== '1';
 
 // NOTE: the baked-in src/server/migration-export/*.csv snapshot is no longer
 // auto-imported on boot. The live SQLite DB (restored from the KV backup
@@ -69,6 +58,9 @@ try {
 const app = express();
 app.disable('x-powered-by');
 
+app.use(cspMiddleware);
+if (RATE_LIMIT_ENABLED) app.use(rateLimiter);
+
 app.use(function (req, res, next) {
   // Item 2: Restrict CORS to trusted origins only
   const origin = req.headers.origin || '';
@@ -77,8 +69,8 @@ app.use(function (req, res, next) {
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  // Item 3: Content-Security-Policy for all responses
-  res.setHeader('Content-Security-Policy', CSP);
+  // Item 3: Content-Security-Policy for all responses (uses per-request nonce)
+  // NOTE: CSP is now set by cspMiddleware before this point.
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'no-referrer-when-downgrade');
@@ -171,6 +163,13 @@ app.post(API_PREFIX, async function (req, res) {
       }
     }
     const result = await fnRef(args);
+    // Broadcast real-time SSE events for data-mutating functions
+    const dataFns = ['addItem', 'updateItem', 'deleteItem', 'markReviewDone', 'markReviewNotDone',
+      'addSubmission', 'updateSubmission', 'deleteSubmission', 'toggleSubmissionDisplay',
+      'createTask', 'updateTask', 'deleteTask', 'login'];
+    if (dataFns.indexOf(fn) !== -1 && result && result.success !== false) {
+      broadcast(fn === 'login' ? 'userLoggedIn' : 'dataChanged', { fn: fn });
+    }
     res.json({ result: result === undefined ? null : result });
   } catch (err) {
     res.json({ error: (err && err.message) || String(err) });
@@ -296,10 +295,15 @@ server.on('error', function (err) {
   console.error('Server error: ' + err.message);
 });
 
+// Register SSE route for real-time updates
+registerSseRoute(app, API_PREFIX);
+
 if (require.main === module) {
   server.listen(PORT, function () {
     console.log('India Post Dashboard server listening on http://localhost:' + PORT);
     console.log('API dispatcher: POST http://localhost:' + PORT + API_PREFIX);
+    console.log('SSE endpoint: GET http://localhost:' + PORT + API_PREFIX + '/events');
+    console.log('Rate limiting: ' + (RATE_LIMIT_ENABLED ? 'enabled' : 'disabled'));
     // Spreadsheet sync is BUTTON-ONLY: no auto-sync timer.
   });
 }

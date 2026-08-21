@@ -5,9 +5,7 @@
  * Password-based authentication, sessions and user management
  * (port of Auth.gs against the 'users' table).
  * ============================================================
- */
-
-const { db, createSession_, sessionEmail_, destroySession_, destroySessionsForEmail_, cacheGetTTL, cachePut, cacheRemove } = require('./db');
+ */  const { db, createSession_, sessionEmail_, destroySession_, refreshSession_, destroySessionsForEmail_, cacheGetTTL, cachePut, cacheRemove } = require('./db');
 const {
   CONFIG,
   ROLES,
@@ -569,6 +567,18 @@ function logout(token) {
   return { success: true };
 }
 
+function refreshSession(token) {
+  if (!token) return { success: false, message: 'No token.' };
+  try {
+    const user = authenticate_(token);
+    const refreshed = refreshSession_(token);
+    if (!refreshed) return { success: false, message: 'Session expired.' };
+    return { success: true, user: user };
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+}
+
 function validateSession(token) {
   try {
     const user = authenticate_(token);
@@ -1110,6 +1120,7 @@ module.exports = {
   login,
   logout,
   validateSession,
+  refreshSession,
   requestPasswordReset,
   changePassword,
   adminGetUsers,
@@ -1125,5 +1136,83 @@ module.exports = {
   getCurrentUserInfo,
   ALL_DIVISIONAL_HEADS_MARKER,
   isDivisionalHeadUser_,
-  getDivisionalHeadEmails_
+  getDivisionalHeadEmails_,
+  adminImportCsv
 };
+
+/**
+ * Admin CSV import: parses a CSV string of records (not users) and imports
+ * them into the database. Expected columns: sector, description, entry_date,
+ * action, responsibility, review_date.
+ * Requires admin or editor token.
+ */
+function adminImportCsv(csvText, token) {
+  const user = requireEditor_(token);
+  const lines = String(csvText || '').split(/\r?\n/).filter(function (l) { return l.trim(); });
+  if (lines.length < 2) return { success: false, message: 'CSV must have a header row and at least one data row.' };
+
+  const records = require('./records');
+  const added = [];
+  const errors = [];
+
+  // Parse header
+  const header = parseCsvLine_(lines[0]);
+  const colMap = {};
+  const expectedCols = ['sector', 'description', 'entry_date', 'entrydate', 'action', 'responsibility', 'review_date', 'reviewdate'];
+  header.forEach(function (col, idx) {
+    const normalized = col.toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
+    if (expectedCols.indexOf(normalized) !== -1 || normalized === 'sector' || normalized === 'description' || normalized === 'action' || normalized === 'responsibility') {
+      colMap[normalized] = idx;
+    }
+  });
+
+  for (let i = 1; i < lines.length; i++) {
+    try {
+      const cols = parseCsvLine_(lines[i]);
+      const item = {
+        sector: cols[colMap.sector] || '',
+        description: cols[colMap.description] || '',
+        entryDate: cols[colMap.entry_date] || cols[colMap.entrydate] || '',
+        action: cols[colMap.action] || '',
+        responsibility: cols[colMap.responsibility] || '',
+        reviewDate: cols[colMap.review_date] || cols[colMap.reviewdate] || ''
+      };
+      if (!item.sector && !item.description) {
+        errors.push('Row ' + (i + 1) + ': empty sector and description, skipped.');
+        continue;
+      }
+      const result = records.addItem(item, token);
+      if (result && result.row) {
+        added.push({ row: result.row, sector: item.sector });
+      } else {
+        errors.push('Row ' + (i + 1) + ': ' + (result && result.message || 'import failed'));
+      }
+    } catch (err) {
+      errors.push('Row ' + (i + 1) + ': ' + (err.message || 'parse error'));
+    }
+  }
+
+  try { logAudit_(require('./audit'), 'CSV_IMPORT', '', 'Imported ' + added.length + ' records, ' + errors.length + ' errors', user.email); } catch (err) {}
+
+  return { success: true, added: added.length, errors: errors };
+}
+
+function parseCsvLine_(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
+      else if (ch === '"') { inQuotes = false; }
+      else { current += ch; }
+    } else {
+      if (ch === '"') { inQuotes = true; }
+      else if (ch === ',') { result.push(current); current = ''; }
+      else { current += ch; }
+    }
+  }
+  result.push(current);
+  return result;
+}

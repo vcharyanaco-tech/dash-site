@@ -430,6 +430,20 @@
               </div>
               <div id="backupStatus" class="form-status" aria-live="polite"></div>
             </div>
+
+            <div id="csvImportCard" class="settings-card hidden">
+              <div class="settings-card-head">
+                <h3 class="text-subheading">CSV Import</h3>
+                <p class="section-copy">Import records from a CSV file. Expected columns: sector, description, entry_date, action, responsibility, review_date.</p>
+              </div>
+              <div id="csvImportDropZone" class="csv-drop-zone" style="border:2px dashed var(--border,#d1d5db);border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;">
+                <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 8px;display:block;color:var(--muted,#6b7280);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                <p style="margin:0 0 4px;color:var(--text,#1f2937);font-weight:500;">Drop a CSV file here or click to browse</p>
+                <p style="margin:0;color:var(--muted,#6b7280);font-size:12px;">Supported format: .csv with header row</p>
+                <input id="csvImportFileInput" type="file" accept=".csv" style="display:none;" onchange="handleCsvFileInputChange(event)">
+              </div>
+              <div id="csvImportStatus" class="form-status" aria-live="polite" style="margin-top:8px;"></div>
+            </div>
           </div>
 
           <div id="usersAdmin" class="settings-card hidden">

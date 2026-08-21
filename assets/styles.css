@@ -2613,6 +2613,50 @@ body.sidebar-open .sidebar-backdrop {
   .modal-card { padding: var(--sp-2); }
   .toast-container { left: var(--sp-1); right: var(--sp-1); align-items: stretch; }
   .toast { min-width: 0; max-width: none; }
+
+  /* KPI cards: 2-column grid on mobile */
+  .kpi-grid { grid-template-columns: 1fr 1fr !important; }
+  .kpi-card:last-child { grid-column: span 2; }
+
+  /* Dashboard cards: single column, full width */
+  .dashboard-cards { grid-template-columns: 1fr !important; }
+  .card { padding: var(--sp-2); }
+  .card-footer .actions { flex-wrap: wrap; gap: 4px; }
+  .card-footer .btn { font-size: 11px; padding: 3px 8px; }
+
+  /* Table scroll on mobile */
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .data-table { min-width: 600px; }
+
+  /* Analytics cards */
+  .analytics-cards { grid-template-columns: 1fr 1fr; }
+
+  /* Filter chips wrap */
+  .filter-chips { flex-wrap: wrap; }
+
+  /* Modals: full-screen on very small screens */
+  .modal-card { max-width: 100%; margin: var(--sp-1); border-radius: 8px; }
+
+  /* Sidebar backdrop */
+  .sidebar-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 90; }
+
+  /* Auth screen adjustments */
+  .auth-screen { padding: var(--sp-2); }
+  .auth-card { max-width: 100%; padding: var(--sp-3); }
+}
+
+/* ---------------------------------- CSV Import Drop Zone ---------------------------------- */
+.csv-drop-zone.drag-over {
+  border-color: var(--accent, #2563eb) !important;
+  background: rgba(37, 99, 235, 0.06);
+}
+.csv-drop-zone:hover {
+  border-color: var(--accent, #2563eb);
+}
+
+/* ---------------------------------- Shortcuts Modal ---------------------------------- */
+#shortcutsModal .modal-card {
+  max-width: 480px;
 }
 
 /* ---------------------------------- Print ---------------------------------- */

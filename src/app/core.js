@@ -175,7 +175,11 @@ const ApiService = {
   // Weekly reports
   sendWeeklyReport: function () { return apiCall_('sendWeeklyReport', getAuthToken()); },
   // i18n
-  getTranslations: function (lang) { return apiCall_('getTranslations', lang); }
+  getTranslations: function (lang) { return apiCall_('getTranslations', lang); },
+  // Session refresh
+  refreshSession: function () { return apiCall_('refreshSession', getAuthToken()); },
+  // Admin CSV import
+  adminImportCsv: function (csvText) { return apiCall_('adminImportCsv', csvText, getAuthToken()); }
 };
 
 const appState = {

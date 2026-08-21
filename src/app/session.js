@@ -430,6 +430,7 @@ function loadApp() {
     EventBus.emit('DataRefreshed');
     EventBus.emit('UserLoggedIn');
     startAutoRefresh();
+    initRealtime();
 
     if (appState.mustChange) {
       getEl('mustChangeBanner').classList.remove('hidden');
@@ -505,6 +506,7 @@ function handleForgotPassword(e) {
 
 function logout() {
   stopAutoRefresh();
+  teardownRealtime();
   ApiService.logout().then(function () {
     setAuthToken('');
     window.location.href = window.location.href.split('?')[0];
