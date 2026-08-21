@@ -183,3 +183,15 @@ CREATE INDEX IF NOT EXISTS idx_notifications_email ON notifications(email);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit(timestamp);
 CREATE INDEX IF NOT EXISTS idx_documents_record_row ON documents(record_row);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username != '';
+
+-- Record change history: stores a JSON diff for every update so admins can
+-- see exactly what changed on each edit. One row per update event.
+CREATE TABLE IF NOT EXISTS record_changes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  record_row INTEGER NOT NULL,
+  record_id TEXT NOT NULL DEFAULT '',
+  changed_by TEXT NOT NULL DEFAULT '',
+  changed_at INTEGER,
+  diff TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_record_changes_row ON record_changes(record_row);

@@ -33,6 +33,7 @@ const dispatch = {
   markReviewDone: function (args) { return records.markReviewDone(A(args, 0), A(args, 1)); },
   markReviewNotDone: function (args) { return records.markReviewNotDone(A(args, 0), A(args, 1)); },
   generateReviewNotifications: function (args) { return records.generateReviewNotifications(A(args, 0)); },
+  getRecordHistory: function (args) { return records.getRecordHistory(A(args, 0), A(args, 1)); },
 
   login: function (args) { return auth.login(A(args, 0), A(args, 1)); },
   logout: function (args) { return auth.logout(A(args, 0)); },

@@ -524,6 +524,19 @@ function updateRecord_(item, token) {
     const existing = db.prepare('SELECT * FROM records WHERE row = ?').get(row);
     if (!existing) throw new Error('Record not found.');
 
+    // Compute diff before writing
+    const FIELD_MAP = { sector: 'sector', description: 'description', entry_date: 'entryDate', action: 'action', responsibility: 'responsibility', review_date: 'reviewDate' };
+    const diff = {};
+    Object.keys(FIELD_MAP).forEach(function (dbCol) {
+      const newVal = String(normalized[FIELD_MAP[dbCol]] || '');
+      const oldVal = String(existing[dbCol] || '');
+      if (oldVal !== newVal) diff[dbCol] = { from: oldVal, to: newVal };
+    });
+    const newLinks = JSON.stringify(normalizeLinksForStorage_(normalized.links || {}));
+    if (existing.links !== newLinks) diff.links = { from: existing.links, to: newLinks };
+    const newBg = item.flagged ? CONFIG.COLORS.FLAG : CONFIG.COLORS.NORMAL;
+    if (existing.review_bg !== newBg) diff.review_bg = { from: existing.review_bg, to: newBg };
+
     db.prepare(
       'UPDATE records SET sector = ?, description = ?, entry_date = ?, action = ?, responsibility = ?, review_date = ?, links = ?, review_bg = ?, updated_at = ? WHERE row = ?'
     ).run(
@@ -534,10 +547,19 @@ function updateRecord_(item, token) {
       String(normalized.responsibility || ''),
       String(normalized.reviewDate || ''),
       JSON.stringify(normalizeLinksForStorage_(normalized.links || {})),
-      item.flagged ? CONFIG.COLORS.FLAG : CONFIG.COLORS.NORMAL,
+      newBg,
       Date.now(),
       row
     );
+
+    // Persist diff for change history
+    if (Object.keys(diff).length > 0) {
+      const recordId = String(row - CONFIG.SHEET.START_ROW + 1);
+      try {
+        db.prepare('INSERT INTO record_changes (record_row, record_id, changed_by, changed_at, diff) VALUES (?, ?, ?, ?, ?)')
+          .run(row, recordId, editor.email || '', Date.now(), JSON.stringify(diff));
+      } catch (err) { /* ignore */ }
+    }
 
     bumpDataGeneration_();
 
@@ -751,6 +773,30 @@ function dailyDateUpdate() {
   return { ok: true };
 }
 
+/* ============================================================
+ * Record Change History
+ * ============================================================ */
+
+function getRecordHistory(row, token) {
+  auth.requireViewer(token);
+  const rowNum = Number(row);
+  if (!isFinite(rowNum) || rowNum < 1) throw new Error('Invalid row number.');
+  const rows = db.prepare(
+    'SELECT record_row, record_id, changed_by, changed_at, diff FROM record_changes WHERE record_row = ? ORDER BY changed_at DESC LIMIT 50'
+  ).all(rowNum);
+  return rows.map(function (r) {
+    let diff = {};
+    try { diff = JSON.parse(r.diff || '{}'); } catch (e) {}
+    return {
+      recordRow: r.record_row,
+      recordId: r.record_id,
+      changedBy: r.changed_by || '',
+      changedAt: r.changed_at ? String(r.changed_at) : '',
+      diff: diff
+    };
+  });
+}
+
 const RecordService = Object.freeze({
   add: addRecord_,
   update: updateRecord_,
@@ -775,6 +821,7 @@ module.exports = {
   addItem,
   deleteItem,
   markReviewDone,
+  getRecordHistory,
   markReviewNotDone,
   getServerTime,
   sendReviewReminders,

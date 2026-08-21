@@ -47,30 +47,10 @@ const CSP = [
   "object-src 'none'"
 ].join('; ');
 
-// ── Per-IP rate limiting (in-memory sliding window) ───────────────────────
-const RATE_WINDOW_MS = 60000;
-const RATE_MAX_POST = 120; // POST /api per IP per minute
-const rateBuckets = new Map();
-
-function checkRateLimit(req) {
-  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
-  const now = Date.now();
-  let rec = rateBuckets.get(ip);
-  if (!rec) {
-    rec = [];
-    rateBuckets.set(ip, rec);
-    // Prevent unbounded growth
-    if (rateBuckets.size > 10000) {
-      for (const [k, v] of rateBuckets) {
-        if (!v.length || v[v.length - 1] <= now - RATE_WINDOW_MS) rateBuckets.delete(k);
-      }
-    }
-  }
-  // Trim stale entries
-  while (rec.length && rec[0] <= now - RATE_WINDOW_MS) rec.shift();
-  rec.push(now);
-  return rec.length > RATE_MAX_POST;
-}
+// NOTE: Per-IP rate limiting is handled by the Cloudflare Worker
+// (dashv1-proxy) which fronts this server. The Worker enforces
+// 60 POST/min + 240 GET/min per IP, so no duplicate server-side
+// limiter is needed here.
 
 // NOTE: the baked-in src/server/migration-export/*.csv snapshot is no longer
 // auto-imported on boot. The live SQLite DB (restored from the KV backup
@@ -111,6 +91,7 @@ app.use(function (req, res, next) {
 
 app.use(express.static(STATIC_ROOT, {
   index: false,
+  maxAge: '1h',
   setHeaders: function (res) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
   }
@@ -121,7 +102,24 @@ app.get(API_PREFIX + '/health', function (req, res) {
   // in a health check instead of silently widening the redeploy data-loss window.
   let dataSync = null;
   try { dataSync = require('./data-sync').getBackupStatus(); } catch (err) { dataSync = { error: String(err && err.message || err) }; }
-  res.json({ ok: true, name: 'India Post Dashboard server', port: PORT, now: Date.now(), dataSync: dataSync });
+  // SQLite connectivity check
+  let sqliteOk = false;
+  try { const row = db.prepare('SELECT 1 AS ping').get(); sqliteOk = !!(row && row.ping === 1); } catch (e) { sqliteOk = false; }
+  const mem = process.memoryUsage();
+  res.json({
+    ok: true,
+    name: 'India Post Dashboard server',
+    port: PORT,
+    now: Date.now(),
+    uptime: Math.round(process.uptime()),
+    memory: {
+      rss: Math.round(mem.rss / 1024 / 1024),
+      heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
+      heapTotal: Math.round(mem.heapTotal / 1024 / 1024)
+    },
+    sqlite: { ok: sqliteOk },
+    dataSync: dataSync
+  });
 });
 
 function readBodyJson(req) {
@@ -154,12 +152,6 @@ function readBodyJson(req) {
 }
 
 app.post(API_PREFIX, async function (req, res) {
-  // Item 4: Rate-limit POST /api
-  if (checkRateLimit(req)) {
-    res.setHeader('Retry-After', String(Math.ceil(RATE_WINDOW_MS / 1000)));
-    res.status(429).json({ error: 'Too many requests. Please wait a moment and retry.' });
-    return;
-  }
   try {
     const body = await readBodyJson(req);
     const fn = body && body.function;
