@@ -43,15 +43,14 @@ for (const mod of manifest.modules) {
   console.log(`  ${mod.file.padEnd(16)} ${mod.lineCount} lines`);
 }
 
-// Join without adding separators (each module file already ends with \n)
 let output = chunks.join('');
 
 // Read the original to check if it ends with a trailing newline
-// (The original app.js typically does NOT end with a trailing newline.)
 const originalPath = APP_JS + '.original';
 if (fs.existsSync(originalPath)) {
   const origBuf = fs.readFileSync(originalPath);
   const origEndsWithNewline = origBuf[origBuf.length - 1] === 0x0a; // 0x0a = \n
+
   if (!origEndsWithNewline && output.endsWith('\n')) {
     output = output.slice(0, -1); // strip trailing newline to match original
   }
