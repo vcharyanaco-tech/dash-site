@@ -138,16 +138,8 @@ function resetEditForm() {
   getEl('editDescription').value = '';
   getEl('editEntryDate').value = '';
   getEl('editAction').value = '';
-  populateResponsibilitySelect();
   getEl('editResponsibility').value = '';
-  // Clear multi-select chips
-  var msContainer = document.getElementById('editResponsibilityMs');
-  if (msContainer) {
-    msContainer.querySelectorAll('.ms-chip').forEach(function (c) { c.remove(); });
-    msContainer.querySelectorAll('.ms-option').forEach(function (o) { o.classList.remove('ms-selected'); });
-    var triggerBtn = msContainer.querySelector('.ms-trigger');
-    if (triggerBtn) triggerBtn.textContent = 'Select...';
-  }
+  clearMultiSelect('editResponsibilityMs');
   getEl('editReviewDate').value = '';
   getEl('editFlagged').checked = false;
   appState.fieldLinks = {};
@@ -190,22 +182,8 @@ function editItem(row) {
   getEl('editDescription').value = item.description || '';
   getEl('editEntryDate').value = item.entryDate || '';
   getEl('editAction').value = item.action || '';
-  populateResponsibilitySelect();
   getEl('editResponsibility').value = item.responsibility || '';
-  // Populate multi-select chips from comma-separated value
-  var msContainer = document.getElementById('editResponsibilityMs');
-  if (msContainer) {
-    var chipsContainer = msContainer.querySelector('.ms-chips');
-    var vals = (item.responsibility || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-    chipsContainer.innerHTML = vals.map(function (v) {
-      return '<span class="ms-chip" data-value="' + escAttr(v) + '">' + escapeHtml(v) + '<button type="button" class="ms-chip-remove" aria-label="Remove" data-remove="' + escAttr(v) + '">&times;</button></span>';
-    }).join('');
-    var triggerBtn = msContainer.querySelector('.ms-trigger');
-    triggerBtn.textContent = vals.length ? vals.length + ' selected' : 'Select...';
-    msContainer.querySelectorAll('.ms-option').forEach(function (it) {
-      it.classList.toggle('ms-selected', vals.indexOf(it.getAttribute('data-value')) !== -1);
-    });
-  }
+  populateResponsibilitySelect();
   getEl('editReviewDate').value = item.reviewDate || '';
   getEl('editFlagged').checked = !!item.flagged;
   appState.fieldLinks = {};

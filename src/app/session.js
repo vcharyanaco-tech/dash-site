@@ -274,6 +274,10 @@ function initApp() {
   startLiveClock();
   initDatePicker();
 
+  // Initialize multi-select chip components (event delegation, survives innerHTML rebuilds)
+  initMultiSelect('editResponsibilityMs', 'editResponsibility', 'Select...');
+  initMultiSelect('taskAssigneeMs', 'taskAssignee', 'Select...');
+
   // Column-resize handles for every static data table (records, audit,
   // users, activity, tasks). Handlers attach once — the header cells persist
   // across tbody re-renders, so the widths keep working after any refresh.

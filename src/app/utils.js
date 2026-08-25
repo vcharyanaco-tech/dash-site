@@ -269,6 +269,11 @@ function autoRefreshTick() {
 
 /* ---------------------------------- Multi-Select Chips ---------------------------------- */
 
+/* Initialize multi-select component with event delegation.
+   Called once per container at page load — all handlers survive innerHTML
+   rebuilds because they listen on stable parent elements. */
+var msInstances = {};
+
 function initMultiSelect(containerId, hiddenInputId, placeholder) {
   var container = document.getElementById(containerId);
   var hiddenInput = document.getElementById(hiddenInputId);
@@ -278,23 +283,25 @@ function initMultiSelect(containerId, hiddenInputId, placeholder) {
   var chipsContainer = container.querySelector('.ms-chips');
   var dropdown = container.querySelector('.ms-dropdown');
 
+  function getValues() {
+    var raw = hiddenInput.value || '';
+    return raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+
   function renderChips() {
     var vals = getValues();
-    var items = container.querySelectorAll('.ms-option');
+    // Build labels from current DOM options
     var labels = {};
-    items.forEach(function (it) { labels[it.getAttribute('data-value')] = it.textContent.trim(); });
+    container.querySelectorAll('.ms-option').forEach(function (it) {
+      labels[it.getAttribute('data-value')] = it.textContent.trim();
+    });
     chipsContainer.innerHTML = vals.map(function (v) {
       return '<span class="ms-chip" data-value="' + escAttr(v) + '">' + escapeHtml(labels[v] || v) + '<button type="button" class="ms-chip-remove" aria-label="Remove" data-remove="' + escAttr(v) + '">&times;</button></span>';
     }).join('');
     triggerBtn.textContent = vals.length ? vals.length + ' selected' : (placeholder || 'Select...');
-    items.forEach(function (it) {
+    container.querySelectorAll('.ms-option').forEach(function (it) {
       it.classList.toggle('ms-selected', vals.indexOf(it.getAttribute('data-value')) !== -1);
     });
-  }
-
-  function getValues() {
-    var raw = hiddenInput.value || '';
-    return raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
   }
 
   function setValues(vals) {
@@ -309,6 +316,7 @@ function initMultiSelect(containerId, hiddenInputId, placeholder) {
     setValues(vals);
   }
 
+  // Trigger button — open/close dropdown
   triggerBtn.addEventListener('click', function (e) {
     e.stopPropagation();
     document.querySelectorAll('.ms-dropdown.open').forEach(function (d) {
@@ -317,6 +325,7 @@ function initMultiSelect(containerId, hiddenInputId, placeholder) {
     dropdown.classList.toggle('open');
   });
 
+  // Chip removal — event delegation on stable parent
   chipsContainer.addEventListener('click', function (e) {
     var rm = e.target.closest('.ms-chip-remove');
     if (rm) {
@@ -325,17 +334,23 @@ function initMultiSelect(containerId, hiddenInputId, placeholder) {
     }
   });
 
-  container.querySelectorAll('.ms-option').forEach(function (opt) {
-    opt.addEventListener('click', function (e) {
-      e.stopPropagation();
-      toggleValue(opt.getAttribute('data-value'));
-    });
+  // Option clicks — event delegation on stable dropdown parent
+  dropdown.addEventListener('click', function (e) {
+    var opt = e.target.closest('.ms-option');
+    if (!opt) return;
+    e.stopPropagation();
+    toggleValue(opt.getAttribute('data-value'));
   });
 
   renderChips();
-  return { getValues: getValues, setValues: setValues, renderChips: renderChips };
+  var inst = { getValues: getValues, setValues: setValues, renderChips: renderChips };
+  msInstances[containerId] = inst;
+  return inst;
 }
 
+/* Populate options into a multi-select dropdown. Options are rebuilt from
+   scratch each time (caller provides the full list). Existing selected
+   values in the hidden input are preserved. */
 function populateMultiSelectOptions(containerId, options) {
   var container = document.getElementById(containerId);
   if (!container) return;
@@ -344,30 +359,29 @@ function populateMultiSelectOptions(containerId, options) {
   dropdown.innerHTML = options.map(function (opt) {
     return '<div class="ms-option" data-value="' + escAttr(opt.value) + '">' + escapeHtml(opt.label) + '</div>';
   }).join('');
-  // Re-bind click handlers
-  container.querySelectorAll('.ms-option').forEach(function (el) {
-    el.addEventListener('click', function (e) {
-      e.stopPropagation();
-      var hiddenInput = container.querySelector('input[type=hidden]');
-      var vals = (hiddenInput.value || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-      var val = el.getAttribute('data-value');
-      var idx = vals.indexOf(val);
-      if (idx === -1) { vals.push(val); } else { vals.splice(idx, 1); }
-      hiddenInput.value = vals.join(', ');
-      // Re-render chips
-      var chipsContainer = container.querySelector('.ms-chips');
-      var labels = {};
-      options.forEach(function (o) { labels[o.value] = o.label; });
-      chipsContainer.innerHTML = vals.map(function (v) {
-        return '<span class="ms-chip" data-value="' + escAttr(v) + '">' + escapeHtml(labels[v] || v) + '<button type="button" class="ms-chip-remove" aria-label="Remove" data-remove="' + escAttr(v) + '">&times;</button></span>';
-      }).join('');
-      var triggerBtn = container.querySelector('.ms-trigger');
-      triggerBtn.textContent = vals.length ? vals.length + ' selected' : 'Select...';
-      container.querySelectorAll('.ms-option').forEach(function (it) {
-        it.classList.toggle('ms-selected', vals.indexOf(it.getAttribute('data-value')) !== -1);
-      });
-    });
-  });
+  // Re-render chips so labels match the new options
+  var inst = msInstances[containerId];
+  if (inst) inst.renderChips();
+}
+
+function setMultiSelectValues(containerId, csv) {
+  var inst = msInstances[containerId];
+  if (inst) {
+    inst.setValues((csv || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean));
+  } else {
+    var el = document.getElementById(containerId.replace('Ms', ''));
+    if (el) el.value = csv || '';
+  }
+}
+
+function getMultiSelectValues(containerId) {
+  var inst = msInstances[containerId];
+  return inst ? inst.getValues() : [];
+}
+
+function clearMultiSelect(containerId) {
+  var inst = msInstances[containerId];
+  if (inst) inst.setValues([]);
 }
 
 function closeAllMultiSelects() {

@@ -27,10 +27,10 @@ function generateNonce() {
   return crypto.randomBytes(16).toString('base64');
 }
 
-function buildCsp(nonce) {
+function buildCsp() {
   return [
     "default-src 'self'",
-    "script-src 'self' 'nonce-" + nonce + "' 'unsafe-hashes' 'unsafe-inline'",
+    "script-src 'self' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "font-src 'self'",
@@ -49,9 +49,7 @@ function buildCsp(nonce) {
  * in template rendering.
  */
 function cspMiddleware(req, res, next) {
-  const nonce = generateNonce();
-  res.locals.cspNonce = nonce;
-  res.setHeader('Content-Security-Policy', buildCsp(nonce));
+  res.setHeader('Content-Security-Policy', buildCsp());
   next();
 }
 

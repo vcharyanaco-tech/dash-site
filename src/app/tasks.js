@@ -111,14 +111,7 @@ function closeTaskModal() {
   getEl('taskTitle').value = '';
   getEl('taskDescription').value = '';
   getEl('taskAssignee').value = '';
-  // Clear multi-select chips
-  var msContainer = document.getElementById('taskAssigneeMs');
-  if (msContainer) {
-    msContainer.querySelectorAll('.ms-chip').forEach(function (c) { c.remove(); });
-    msContainer.querySelectorAll('.ms-option').forEach(function (o) { o.classList.remove('ms-selected'); });
-    var triggerBtn = msContainer.querySelector('.ms-trigger');
-    if (triggerBtn) triggerBtn.textContent = 'Select...';
-  }
+  clearMultiSelect('taskAssigneeMs');
   getEl('taskPriority').value = 'MEDIUM';
   getEl('taskDueDate').value = '';
   getEl('taskRecordRow').value = '';
@@ -246,42 +239,14 @@ function editTask(id) {
   
   // Populate assignee (will be populated after users are loaded)
   if (appState.allUsers) {
-    populateTaskAssigneeDropdown();
     getEl('taskAssignee').value = task.assignee || '';
-    // Populate multi-select chips from comma-separated value
-    var msContainer = document.getElementById('taskAssigneeMs');
-    if (msContainer) {
-      var chipsContainer = msContainer.querySelector('.ms-chips');
-      var vals = (task.assignee || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-      chipsContainer.innerHTML = vals.map(function (v) {
-        return '<span class="ms-chip" data-value="' + escAttr(v) + '">' + escapeHtml(v) + '<button type="button" class="ms-chip-remove" aria-label="Remove" data-remove="' + escAttr(v) + '">&times;</button></span>';
-      }).join('');
-      var triggerBtn = msContainer.querySelector('.ms-trigger');
-      triggerBtn.textContent = vals.length ? vals.length + ' selected' : 'Select...';
-      msContainer.querySelectorAll('.ms-option').forEach(function (it) {
-        it.classList.toggle('ms-selected', vals.indexOf(it.getAttribute('data-value')) !== -1);
-      });
-    }
+    populateTaskAssigneeDropdown();
   } else {
     // Load users if not already loaded
     ApiService.getAssignableUsers().then(function (users) {
       appState.allUsers = users;
-      populateTaskAssigneeDropdown();
       getEl('taskAssignee').value = task.assignee || '';
-      // Populate multi-select chips
-      var msContainer = document.getElementById('taskAssigneeMs');
-      if (msContainer) {
-        var chipsContainer = msContainer.querySelector('.ms-chips');
-        var vals = (task.assignee || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-        chipsContainer.innerHTML = vals.map(function (v) {
-          return '<span class="ms-chip" data-value="' + escAttr(v) + '">' + escapeHtml(v) + '<button type="button" class="ms-chip-remove" aria-label="Remove" data-remove="' + escAttr(v) + '">&times;</button></span>';
-        }).join('');
-        var triggerBtn = msContainer.querySelector('.ms-trigger');
-        triggerBtn.textContent = vals.length ? vals.length + ' selected' : 'Select...';
-        msContainer.querySelectorAll('.ms-option').forEach(function (it) {
-          it.classList.toggle('ms-selected', vals.indexOf(it.getAttribute('data-value')) !== -1);
-        });
-      }
+      populateTaskAssigneeDropdown();
     }).catch(function (err) {
       console.error('Could not load users:', err);
     });
