@@ -44,9 +44,12 @@ function renderTaskList() {
         actionButtons += '<button class="btn btn-ghost btn-small" type="button" onclick="deleteTaskConfirm(\'' + escAttr(t.id) + '\')" style="margin-left:4px;color:var(--danger,#dc3545);">Delete</button>';
       }
       
-      // Display a friendly label for the 'All Divisional Heads' group marker.
-      var assigneeDisplay = t.assignee || '';
-      if (assigneeDisplay === 'group:all-divisional-heads') assigneeDisplay = 'All Divisional Heads';
+      // Display a friendly label for the assignee (may be comma-separated).
+      var assigneeDisplay = (t.assignee || '').split(',').map(function (a) {
+        a = a.trim();
+        if (a === 'group:all-divisional-heads') return 'All Divisional Heads';
+        return a;
+      }).filter(Boolean).join(', ');
 
       return '<tr data-task-id="' + escAttr(t.id) + '">' +
         '<td class="preserve-whitespace">' + escapeHtml(t.title || '') + '</td>' +
@@ -62,18 +65,17 @@ function renderTaskList() {
 }
 
 function populateTaskAssigneeDropdown() {
-  const select = getEl('taskAssignee');
-  if (!select) return;
+  const hiddenInput = getEl('taskAssignee');
+  if (!hiddenInput) return;
   
   const users = appState.allUsers || [];
-  select.innerHTML = '<option value="">Select assignee...</option>' +
-    users.map(function (u) {
-      // Use the friendly label for the 'All Divisional Heads' group entry.
-      var displayLabel = u.email === 'group:all-divisional-heads'
-        ? 'All Divisional Heads'
-        : u.email + (u.username ? ' (' + u.username + ')' : '');
-      return '<option value="' + escAttr(u.email) + '">' + escapeHtml(displayLabel) + '</option>';
-    }).join('');
+  const options = users.map(function (u) {
+    var displayLabel = u.email === 'group:all-divisional-heads'
+      ? 'All Divisional Heads'
+      : u.email + (u.username ? ' (' + u.username + ')' : '');
+    return { value: u.email, label: displayLabel };
+  });
+  populateMultiSelectOptions('taskAssigneeMs', options);
 }
 
 function openTaskModal() {
@@ -109,6 +111,14 @@ function closeTaskModal() {
   getEl('taskTitle').value = '';
   getEl('taskDescription').value = '';
   getEl('taskAssignee').value = '';
+  // Clear multi-select chips
+  var msContainer = document.getElementById('taskAssigneeMs');
+  if (msContainer) {
+    msContainer.querySelectorAll('.ms-chip').forEach(function (c) { c.remove(); });
+    msContainer.querySelectorAll('.ms-option').forEach(function (o) { o.classList.remove('ms-selected'); });
+    var triggerBtn = msContainer.querySelector('.ms-trigger');
+    if (triggerBtn) triggerBtn.textContent = 'Select...';
+  }
   getEl('taskPriority').value = 'MEDIUM';
   getEl('taskDueDate').value = '';
   getEl('taskRecordRow').value = '';
@@ -238,12 +248,40 @@ function editTask(id) {
   if (appState.allUsers) {
     populateTaskAssigneeDropdown();
     getEl('taskAssignee').value = task.assignee || '';
+    // Populate multi-select chips from comma-separated value
+    var msContainer = document.getElementById('taskAssigneeMs');
+    if (msContainer) {
+      var chipsContainer = msContainer.querySelector('.ms-chips');
+      var vals = (task.assignee || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      chipsContainer.innerHTML = vals.map(function (v) {
+        return '<span class="ms-chip" data-value="' + escAttr(v) + '">' + escapeHtml(v) + '<button type="button" class="ms-chip-remove" aria-label="Remove" data-remove="' + escAttr(v) + '">&times;</button></span>';
+      }).join('');
+      var triggerBtn = msContainer.querySelector('.ms-trigger');
+      triggerBtn.textContent = vals.length ? vals.length + ' selected' : 'Select...';
+      msContainer.querySelectorAll('.ms-option').forEach(function (it) {
+        it.classList.toggle('ms-selected', vals.indexOf(it.getAttribute('data-value')) !== -1);
+      });
+    }
   } else {
     // Load users if not already loaded
     ApiService.getAssignableUsers().then(function (users) {
       appState.allUsers = users;
       populateTaskAssigneeDropdown();
       getEl('taskAssignee').value = task.assignee || '';
+      // Populate multi-select chips
+      var msContainer = document.getElementById('taskAssigneeMs');
+      if (msContainer) {
+        var chipsContainer = msContainer.querySelector('.ms-chips');
+        var vals = (task.assignee || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        chipsContainer.innerHTML = vals.map(function (v) {
+          return '<span class="ms-chip" data-value="' + escAttr(v) + '">' + escapeHtml(v) + '<button type="button" class="ms-chip-remove" aria-label="Remove" data-remove="' + escAttr(v) + '">&times;</button></span>';
+        }).join('');
+        var triggerBtn = msContainer.querySelector('.ms-trigger');
+        triggerBtn.textContent = vals.length ? vals.length + ' selected' : 'Select...';
+        msContainer.querySelectorAll('.ms-option').forEach(function (it) {
+          it.classList.toggle('ms-selected', vals.indexOf(it.getAttribute('data-value')) !== -1);
+        });
+      }
     }).catch(function (err) {
       console.error('Could not load users:', err);
     });

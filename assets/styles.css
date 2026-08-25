@@ -2659,6 +2659,99 @@ body.sidebar-open .sidebar-backdrop {
   max-width: 480px;
 }
 
+/* ---------------------------------- Multi-Select Chips ---------------------------------- */
+.multi-select {
+  position: relative;
+  width: 100%;
+}
+.ms-trigger {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  color: var(--text, #1d2129);
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e4e7ec);
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  min-height: 38px;
+  word-break: break-word;
+}
+.ms-trigger:hover {
+  border-color: var(--border-strong, #d0d5dd);
+}
+.ms-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.ms-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--secondary-soft, #e7f0f8);
+  color: var(--secondary, #004b87);
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.ms-chip-remove {
+  background: none;
+  border: none;
+  color: var(--secondary, #004b87);
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.7;
+}
+.ms-chip-remove:hover {
+  opacity: 1;
+}
+.ms-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0; right: 0;
+  z-index: 1000;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e4e7ec);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.1);
+  margin-top: 4px;
+}
+.ms-dropdown.open {
+  display: block;
+}
+.ms-option {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text, #1d2129);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ms-option:hover {
+  background: var(--surface-3, #f1f3f5);
+}
+.ms-option.ms-selected {
+  background: var(--secondary-soft, #e7f0f8);
+  color: var(--secondary, #004b87);
+  font-weight: 500;
+}
+.ms-option.ms-selected::before {
+  content: '\2713';
+  font-size: 12px;
+}
+
 /* ---------------------------------- Print ---------------------------------- */
 @media print {
   .sidebar, .topbar, .app-footer, .toast-container, .overlay, .auth-screen, .pagination, .section-actions { display: none !important; }

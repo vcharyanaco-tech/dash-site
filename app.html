@@ -676,10 +676,13 @@
           <textarea id="editAction" class="textarea" rows="3"></textarea>
         </div>
         <div class="field">
-          <label for="editResponsibility">Responsibility</label>
-          <select id="editResponsibility" class="select">
-            <option value="">Select responsibility…</option>
-          </select>
+          <label>Responsibility</label>
+          <input type="hidden" id="editResponsibility" value="">
+          <div class="multi-select" id="editResponsibilityMs">
+            <button type="button" class="ms-trigger" id="editResponsibilityBtn">Select...</button>
+            <div class="ms-chips"></div>
+            <div class="ms-dropdown"></div>
+          </div>
         </div>
         <div class="field">
           <label class="checkbox"><input id="editFlagged" type="checkbox"> Flagged / review due</label>
@@ -976,10 +979,13 @@
         </div>
         <div class="form-row">
           <div class="field">
-            <label for="taskAssignee">Assignee</label>
-            <select id="taskAssignee" class="select" required>
-              <option value="">Select assignee...</option>
-            </select>
+            <label>Assignee</label>
+            <input type="hidden" id="taskAssignee" value="">
+            <div class="multi-select" id="taskAssigneeMs">
+              <button type="button" class="ms-trigger" id="taskAssigneeBtn">Select...</button>
+              <div class="ms-chips"></div>
+              <div class="ms-dropdown"></div>
+            </div>
           </div>
           <div class="field">
             <label for="taskPriority">Priority</label>

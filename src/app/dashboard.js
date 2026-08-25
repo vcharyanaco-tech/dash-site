@@ -12,17 +12,36 @@ function populateFilters() {
   filter.value = selected;
 }
 
-/* Populate the edit-dialog responsibility dropdown with every responsibility
+/* Populate the edit-dialog responsibility multi-select with every responsibility
    entry returned by the server (all records, not just the current view). */
 function populateResponsibilitySelect() {
-  const select = getEl('editResponsibility');
-  if (!select) return;
-  const selected = select.value;
+  const hiddenInput = getEl('editResponsibility');
+  if (!hiddenInput) return;
+  const selected = hiddenInput.value || '';
   const list = appState.responsibilities || [];
-  select.innerHTML = '<option value="">Select responsibility…</option>' + list.map(function (r) {
-    return `<option value="${escAttr(r)}">${escapeHtml(r)}</option>`;
-  }).join('');
-  select.value = selected;
+  const options = list.map(function (r) {
+    return { value: r, label: r };
+  });
+  populateMultiSelectOptions('editResponsibilityMs', options);
+  // Restore selected value
+  if (selected) {
+    hiddenInput.value = selected;
+    var container = document.getElementById('editResponsibilityMs');
+    if (container) {
+      var chipsContainer = container.querySelector('.ms-chips');
+      var labels = {};
+      options.forEach(function (o) { labels[o.value] = o.label; });
+      var vals = selected.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      chipsContainer.innerHTML = vals.map(function (v) {
+        return '<span class="ms-chip" data-value="' + escAttr(v) + '">' + escapeHtml(labels[v] || v) + '<button type="button" class="ms-chip-remove" aria-label="Remove" data-remove="' + escAttr(v) + '">&times;</button></span>';
+      }).join('');
+      var triggerBtn = container.querySelector('.ms-trigger');
+      triggerBtn.textContent = vals.length ? vals.length + ' selected' : 'Select...';
+      container.querySelectorAll('.ms-option').forEach(function (it) {
+        it.classList.toggle('ms-selected', vals.indexOf(it.getAttribute('data-value')) !== -1);
+      });
+    }
+  }
 }
 
 /* Generate review-due in-app notifications for the signed-in user, then load

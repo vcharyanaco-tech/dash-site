@@ -18,13 +18,24 @@ function isGroupAssignee_(assignee) {
 
 /* Helper: resolve an assignee value to a list of email addresses.
    Group markers are expanded to the individual emails of every member.
+   Comma-separated emails are split and each resolved individually.
    Plain emails are returned as a single-element list. */
 function resolveAssigneeEmails_(assignee) {
-  if (isGroupAssignee_(assignee)) {
-    return auth.getDivisionalHeadEmails_();
-  }
-  const email = String(assignee || '').toLowerCase().trim();
-  return email ? [email] : [];
+  const raw = String(assignee || '').trim();
+  if (!raw) return [];
+  // Split comma-separated assignees
+  const parts = raw.split(',').map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
+  const allEmails = [];
+  parts.forEach(function (part) {
+    if (isGroupAssignee_(part)) {
+      allEmails.push.apply(allEmails, auth.getDivisionalHeadEmails_());
+    } else if (part) {
+      allEmails.push(part);
+    }
+  });
+  // Deduplicate
+  var seen = {};
+  return allEmails.filter(function (e) { if (seen[e]) return false; seen[e] = true; return true; });
 }
 
 /* Helper: send notification + email to one or more recipients */
@@ -229,13 +240,18 @@ function getTasks(filters, token) {
   rows.forEach(function (rec) {
     if (filters.assignee) {
       const filterEmail = String(filters.assignee).toLowerCase();
-      if (isGroupAssignee_(rec.assignee)) {
-        // Tasks assigned to 'All Divisional Heads' match any do_* user
-        const callerUser = auth.findUserRecord_(caller.email);
-        if (!callerUser || !auth.isDivisionalHeadUser_(callerUser)) return;
-      } else if (rec.assignee !== filterEmail) {
-        return;
-      }
+      // Check if any of the comma-separated assignees match
+      const recAssignees = String(rec.assignee || '').split(',').map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
+      var matches = false;
+      recAssignees.forEach(function (a) {
+        if (isGroupAssignee_(a)) {
+          const callerUser = auth.findUserRecord_(caller.email);
+          if (callerUser && auth.isDivisionalHeadUser_(callerUser)) matches = true;
+        } else if (a === filterEmail) {
+          matches = true;
+        }
+      });
+      if (!matches) return;
     }
     if (filters.status && rec.status !== String(filters.status).toUpperCase()) return;
     if (filters.recordRow && rec.recordRow !== Number(filters.recordRow)) return;
@@ -268,6 +284,8 @@ function deleteTask(id, token) {
 
 function getMyTasks(token) {
   const user = auth.requireLogin(token);
+  // getTasks filters by assignee matching; for comma-separated assignees,
+  // we need to check if user.email appears in any task's assignee list.
   return getTasks({ assignee: user.email }, token);
 }
 

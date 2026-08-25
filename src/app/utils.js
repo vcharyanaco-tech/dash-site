@@ -266,3 +266,112 @@ function autoRefreshTick() {
     if (handleServerFailure(err)) return;
   });
 }
+
+/* ---------------------------------- Multi-Select Chips ---------------------------------- */
+
+function initMultiSelect(containerId, hiddenInputId, placeholder) {
+  var container = document.getElementById(containerId);
+  var hiddenInput = document.getElementById(hiddenInputId);
+  if (!container || !hiddenInput) return null;
+
+  var triggerBtn = container.querySelector('.ms-trigger');
+  var chipsContainer = container.querySelector('.ms-chips');
+  var dropdown = container.querySelector('.ms-dropdown');
+
+  function renderChips() {
+    var vals = getValues();
+    var items = container.querySelectorAll('.ms-option');
+    var labels = {};
+    items.forEach(function (it) { labels[it.getAttribute('data-value')] = it.textContent.trim(); });
+    chipsContainer.innerHTML = vals.map(function (v) {
+      return '<span class="ms-chip" data-value="' + escAttr(v) + '">' + escapeHtml(labels[v] || v) + '<button type="button" class="ms-chip-remove" aria-label="Remove" data-remove="' + escAttr(v) + '">&times;</button></span>';
+    }).join('');
+    triggerBtn.textContent = vals.length ? vals.length + ' selected' : (placeholder || 'Select...');
+    items.forEach(function (it) {
+      it.classList.toggle('ms-selected', vals.indexOf(it.getAttribute('data-value')) !== -1);
+    });
+  }
+
+  function getValues() {
+    var raw = hiddenInput.value || '';
+    return raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+
+  function setValues(vals) {
+    hiddenInput.value = vals.join(', ');
+    renderChips();
+  }
+
+  function toggleValue(val) {
+    var vals = getValues();
+    var idx = vals.indexOf(val);
+    if (idx === -1) { vals.push(val); } else { vals.splice(idx, 1); }
+    setValues(vals);
+  }
+
+  triggerBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    document.querySelectorAll('.ms-dropdown.open').forEach(function (d) {
+      if (d !== dropdown) d.classList.remove('open');
+    });
+    dropdown.classList.toggle('open');
+  });
+
+  chipsContainer.addEventListener('click', function (e) {
+    var rm = e.target.closest('.ms-chip-remove');
+    if (rm) {
+      e.stopPropagation();
+      toggleValue(rm.getAttribute('data-remove'));
+    }
+  });
+
+  container.querySelectorAll('.ms-option').forEach(function (opt) {
+    opt.addEventListener('click', function (e) {
+      e.stopPropagation();
+      toggleValue(opt.getAttribute('data-value'));
+    });
+  });
+
+  renderChips();
+  return { getValues: getValues, setValues: setValues, renderChips: renderChips };
+}
+
+function populateMultiSelectOptions(containerId, options) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  var dropdown = container.querySelector('.ms-dropdown');
+  if (!dropdown) return;
+  dropdown.innerHTML = options.map(function (opt) {
+    return '<div class="ms-option" data-value="' + escAttr(opt.value) + '">' + escapeHtml(opt.label) + '</div>';
+  }).join('');
+  // Re-bind click handlers
+  container.querySelectorAll('.ms-option').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var hiddenInput = container.querySelector('input[type=hidden]');
+      var vals = (hiddenInput.value || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      var val = el.getAttribute('data-value');
+      var idx = vals.indexOf(val);
+      if (idx === -1) { vals.push(val); } else { vals.splice(idx, 1); }
+      hiddenInput.value = vals.join(', ');
+      // Re-render chips
+      var chipsContainer = container.querySelector('.ms-chips');
+      var labels = {};
+      options.forEach(function (o) { labels[o.value] = o.label; });
+      chipsContainer.innerHTML = vals.map(function (v) {
+        return '<span class="ms-chip" data-value="' + escAttr(v) + '">' + escapeHtml(labels[v] || v) + '<button type="button" class="ms-chip-remove" aria-label="Remove" data-remove="' + escAttr(v) + '">&times;</button></span>';
+      }).join('');
+      var triggerBtn = container.querySelector('.ms-trigger');
+      triggerBtn.textContent = vals.length ? vals.length + ' selected' : 'Select...';
+      container.querySelectorAll('.ms-option').forEach(function (it) {
+        it.classList.toggle('ms-selected', vals.indexOf(it.getAttribute('data-value')) !== -1);
+      });
+    });
+  });
+}
+
+function closeAllMultiSelects() {
+  document.querySelectorAll('.ms-dropdown.open').forEach(function (d) { d.classList.remove('open'); });
+}
+
+document.addEventListener('click', function () { closeAllMultiSelects(); });
