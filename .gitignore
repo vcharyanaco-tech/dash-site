@@ -19,3 +19,4 @@ data/
 
 # Smoke-test scratch DBs (created when running npm test with a scratch dir)
 .dash_test*/
+.env.local
