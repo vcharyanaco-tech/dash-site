@@ -168,6 +168,11 @@ const ApiService = {
   setFathomApiKey: function (apiKey) { return apiCall_('setFathomApiKey', getAuthToken(), apiKey); },
   listFathomMeetings: function (opts) { return apiCall_('listFathomMeetings', getAuthToken(), opts || {}); },
   getFathomMeetingContent: function (recordingId) { return apiCall_('getFathomMeetingContent', getAuthToken(), recordingId); },
+  getRecordingDownloadLink: function (recordingId) { return apiCall_('getRecordingDownloadLink', getAuthToken(), recordingId); },
+  listFathomUsers: function () { return apiCall_('listFathomUsers', getAuthToken()); },
+  searchFathomMeetings: function (opts) { return apiCall_('searchFathomMeetings', getAuthToken(), opts || {}); },
+  getFathomMeetingStats: function () { return apiCall_('getFathomMeetingStats', getAuthToken()); },
+  bulkGetRecordingDownloadLinks: function (recordingIds) { return apiCall_('bulkGetRecordingDownloadLinks', getAuthToken(), recordingIds); },
   // Push notifications
   subscribePush: function (subscription) { return apiCall_('subscribePush', subscription, getAuthToken()); },
   unsubscribePush: function (endpoint) { return apiCall_('unsubscribePush', endpoint, getAuthToken()); },
@@ -175,7 +180,11 @@ const ApiService = {
   // Weekly reports
   sendWeeklyReport: function () { return apiCall_('sendWeeklyReport', getAuthToken()); },
   // i18n
-  getTranslations: function (lang) { return apiCall_('getTranslations', lang); }
+  getTranslations: function (lang) { return apiCall_('getTranslations', lang); },
+  // Session refresh
+  refreshSession: function () { return apiCall_('refreshSession', getAuthToken()); },
+  // Admin CSV import
+  adminImportCsv: function (csvText) { return apiCall_('adminImportCsv', csvText, getAuthToken()); }
 };
 
 const appState = {
@@ -945,11 +954,23 @@ function renderMeetingMinutes(data) {
   const actions = Array.isArray(minutes.actionItems) ? minutes.actionItems : [];
   const risks = Array.isArray(minutes.risks) ? minutes.risks : [];
   const meetingTitle = String((data && data.title) || 'Review meeting');
+  const highlights = Array.isArray(data && data.highlights) ? data.highlights : [];
   let html = '<div class="meeting-notes-wrap">';
   if (data && data.fathomUrl) {
     html += '<div class="meeting-notes-drive">' +
       '<span>&#128279; Fathom recording: <a href="' + escapeHtml(data.fathomUrl) + '" target="_blank" rel="noopener noreferrer">Open in Fathom</a></span>' +
       '</div>';
+  }
+  if (highlights.length) {
+    html += '<div class="card-ai-head"><span class="card-ai-title">Highlights (' + highlights.length + ')</span></div>' +
+      '<div class="meeting-notes-section"><ul class="meeting-notes-list">';
+    highlights.forEach(function (h) {
+      const title = escapeHtml(h.title || 'Highlight');
+      const note = h.note ? '<br><small>' + escapeHtml(h.note) + '</small>' : '';
+      const time = h.startTime ? ' (' + formatTimestamp(h.startTime) + (h.endTime ? ' - ' + formatTimestamp(h.endTime) : '') + ')' : '';
+      html += '<li><strong>' + title + '</strong>' + time + note + '</li>';
+    });
+    html += '</ul></div>';
   }
   if (summary) {
     html += '<div class="card-ai-head"><span class="card-ai-title">Summary</span></div>' +
@@ -1105,10 +1126,16 @@ function initFathomPanel() {
   const list = getEl('fathomList');
   const keyRow = getEl('fathomKeyRow');
   const loadBtn = getEl('fathomLoadBtn');
+  const statsBtn = getEl('fathomStatsBtn');
+  const bulkDownloadBtn = getEl('fathomBulkDownloadBtn');
   const status = getEl('fathomStatus');
+  const searchInput = getEl('fathomSearchInput');
   if (list) list.innerHTML = '';
   if (keyRow) keyRow.classList.add('hidden');
   if (loadBtn) loadBtn.disabled = false;
+  if (statsBtn) statsBtn.style.display = 'none';
+  if (bulkDownloadBtn) bulkDownloadBtn.style.display = 'none';
+  if (searchInput) searchInput.value = '';
   if (status) status.textContent = '';
   ApiService.getFathomStatus().then(function (data) {
     const f = data && data.fathom;
@@ -1125,6 +1152,8 @@ function initFathomPanel() {
       return;
     }
     if (loadBtn) loadBtn.style.display = 'inline-flex';
+    if (statsBtn) statsBtn.style.display = 'inline-flex';
+    if (bulkDownloadBtn) bulkDownloadBtn.style.display = 'inline-flex';
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
     if (status) status.textContent = err && err.message ? err.message : String(err);
@@ -1188,13 +1217,22 @@ function renderFathomMeetingList(items) {
   items.forEach(function (m, i) {
     const date = m.createdAt ? formatTimestamp(m.createdAt) : '';
     const actionCount = (m.actionItems && m.actionItems.length) || 0;
+    const highlightCount = (m.highlights && m.highlights.length) || 0;
+    const sharedWith = m.sharedWith || 'none';
+    const meetingUrl = m.meetingUrl || '';
     html += '<div class="fathom-meeting-item" role="button" tabindex="0" onclick="viewFathomMeeting(' + i + ')">' +
       '<div class="fathom-meeting-title">' + escapeHtml(m.title) + '</div>' +
       '<div class="fathom-meeting-meta">' + escapeHtml(date) +
       (m.recordedBy ? ' &middot; ' + escapeHtml(m.recordedBy) : '') +
-      (actionCount ? ' &middot; ' + actionCount + ' action item(s)' : '') + '</div>' +
+      (actionCount ? ' &middot; ' + actionCount + ' action item(s)' : '') +
+      (highlightCount ? ' &middot; ' + highlightCount + ' highlight(s)' : '') +
+      (sharedWith !== 'none' ? ' &middot; Shared: ' + escapeHtml(sharedWith) : '') + '</div>' +
+      (meetingUrl ? '<div class="fathom-meeting-meta"><a href="' + escapeHtml(meetingUrl) + '" target="_blank" rel="noopener noreferrer">Open in Fathom</a></div>' : '') +
       (m.summary ? '<div class="fathom-meeting-summary">' + escapeHtml(m.summary.substring(0, 220)) + '</div>' : '') +
+      '<div class="fathom-meeting-actions">' +
       '<span class="btn btn-small btn-secondary" style="pointer-events:none;">View notes</span>' +
+      (m.recordingId ? '<button class="btn btn-small btn-ghost" type="button" onclick="event.stopPropagation(); downloadRecording(\'' + escapeAttr(m.recordingId) + '\')">Download</button>' : '') +
+      '</div>' +
       '</div>';
   });
   html += '</div>';
@@ -1219,6 +1257,8 @@ function viewFathomMeeting(index) {
         dueDate: ''
       };
     });
+    // Merge highlights from both the meeting card and the content response
+    const highlights = (data.highlights && data.highlights.length) ? data.highlights : (m.highlights || []);
     renderMeetingMinutes({
       title: m.title,
       minutes: {
@@ -1229,11 +1269,151 @@ function viewFathomMeeting(index) {
       },
       transcript: data.transcript || '',
       transcriptChars: data.transcriptChars || 0,
-      fathomUrl: m.shareUrl || m.url || ''
+      fathomUrl: m.shareUrl || m.url || m.meetingUrl || '',
+      highlights: highlights
     });
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
     renderMeetingMinutesError(err && err.message ? err.message : String(err));
+  });
+}
+
+function downloadRecording(recordingId) {
+  if (!recordingId) return;
+  showOverlay('Requesting download link\u2026');
+  ApiService.getRecordingDownloadLink(recordingId).then(function (data) {
+    hideOverlay();
+    if (!data || data.success !== true) {
+      showToast((data && data.message) || 'Could not get download link.', 'error');
+      return;
+    }
+    if (data.downloadUrl) {
+      window.open(data.downloadUrl, '_blank');
+      showToast('Download link opened (valid for ~24 hours).', 'success');
+    } else {
+      showToast('No download URL returned.', 'warning');
+    }
+  }).catch(function (err) {
+    hideOverlay();
+    if (handleServerFailure(err)) return;
+    showToast('Download failed: ' + (err && err.message ? err.message : String(err)), 'error');
+  });
+}
+
+// Additional Fathom API features
+
+function searchFathomMeetings() {
+  const queryEl = getEl('fathomSearchInput');
+  const query = queryEl ? queryEl.value.trim() : '';
+  if (!query) {
+    // If no query, just reload all meetings
+    loadFathomMeetings();
+    return;
+  }
+  
+  const list = getEl('fathomList');
+  const status = getEl('fathomStatus');
+  if (list) list.innerHTML = '<p class="meeting-notes-hint" style="padding:6px 0;">Searching Fathom meetings\u2026</p>';
+  
+  ApiService.searchFathomMeetings({ query: query }).then(function (data) {
+    if (!data || data.success !== true) {
+      if (status) status.textContent = (data && data.message) || 'Search failed.';
+      return;
+    }
+    fathomMeetingsCache = data.items || [];
+    renderFathomMeetingList(fathomMeetingsCache);
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+    if (status) status.textContent = err && err.message ? err.message : String(err);
+  });
+}
+
+function showFathomStats() {
+  const status = getEl('fathomStatus');
+  if (status) status.textContent = 'Loading Fathom statistics\u2026';
+  
+  ApiService.getFathomMeetingStats().then(function (data) {
+    if (!data || data.success !== true) {
+      if (status) status.textContent = (data && data.message) || 'Could not load statistics.';
+      return;
+    }
+    
+    const stats = data.stats || {};
+    const statsHtml = '<div class="fathom-stats" style="padding:10px; background:var(--surface-secondary); border-radius:8px; margin-top:10px;">' +
+      '<div style="font-weight:600; margin-bottom:10px;">Fathom Meeting Statistics</div>' +
+      '<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">' +
+      '<div><strong>' + (stats.totalMeetings || 0) + '</strong><br>Total meetings</div>' +
+      '<div><strong>' + (stats.totalActionItems || 0) + '</strong><br>Total action items</div>' +
+      '<div><strong>' + (stats.averageActionItemsPerMeeting || 0) + '</strong><br>Avg action items/meeting</div>' +
+      '</div>';
+    
+    // Show recorded by breakdown
+    if (stats.recordedByCounts && Object.keys(stats.recordedByCounts).length) {
+      statsHtml += '<div style="margin-top:10px;"><strong>Recorded by:</strong><ul style="margin:5px 0 0 20px;">';
+      Object.keys(stats.recordedByCounts).forEach(function (name) {
+        statsHtml += '<li>' + escapeHtml(name) + ': ' + stats.recordedByCounts[name] + ' meeting(s)</li>';
+      });
+      statsHtml += '</ul></div>';
+    }
+    
+    statsHtml += '</div>';
+    
+    // Insert stats before the meeting list
+    const list = getEl('fathomList');
+    if (list) {
+      list.insertAdjacentHTML('afterbegin', statsHtml);
+    }
+    if (status) status.textContent = 'Statistics loaded.';
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+    if (status) status.textContent = err && err.message ? err.message : String(err);
+  });
+}
+
+function bulkDownloadRecordings() {
+  if (!fathomMeetingsCache.length) {
+    showToast('No meetings loaded. Load meetings first.', 'warning');
+    return;
+  }
+  
+  const recordingIds = fathomMeetingsCache
+    .filter(function (m) { return m.recordingId; })
+    .map(function (m) { return m.recordingId; });
+  
+  if (!recordingIds.length) {
+    showToast('No recordings available for download.', 'warning');
+    return;
+  }
+  
+  showOverlay('Requesting download links for ' + recordingIds.length + ' recording(s)\u2026');
+  
+  ApiService.bulkGetRecordingDownloadLinks(recordingIds).then(function (data) {
+    hideOverlay();
+    if (!data || data.success !== true) {
+      showToast((data && data.message) || 'Bulk download failed.', 'error');
+      return;
+    }
+    
+    const results = data.results || [];
+    const errors = data.errors || [];
+    
+    if (results.length) {
+      // Open download links in new tabs (browser may block popups)
+      results.forEach(function (r, i) {
+        setTimeout(function () {
+          if (r.downloadUrl) window.open(r.downloadUrl, '_blank');
+        }, i * 500); // Stagger to avoid popup blocker
+      });
+      showToast('Opened ' + results.length + ' download link(s). Links valid for ~24 hours.', 'success');
+    }
+    
+    if (errors.length) {
+      showToast(errors.length + ' recording(s) failed to get download links.', 'warning');
+    }
+  }).catch(function (err) {
+    hideOverlay();
+    if (handleServerFailure(err)) return;
+    showToast('Bulk download failed: ' + (err && err.message ? err.message : String(err)), 'error');
   });
 }
 
@@ -2374,6 +2554,10 @@ function initApp() {
   startLiveClock();
   initDatePicker();
 
+  // Initialize multi-select chip components (event delegation, survives innerHTML rebuilds)
+  initMultiSelect('editResponsibilityMs', 'editResponsibility', 'Select...');
+  initMultiSelect('taskAssigneeMs', 'taskAssignee', 'Select...');
+
   // Column-resize handles for every static data table (records, audit,
   // users, activity, tasks). Handlers attach once — the header cells persist
   // across tbody re-renders, so the widths keep working after any refresh.
@@ -2530,6 +2714,7 @@ function loadApp() {
     EventBus.emit('DataRefreshed');
     EventBus.emit('UserLoggedIn');
     startAutoRefresh();
+    initRealtime();
 
     if (appState.mustChange) {
       getEl('mustChangeBanner').classList.remove('hidden');
@@ -2605,6 +2790,7 @@ function handleForgotPassword(e) {
 
 function logout() {
   stopAutoRefresh();
+  teardownRealtime();
   ApiService.logout().then(function () {
     setAuthToken('');
     window.location.href = window.location.href.split('?')[0];
@@ -2647,17 +2833,16 @@ function populateFilters() {
   filter.value = selected;
 }
 
-/* Populate the edit-dialog responsibility dropdown with every responsibility
+/* Populate the edit-dialog responsibility multi-select with every responsibility
    entry returned by the server (all records, not just the current view). */
 function populateResponsibilitySelect() {
-  const select = getEl('editResponsibility');
-  if (!select) return;
-  const selected = select.value;
+  const hiddenInput = getEl('editResponsibility');
+  if (!hiddenInput) return;
   const list = appState.responsibilities || [];
-  select.innerHTML = '<option value="">Select responsibility…</option>' + list.map(function (r) {
-    return `<option value="${escAttr(r)}">${escapeHtml(r)}</option>`;
-  }).join('');
-  select.value = selected;
+  const options = list.map(function (r) {
+    return { value: r, label: r };
+  });
+  populateMultiSelectOptions('editResponsibilityMs', options);
 }
 
 /* Generate review-due in-app notifications for the signed-in user, then load
@@ -4046,6 +4231,11 @@ function sendEmailAllUsers() {
 function renderSettings() {
   getEl('mustChangeBanner').classList.toggle('hidden', !appState.mustChange);
 
+  // CSV import drop zone — editors and admins
+  var csvImportCard = getEl('csvImportCard');
+  if (csvImportCard) csvImportCard.classList.toggle('hidden', !appState.isEditor);
+  wireCsvImportDropZone();
+
   // Google Sheet sync + full backup — admin only.
   const sheetSyncCard = getEl('sheetSyncCard');
   if (sheetSyncCard) sheetSyncCard.classList.toggle('hidden', !appState.isAdmin);
@@ -4064,6 +4254,49 @@ function renderSettings() {
     usersAdmin.classList.add('hidden');
     if (userActivityCard) userActivityCard.classList.add('hidden');
   }
+
+  // Fathom API key — admin only
+  var fathomCard = getEl('fathomSettingsCard');
+  if (fathomCard) {
+    if (appState.isAdmin) {
+      fathomCard.classList.remove('hidden');
+      ApiService.getFathomStatus().then(function (data) {
+        var f = data && data.fathom;
+        var st = getEl('fathomSettingsStatus');
+        if (!f) return;
+        if (f.configured) {
+          if (st) { st.textContent = '\u2713 Configured'; st.style.color = 'var(--success, #16a34a)'; }
+        } else if (f.enabled) {
+          if (st) { st.textContent = 'Not configured — paste your key above'; st.style.color = 'var(--warning, #d97706)'; }
+        } else {
+          if (st) { st.textContent = 'Fathom integration is disabled on the server'; st.style.color = 'var(--muted)'; }
+        }
+      }).catch(function () {});
+    } else {
+      fathomCard.classList.add('hidden');
+    }
+  }
+}
+
+function saveSettingsFathomKey() {
+  var input = getEl('settingsFathomApiKey');
+  var key = input ? input.value.trim() : '';
+  if (!key) { showToast('Paste your Fathom API key first.', 'warning'); return; }
+  showOverlay('Saving Fathom API key…');
+  ApiService.setFathomApiKey(key).then(function (res) {
+    hideOverlay();
+    if (res && res.ok) {
+      if (input) input.value = '';
+      showToast('Fathom API key saved.', 'success');
+      renderSettings();
+    } else {
+      showToast((res && res.message) || 'Could not save the key.', 'error');
+    }
+  }).catch(function (err) {
+    hideOverlay();
+    if (handleServerFailure(err)) return;
+    showToast('Error saving key: ' + (err.message || err), 'error');
+  });
 }
 
 function loadUsers() {
@@ -4600,6 +4833,94 @@ function resetUserPassword(email) {
   });
 }
 
+/* ---------------------------------- CSV Import (drag-and-drop) ---------------------------------- */
+/* Admin/editor can drag a CSV file onto the drop zone (or click to browse).
+   The file is parsed, sent to the server, and records are imported. */
+
+function wireCsvImportDropZone() {
+  var dropZone = getEl('csvImportDropZone');
+  if (!dropZone) return; // not on this page
+
+  dropZone.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.add('drag-over');
+  });
+
+  dropZone.addEventListener('dragleave', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.remove('drag-over');
+  });
+
+  dropZone.addEventListener('drop', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.remove('drag-over');
+    var files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length) handleCsvFileImport(files[0]);
+  });
+
+  // Click to browse
+  dropZone.addEventListener('click', function (e) {
+    if (e.target.tagName === 'INPUT') return; // don't double-trigger
+    var fileInput = getEl('csvImportFileInput');
+    if (fileInput) fileInput.click();
+  });
+}
+
+function handleCsvFileImport(file) {
+  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
+  if (!file) return;
+  if (!file.name.match(/\.csv$/i)) {
+    showToast('Please select a .csv file.', 'error');
+    return;
+  }
+  var status = getEl('csvImportStatus');
+  if (status) { status.textContent = 'Reading file…'; status.className = 'form-status'; }
+  var reader = new FileReader();
+  reader.onload = function (e) {
+    var csvText = e.target.result;
+    if (!csvText || !csvText.trim()) {
+      if (status) { status.textContent = 'File is empty.'; status.className = 'form-status error'; }
+      return;
+    }
+    if (status) { status.textContent = 'Importing records…'; status.className = 'form-status'; }
+    showOverlay('Importing CSV…');
+    ApiService.adminImportCsv(csvText).then(function (result) {
+      hideOverlay();
+      if (!result || !result.success) {
+        var msg = (result && result.message) || 'Import failed.';
+        if (status) { status.textContent = msg; status.className = 'form-status error'; }
+        showToast(msg, 'error');
+        return;
+      }
+      var lines = [result.added + ' record(s) imported successfully.'];
+      if (result.errors && result.errors.length) {
+        lines.push(result.errors.length + ' error(s): ' + result.errors.slice(0, 3).join('; '));
+      }
+      var msg = lines.join(' ');
+      if (status) { status.textContent = msg; status.className = 'form-status success'; }
+      showToast(msg, result.errors && result.errors.length ? 'warning' : 'success');
+      refreshData();
+    }).catch(function (err) {
+      hideOverlay();
+      if (handleServerFailure(err)) return;
+      var msg = 'Import failed: ' + (err.message || err);
+      if (status) { status.textContent = msg; status.className = 'form-status error'; }
+      showToast(msg, 'error');
+    });
+  };
+  reader.readAsText(file);
+}
+
+function handleCsvFileInputChange(e) {
+  var file = e.target && e.target.files && e.target.files[0];
+  if (file) handleCsvFileImport(file);
+  // Reset the input so the same file can be re-selected
+  e.target.value = '';
+}
+
 /* ---------------------------------- Record detail dialog ---------------------------------- */
 /* Read-only drill-down for any record (S8): shows every display field plus the
    review status and submission count, with contextual actions. */
@@ -4785,9 +5106,12 @@ function renderTaskList() {
         actionButtons += '<button class="btn btn-ghost btn-small" type="button" onclick="deleteTaskConfirm(\'' + escAttr(t.id) + '\')" style="margin-left:4px;color:var(--danger,#dc3545);">Delete</button>';
       }
       
-      // Display a friendly label for the 'All Divisional Heads' group marker.
-      var assigneeDisplay = t.assignee || '';
-      if (assigneeDisplay === 'group:all-divisional-heads') assigneeDisplay = 'All Divisional Heads';
+      // Display a friendly label for the assignee (may be comma-separated).
+      var assigneeDisplay = (t.assignee || '').split(',').map(function (a) {
+        a = a.trim();
+        if (a === 'group:all-divisional-heads') return 'All Divisional Heads';
+        return a;
+      }).filter(Boolean).join(', ');
 
       return '<tr data-task-id="' + escAttr(t.id) + '">' +
         '<td class="preserve-whitespace">' + escapeHtml(t.title || '') + '</td>' +
@@ -4803,18 +5127,17 @@ function renderTaskList() {
 }
 
 function populateTaskAssigneeDropdown() {
-  const select = getEl('taskAssignee');
-  if (!select) return;
+  const hiddenInput = getEl('taskAssignee');
+  if (!hiddenInput) return;
   
   const users = appState.allUsers || [];
-  select.innerHTML = '<option value="">Select assignee...</option>' +
-    users.map(function (u) {
-      // Use the friendly label for the 'All Divisional Heads' group entry.
-      var displayLabel = u.email === 'group:all-divisional-heads'
-        ? 'All Divisional Heads'
-        : u.email + (u.username ? ' (' + u.username + ')' : '');
-      return '<option value="' + escAttr(u.email) + '">' + escapeHtml(displayLabel) + '</option>';
-    }).join('');
+  const options = users.map(function (u) {
+    var displayLabel = u.email === 'group:all-divisional-heads'
+      ? 'All Divisional Heads'
+      : u.email + (u.username ? ' (' + u.username + ')' : '');
+    return { value: u.email, label: displayLabel };
+  });
+  populateMultiSelectOptions('taskAssigneeMs', options);
 }
 
 function openTaskModal() {
@@ -4850,6 +5173,7 @@ function closeTaskModal() {
   getEl('taskTitle').value = '';
   getEl('taskDescription').value = '';
   getEl('taskAssignee').value = '';
+  clearMultiSelect('taskAssigneeMs');
   getEl('taskPriority').value = 'MEDIUM';
   getEl('taskDueDate').value = '';
   getEl('taskRecordRow').value = '';
@@ -4977,14 +5301,14 @@ function editTask(id) {
   
   // Populate assignee (will be populated after users are loaded)
   if (appState.allUsers) {
-    populateTaskAssigneeDropdown();
     getEl('taskAssignee').value = task.assignee || '';
+    populateTaskAssigneeDropdown();
   } else {
     // Load users if not already loaded
     ApiService.getAssignableUsers().then(function (users) {
       appState.allUsers = users;
-      populateTaskAssigneeDropdown();
       getEl('taskAssignee').value = task.assignee || '';
+      populateTaskAssigneeDropdown();
     }).catch(function (err) {
       console.error('Could not load users:', err);
     });
@@ -5292,6 +5616,129 @@ function autoRefreshTick() {
     if (handleServerFailure(err)) return;
   });
 }
+
+/* ---------------------------------- Multi-Select Chips ---------------------------------- */
+
+/* Initialize multi-select component with event delegation.
+   Called once per container at page load — all handlers survive innerHTML
+   rebuilds because they listen on stable parent elements. */
+var msInstances = {};
+
+function initMultiSelect(containerId, hiddenInputId, placeholder) {
+  var container = document.getElementById(containerId);
+  var hiddenInput = document.getElementById(hiddenInputId);
+  if (!container || !hiddenInput) return null;
+
+  var triggerBtn = container.querySelector('.ms-trigger');
+  var chipsContainer = container.querySelector('.ms-chips');
+  var dropdown = container.querySelector('.ms-dropdown');
+
+  function getValues() {
+    var raw = hiddenInput.value || '';
+    return raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+
+  function renderChips() {
+    var vals = getValues();
+    // Build labels from current DOM options
+    var labels = {};
+    container.querySelectorAll('.ms-option').forEach(function (it) {
+      labels[it.getAttribute('data-value')] = it.textContent.trim();
+    });
+    chipsContainer.innerHTML = vals.map(function (v) {
+      return '<span class="ms-chip" data-value="' + escAttr(v) + '">' + escapeHtml(labels[v] || v) + '<button type="button" class="ms-chip-remove" aria-label="Remove" data-remove="' + escAttr(v) + '">&times;</button></span>';
+    }).join('');
+    triggerBtn.textContent = vals.length ? vals.length + ' selected' : (placeholder || 'Select...');
+    container.querySelectorAll('.ms-option').forEach(function (it) {
+      it.classList.toggle('ms-selected', vals.indexOf(it.getAttribute('data-value')) !== -1);
+    });
+  }
+
+  function setValues(vals) {
+    hiddenInput.value = vals.join(', ');
+    renderChips();
+  }
+
+  function toggleValue(val) {
+    var vals = getValues();
+    var idx = vals.indexOf(val);
+    if (idx === -1) { vals.push(val); } else { vals.splice(idx, 1); }
+    setValues(vals);
+  }
+
+  // Trigger button — open/close dropdown
+  triggerBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    document.querySelectorAll('.ms-dropdown.open').forEach(function (d) {
+      if (d !== dropdown) d.classList.remove('open');
+    });
+    dropdown.classList.toggle('open');
+  });
+
+  // Chip removal — event delegation on stable parent
+  chipsContainer.addEventListener('click', function (e) {
+    var rm = e.target.closest('.ms-chip-remove');
+    if (rm) {
+      e.stopPropagation();
+      toggleValue(rm.getAttribute('data-remove'));
+    }
+  });
+
+  // Option clicks — event delegation on stable dropdown parent
+  dropdown.addEventListener('click', function (e) {
+    var opt = e.target.closest('.ms-option');
+    if (!opt) return;
+    e.stopPropagation();
+    toggleValue(opt.getAttribute('data-value'));
+  });
+
+  renderChips();
+  var inst = { getValues: getValues, setValues: setValues, renderChips: renderChips };
+  msInstances[containerId] = inst;
+  return inst;
+}
+
+/* Populate options into a multi-select dropdown. Options are rebuilt from
+   scratch each time (caller provides the full list). Existing selected
+   values in the hidden input are preserved. */
+function populateMultiSelectOptions(containerId, options) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  var dropdown = container.querySelector('.ms-dropdown');
+  if (!dropdown) return;
+  dropdown.innerHTML = options.map(function (opt) {
+    return '<div class="ms-option" data-value="' + escAttr(opt.value) + '">' + escapeHtml(opt.label) + '</div>';
+  }).join('');
+  // Re-render chips so labels match the new options
+  var inst = msInstances[containerId];
+  if (inst) inst.renderChips();
+}
+
+function setMultiSelectValues(containerId, csv) {
+  var inst = msInstances[containerId];
+  if (inst) {
+    inst.setValues((csv || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean));
+  } else {
+    var el = document.getElementById(containerId.replace('Ms', ''));
+    if (el) el.value = csv || '';
+  }
+}
+
+function getMultiSelectValues(containerId) {
+  var inst = msInstances[containerId];
+  return inst ? inst.getValues() : [];
+}
+
+function clearMultiSelect(containerId) {
+  var inst = msInstances[containerId];
+  if (inst) inst.setValues([]);
+}
+
+function closeAllMultiSelects() {
+  document.querySelectorAll('.ms-dropdown.open').forEach(function (d) { d.classList.remove('open'); });
+}
+
+document.addEventListener('click', function () { closeAllMultiSelects(); });
 
 /* ---------------------------------- Dashboard Studio ---------------------------------- */
 
@@ -5631,8 +6078,8 @@ function resetEditForm() {
   getEl('editDescription').value = '';
   getEl('editEntryDate').value = '';
   getEl('editAction').value = '';
-  populateResponsibilitySelect();
   getEl('editResponsibility').value = '';
+  clearMultiSelect('editResponsibilityMs');
   getEl('editReviewDate').value = '';
   getEl('editFlagged').checked = false;
   appState.fieldLinks = {};
@@ -5675,8 +6122,8 @@ function editItem(row) {
   getEl('editDescription').value = item.description || '';
   getEl('editEntryDate').value = item.entryDate || '';
   getEl('editAction').value = item.action || '';
-  populateResponsibilitySelect();
   getEl('editResponsibility').value = item.responsibility || '';
+  populateResponsibilitySelect();
   getEl('editReviewDate').value = item.reviewDate || '';
   getEl('editFlagged').checked = !!item.flagged;
   appState.fieldLinks = {};
