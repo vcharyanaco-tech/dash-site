@@ -467,11 +467,23 @@ function renderMeetingMinutes(data) {
   const actions = Array.isArray(minutes.actionItems) ? minutes.actionItems : [];
   const risks = Array.isArray(minutes.risks) ? minutes.risks : [];
   const meetingTitle = String((data && data.title) || 'Review meeting');
+  const highlights = Array.isArray(data && data.highlights) ? data.highlights : [];
   let html = '<div class="meeting-notes-wrap">';
   if (data && data.fathomUrl) {
     html += '<div class="meeting-notes-drive">' +
       '<span>&#128279; Fathom recording: <a href="' + escapeHtml(data.fathomUrl) + '" target="_blank" rel="noopener noreferrer">Open in Fathom</a></span>' +
       '</div>';
+  }
+  if (highlights.length) {
+    html += '<div class="card-ai-head"><span class="card-ai-title">Highlights (' + highlights.length + ')</span></div>' +
+      '<div class="meeting-notes-section"><ul class="meeting-notes-list">';
+    highlights.forEach(function (h) {
+      const title = escapeHtml(h.title || 'Highlight');
+      const note = h.note ? '<br><small>' + escapeHtml(h.note) + '</small>' : '';
+      const time = h.startTime ? ' (' + formatTimestamp(h.startTime) + (h.endTime ? ' - ' + formatTimestamp(h.endTime) : '') + ')' : '';
+      html += '<li><strong>' + title + '</strong>' + time + note + '</li>';
+    });
+    html += '</ul></div>';
   }
   if (summary) {
     html += '<div class="card-ai-head"><span class="card-ai-title">Summary</span></div>' +
@@ -710,13 +722,22 @@ function renderFathomMeetingList(items) {
   items.forEach(function (m, i) {
     const date = m.createdAt ? formatTimestamp(m.createdAt) : '';
     const actionCount = (m.actionItems && m.actionItems.length) || 0;
+    const highlightCount = (m.highlights && m.highlights.length) || 0;
+    const sharedWith = m.sharedWith || 'none';
+    const meetingUrl = m.meetingUrl || '';
     html += '<div class="fathom-meeting-item" role="button" tabindex="0" onclick="viewFathomMeeting(' + i + ')">' +
       '<div class="fathom-meeting-title">' + escapeHtml(m.title) + '</div>' +
       '<div class="fathom-meeting-meta">' + escapeHtml(date) +
       (m.recordedBy ? ' &middot; ' + escapeHtml(m.recordedBy) : '') +
-      (actionCount ? ' &middot; ' + actionCount + ' action item(s)' : '') + '</div>' +
+      (actionCount ? ' &middot; ' + actionCount + ' action item(s)' : '') +
+      (highlightCount ? ' &middot; ' + highlightCount + ' highlight(s)' : '') +
+      (sharedWith !== 'none' ? ' &middot; Shared: ' + escapeHtml(sharedWith) : '') + '</div>' +
+      (meetingUrl ? '<div class="fathom-meeting-meta"><a href="' + escapeHtml(meetingUrl) + '" target="_blank" rel="noopener noreferrer">Open in Fathom</a></div>' : '') +
       (m.summary ? '<div class="fathom-meeting-summary">' + escapeHtml(m.summary.substring(0, 220)) + '</div>' : '') +
+      '<div class="fathom-meeting-actions">' +
       '<span class="btn btn-small btn-secondary" style="pointer-events:none;">View notes</span>' +
+      (m.recordingId ? '<button class="btn btn-small btn-ghost" type="button" onclick="event.stopPropagation(); downloadRecording(\'' + escapeAttr(m.recordingId) + '\')">Download</button>' : '') +
+      '</div>' +
       '</div>';
   });
   html += '</div>';
@@ -741,6 +762,8 @@ function viewFathomMeeting(index) {
         dueDate: ''
       };
     });
+    // Merge highlights from both the meeting card and the content response
+    const highlights = (data.highlights && data.highlights.length) ? data.highlights : (m.highlights || []);
     renderMeetingMinutes({
       title: m.title,
       minutes: {
@@ -751,10 +774,33 @@ function viewFathomMeeting(index) {
       },
       transcript: data.transcript || '',
       transcriptChars: data.transcriptChars || 0,
-      fathomUrl: m.shareUrl || m.url || ''
+      fathomUrl: m.shareUrl || m.url || m.meetingUrl || '',
+      highlights: highlights
     });
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
     renderMeetingMinutesError(err && err.message ? err.message : String(err));
+  });
+}
+
+function downloadRecording(recordingId) {
+  if (!recordingId) return;
+  showOverlay('Requesting download link\u2026');
+  ApiService.getRecordingDownloadLink(recordingId).then(function (data) {
+    hideOverlay();
+    if (!data || data.success !== true) {
+      showToast((data && data.message) || 'Could not get download link.', 'error');
+      return;
+    }
+    if (data.downloadUrl) {
+      window.open(data.downloadUrl, '_blank');
+      showToast('Download link opened (valid for ~24 hours).', 'success');
+    } else {
+      showToast('No download URL returned.', 'warning');
+    }
+  }).catch(function (err) {
+    hideOverlay();
+    if (handleServerFailure(err)) return;
+    showToast('Download failed: ' + (err && err.message ? err.message : String(err)), 'error');
   });
 }

@@ -1090,10 +1090,13 @@ function fathomMeetingToCard_(m) {
     meetingTitle: m.meeting_title || '',
     url: m.url || '',
     shareUrl: m.share_url || '',
+    meetingUrl: m.meeting_url || '',
+    sharedWith: m.shared_with || 'none',
     createdAt: m.created_at || '',
     recordedBy: m.recorded_by ? (m.recorded_by.name || m.recorded_by.email) : '',
     summary: String(summary || '').trim(),
-    actionItems: actions
+    actionItems: actions,
+    highlights: []
   };
 }
 
@@ -1110,6 +1113,7 @@ async function listFathomMeetings(token, opts) {
 
   const qs = ['include_summary=true', 'include_action_items=true', 'limit=' + max];
   if (opts.createdAfter) qs.push('created_after=' + encodeURIComponent(String(opts.createdAfter)));
+  if (opts.includeHighlights) qs.push('include_highlights=true');
 
   try {
     const resp = await fetch(cfg.baseUrl + '/meetings?' + qs.join('&'), {
@@ -1123,8 +1127,90 @@ async function listFathomMeetings(token, opts) {
       const apiErr = body && body.error && (body.error.message || body.error.code || body.error.type);
       return { success: false, message: apiErr || ('Fathom HTTP ' + code), code: code };
     }
-    const items = (body.items || []).map(fathomMeetingToCard_);
+    const items = (body.items || []).map(function (m) {
+      const card = fathomMeetingToCard_(m);
+      // Include highlights if present in the API response
+      if (m.highlights && Array.isArray(m.highlights)) {
+        card.highlights = m.highlights.map(function (h) {
+          return {
+            id: h.id || '',
+            title: h.title || '',
+            note: h.note || '',
+            startTime: h.start_time || 0,
+            endTime: h.end_time || 0,
+            createdAt: h.created_at || ''
+          };
+        });
+      }
+      return card;
+    });
     return { success: true, items: items, nextCursor: body.next_cursor || '' };
+  } catch (err) {
+    return { success: false, message: String(err) };
+  }
+}
+
+async function getRecordingDownloadLink(token, recordingId) {
+  auth.requireAdmin(token);
+  const cfg = fathomConfig_();
+  if (!cfg.enabled) return { success: false, message: 'Fathom integration is not enabled.' };
+  if (!cfg.configured) return { success: false, message: 'Fathom API key is not configured.' };
+  if (!recordingId) return { success: false, message: 'Missing recording id.' };
+  const key = fathomApiKey_();
+  try {
+    const resp = await fetch(cfg.baseUrl + '/recordings/' + encodeURIComponent(String(recordingId)) + '/download', {
+      method: 'GET',
+      headers: { 'X-Api-Key': key }
+    });
+    const code = resp.status;
+    let body = {};
+    try { body = JSON.parse(await resp.text()); } catch (err) { body = {}; }
+    if (code < 200 || code >= 300) {
+      const apiErr = body && body.error && (body.error.message || body.error.code || body.error.type);
+      return { success: false, message: apiErr || ('Fathom HTTP ' + code), code: code };
+    }
+    return {
+      success: true,
+      recordingId: recordingId,
+      downloadUrl: body.download_url || body.url || '',
+      expiresAt: body.expires_at || '',
+      // Links are valid for ~24 hours as per Fathom API spec
+      validFor: 86400
+    };
+  } catch (err) {
+    return { success: false, message: String(err) };
+  }
+}
+
+async function listFathomUsers(token) {
+  auth.requireAdmin(token);
+  const cfg = fathomConfig_();
+  if (!cfg.enabled) return { success: false, message: 'Fathom integration is not enabled.' };
+  if (!cfg.configured) return { success: false, message: 'Fathom API key is not configured.' };
+  const key = fathomApiKey_();
+  try {
+    const resp = await fetch(cfg.baseUrl + '/users', {
+      method: 'GET',
+      headers: { 'X-Api-Key': key }
+    });
+    const code = resp.status;
+    let body = {};
+    try { body = JSON.parse(await resp.text()); } catch (err) { body = {}; }
+    if (code < 200 || code >= 300) {
+      const apiErr = body && body.error && (body.error.message || body.error.code || body.error.type);
+      return { success: false, message: apiErr || ('Fathom HTTP ' + code), code: code };
+    }
+    const users = (body.items || []).map(function (u) {
+      return {
+        id: u.id || '',
+        email: u.email || '',
+        name: u.name || u.display_name || '',
+        role: u.role || '',
+        status: u.status || '',
+        permissions: u.permissions || []
+      };
+    });
+    return { success: true, users: users, total: users.length };
   } catch (err) {
     return { success: false, message: String(err) };
   }
@@ -1138,10 +1224,18 @@ async function getFathomMeetingContent(token, recordingId) {
   if (!recordingId) return { success: false, message: 'Missing recording id.' };
   const key = fathomApiKey_();
   try {
-    const resp = await fetch(cfg.baseUrl + '/recordings/' + encodeURIComponent(String(recordingId)) + '/transcript', {
-      method: 'GET',
-      headers: { 'X-Api-Key': key }
-    });
+    // Fetch both transcript and highlights in parallel
+    const [transcriptResp, highlightsResp] = await Promise.all([
+      fetch(cfg.baseUrl + '/recordings/' + encodeURIComponent(String(recordingId)) + '/transcript', {
+        method: 'GET',
+        headers: { 'X-Api-Key': key }
+      }),
+      fetch(cfg.baseUrl + '/recordings/' + encodeURIComponent(String(recordingId)) + '/highlights', {
+        method: 'GET',
+        headers: { 'X-Api-Key': key }
+      })
+    ]);
+    const resp = transcriptResp; // For backward compatibility with error handling
     const code = resp.status;
     let body = {};
     try { body = JSON.parse(await resp.text()); } catch (err) { body = {}; }
@@ -1153,7 +1247,24 @@ async function getFathomMeetingContent(token, recordingId) {
       const speaker = (t.speaker && t.speaker.display_name) || 'Speaker';
       return '[' + (t.timestamp || '') + '] ' + speaker + ': ' + String(t.text || '');
     }).join('\n');
-    return { success: true, recordingId: recordingId, transcript: transcript, transcriptChars: transcript.length };
+    
+    // Parse highlights from the parallel request
+    let highlights = [];
+    try {
+      const highlightsBody = await highlightsResp.json();
+      highlights = (highlightsBody.items || []).map(function (h) {
+        return {
+          id: h.id || '',
+          title: h.title || '',
+          note: h.note || '',
+          startTime: h.start_time || 0,
+          endTime: h.end_time || 0,
+          createdAt: h.created_at || ''
+        };
+      });
+    } catch (e) { /* highlights may not be available */ }
+    
+    return { success: true, recordingId: recordingId, transcript: transcript, transcriptChars: transcript.length, highlights: highlights };
   } catch (err) {
     return { success: false, message: String(err) };
   }
@@ -1371,6 +1482,8 @@ module.exports = {
   getFathomStatus,
   listFathomMeetings,
   getFathomMeetingContent,
+  getRecordingDownloadLink,
+  listFathomUsers,
   processOfflineQueue,
   setupEnterpriseAddons,
   installEnterpriseTriggers,

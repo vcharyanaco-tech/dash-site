@@ -168,6 +168,8 @@ const ApiService = {
   setFathomApiKey: function (apiKey) { return apiCall_('setFathomApiKey', getAuthToken(), apiKey); },
   listFathomMeetings: function (opts) { return apiCall_('listFathomMeetings', getAuthToken(), opts || {}); },
   getFathomMeetingContent: function (recordingId) { return apiCall_('getFathomMeetingContent', getAuthToken(), recordingId); },
+  getRecordingDownloadLink: function (recordingId) { return apiCall_('getRecordingDownloadLink', getAuthToken(), recordingId); },
+  listFathomUsers: function () { return apiCall_('listFathomUsers', getAuthToken()); },
   // Push notifications
   subscribePush: function (subscription) { return apiCall_('subscribePush', subscription, getAuthToken()); },
   unsubscribePush: function (endpoint) { return apiCall_('unsubscribePush', endpoint, getAuthToken()); },
