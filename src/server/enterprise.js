@@ -1216,6 +1216,167 @@ async function listFathomUsers(token) {
   }
 }
 
+async function searchFathomMeetings(token, opts) {
+  auth.requireAdmin(token);
+  opts = opts || {};
+  const cfg = fathomConfig_();
+  if (!cfg.enabled) return { success: false, message: 'Fathom integration is not enabled.' };
+  if (!cfg.configured) return { success: false, message: 'Fathom API key is not configured.' };
+  const key = fathomApiKey_();
+  
+  // First, get all meetings with basic info
+  const qs = ['include_summary=true', 'include_action_items=true', 'limit=100'];
+  if (opts.createdAfter) qs.push('created_after=' + encodeURIComponent(String(opts.createdAfter)));
+  if (opts.createdBefore) qs.push('created_before=' + encodeURIComponent(String(opts.createdBefore)));
+  
+  try {
+    const resp = await fetch(cfg.baseUrl + '/meetings?' + qs.join('&'), {
+      method: 'GET',
+      headers: { 'X-Api-Key': key }
+    });
+    const code = resp.status;
+    let body = {};
+    try { body = JSON.parse(await resp.text()); } catch (err) { body = {}; }
+    if (code < 200 || code >= 300) {
+      const apiErr = body && body.error && (body.error.message || body.error.code || body.error.type);
+      return { success: false, message: apiErr || ('Fathom HTTP ' + code), code: code };
+    }
+    
+    let items = (body.items || []).map(fathomMeetingToCard_);
+    
+    // Apply client-side filtering
+    if (opts.query) {
+      const q = String(opts.query).toLowerCase();
+      items = items.filter(function (m) {
+        const title = (m.title || '').toLowerCase();
+        const recordedBy = (m.recordedBy || '').toLowerCase();
+        const summary = (m.summary || '').toLowerCase();
+        return title.indexOf(q) !== -1 || recordedBy.indexOf(q) !== -1 || summary.indexOf(q) !== -1;
+      });
+    }
+    
+    if (opts.recordedBy) {
+      const rb = String(opts.recordedBy).toLowerCase();
+      items = items.filter(function (m) {
+        return (m.recordedBy || '').toLowerCase().indexOf(rb) !== -1;
+      });
+    }
+    
+    return { success: true, items: items, total: items.length };
+  } catch (err) {
+    return { success: false, message: String(err) };
+  }
+}
+
+async function getFathomMeetingStats(token, opts) {
+  auth.requireAdmin(token);
+  opts = opts || {};
+  const cfg = fathomConfig_();
+  if (!cfg.enabled) return { success: false, message: 'Fathom integration is not enabled.' };
+  if (!cfg.configured) return { success: false, message: 'Fathom API key is not configured.' };
+  const key = fathomApiKey_();
+  
+  try {
+    const resp = await fetch(cfg.baseUrl + '/meetings?limit=100', {
+      method: 'GET',
+      headers: { 'X-Api-Key': key }
+    });
+    const code = resp.status;
+    let body = {};
+    try { body = JSON.parse(await resp.text()); } catch (err) { body = {}; }
+    if (code < 200 || code >= 300) {
+      const apiErr = body && body.error && (body.error.message || body.error.code || body.error.type);
+      return { success: false, message: apiErr || ('Fathom HTTP ' + code), code: code };
+    }
+    
+    const meetings = body.items || [];
+    const totalMeetings = meetings.length;
+    
+    // Calculate statistics
+    let totalActionItems = 0;
+    let totalDuration = 0;
+    const recordedByCounts = {};
+    const sharedWithCounts = {};
+    const monthlyCounts = {};
+    
+    meetings.forEach(function (m) {
+      // Count action items
+      totalActionItems += (m.action_items || []).length;
+      
+      // Count by recorder
+      const recorder = m.recorded_by ? (m.recorded_by.name || m.recorded_by.email || 'Unknown') : 'Unknown';
+      recordedByCounts[recorder] = (recordedByCounts[recorder] || 0) + 1;
+      
+      // Count by sharing scope
+      const shared = m.shared_with || 'none';
+      sharedWithCounts[shared] = (sharedWithCounts[shared] || 0) + 1;
+      
+      // Count by month
+      if (m.created_at) {
+        const month = String(m.created_at).substring(0, 7); // YYYY-MM
+        monthlyCounts[month] = (monthlyCounts[month] || 0) + 1;
+      }
+    });
+    
+    return {
+      success: true,
+      stats: {
+        totalMeetings: totalMeetings,
+        totalActionItems: totalActionItems,
+        averageActionItemsPerMeeting: totalMeetings > 0 ? (totalActionItems / totalMeetings).toFixed(1) : 0,
+        recordedByCounts: recordedByCounts,
+        sharedWithCounts: sharedWithCounts,
+        monthlyCounts: monthlyCounts
+      }
+    };
+  } catch (err) {
+    return { success: false, message: String(err) };
+  }
+}
+
+async function bulkGetRecordingDownloadLinks(token, recordingIds) {
+  auth.requireAdmin(token);
+  if (!Array.isArray(recordingIds) || !recordingIds.length) {
+    return { success: false, message: 'No recording IDs provided.' };
+  }
+  
+  const results = [];
+  const errors = [];
+  
+  for (let i = 0; i < recordingIds.length; i++) {
+    const recordingId = recordingIds[i];
+    try {
+      const result = await getRecordingDownloadLink(token, recordingId);
+      if (result.success) {
+        results.push({
+          recordingId: recordingId,
+          downloadUrl: result.downloadUrl,
+          expiresAt: result.expiresAt
+        });
+      } else {
+        errors.push({
+          recordingId: recordingId,
+          error: result.message || 'Failed to get download link'
+        });
+      }
+    } catch (err) {
+      errors.push({
+        recordingId: recordingId,
+        error: String(err)
+      });
+    }
+  }
+  
+  return {
+    success: true,
+    results: results,
+    errors: errors,
+    totalRequested: recordingIds.length,
+    successful: results.length,
+    failed: errors.length
+  };
+}
+
 async function getFathomMeetingContent(token, recordingId) {
   auth.requireAdmin(token);
   const cfg = fathomConfig_();
@@ -1484,6 +1645,9 @@ module.exports = {
   getFathomMeetingContent,
   getRecordingDownloadLink,
   listFathomUsers,
+  searchFathomMeetings,
+  getFathomMeetingStats,
+  bulkGetRecordingDownloadLinks,
   processOfflineQueue,
   setupEnterpriseAddons,
   installEnterpriseTriggers,
