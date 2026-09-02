@@ -9,7 +9,7 @@
  */
 
 const { db, getAppSettings, cacheGetTTL, cachePut } = require('./db');
-const { CONFIG, ROLES, COL, ACTIONS } = require('./config');
+const { CONFIG, ROLES, COL, ACTIONS, NOTIFICATION_TYPES } = require('./config');
 const {
   now_, today_, formatDate_, parseDisplayDate_, daysUntilDate_,
   escHtml_, looksLikeUrl_, linkifyText_, absUrl_,
@@ -35,11 +35,14 @@ let dataCache = null;
    only that user is notified. */
 function notifyDivisionalHeads_(type, title, body, link, excludeEmail) {
   const exclude = String(excludeEmail || '').toLowerCase().trim();
-  const notify = require('./notifications');
+  const notifications = require('./notifications');
   const allEmails = auth.getDivisionalHeadEmails_();
   allEmails.forEach(function (email) {
     if (exclude && email === exclude) return;
-    try { notify.notify_(email, type, title, body, link); } catch (err) {}
+    // Use appendNotification_ (synchronous) instead of notify_ (async
+    // via runWithLock_) so the insert completes before the outer lock
+    // in addRecord_/updateRecord_ finishes.
+    try { notifications.appendNotification_(email, type, title, body, link); } catch (err) {}
   });
 }
 
@@ -61,7 +64,7 @@ function notifyResponsibilityUser_(type, title, body, link, responsibility, excl
     if (target) {
       const email = String(target.primaryEmail || target.email || '').toLowerCase().trim();
       if (email && email !== exclude) {
-        try { require('./notifications').notify_(email, type, title, body, link); } catch (err) {}
+        try { require('./notifications').appendNotification_(email, type, title, body, link); } catch (err) {}
       }
     }
   }
