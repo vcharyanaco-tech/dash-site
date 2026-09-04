@@ -27,6 +27,49 @@ function renderSettings() {
     usersAdmin.classList.add('hidden');
     if (userActivityCard) userActivityCard.classList.add('hidden');
   }
+
+  // Fathom API key — admin only
+  var fathomCard = getEl('fathomSettingsCard');
+  if (fathomCard) {
+    if (appState.isAdmin) {
+      fathomCard.classList.remove('hidden');
+      ApiService.getFathomStatus().then(function (data) {
+        var f = data && data.fathom;
+        var st = getEl('fathomSettingsStatus');
+        if (!f) return;
+        if (f.configured) {
+          if (st) { st.textContent = '\u2713 Configured'; st.style.color = 'var(--success, #16a34a)'; }
+        } else if (f.enabled) {
+          if (st) { st.textContent = 'Not configured — paste your key above'; st.style.color = 'var(--warning, #d97706)'; }
+        } else {
+          if (st) { st.textContent = 'Fathom integration is disabled on the server'; st.style.color = 'var(--muted)'; }
+        }
+      }).catch(function () {});
+    } else {
+      fathomCard.classList.add('hidden');
+    }
+  }
+}
+
+function saveSettingsFathomKey() {
+  var input = getEl('settingsFathomApiKey');
+  var key = input ? input.value.trim() : '';
+  if (!key) { showToast('Paste your Fathom API key first.', 'warning'); return; }
+  showOverlay('Saving Fathom API key…');
+  ApiService.setFathomApiKey(key).then(function (res) {
+    hideOverlay();
+    if (res && res.ok) {
+      if (input) input.value = '';
+      showToast('Fathom API key saved.', 'success');
+      renderSettings();
+    } else {
+      showToast((res && res.message) || 'Could not save the key.', 'error');
+    }
+  }).catch(function (err) {
+    hideOverlay();
+    if (handleServerFailure(err)) return;
+    showToast('Error saving key: ' + (err.message || err), 'error');
+  });
 }
 
 function loadUsers() {

@@ -110,6 +110,11 @@ const dispatch = {
   setFathomApiKey: function (args) { return enterprise.setFathomApiKey(A(args, 0), A(args, 1)); },
   listFathomMeetings: function (args) { return enterprise.listFathomMeetings(A(args, 0), A(args, 1)); },
   getFathomMeetingContent: function (args) { return enterprise.getFathomMeetingContent(A(args, 0), A(args, 1)); },
+  getRecordingDownloadLink: function (args) { return enterprise.getRecordingDownloadLink(A(args, 0), A(args, 1)); },
+  listFathomUsers: function (args) { return enterprise.listFathomUsers(A(args, 0)); },
+  searchFathomMeetings: function (args) { return enterprise.searchFathomMeetings(A(args, 0), A(args, 1)); },
+  getFathomMeetingStats: function (args) { return enterprise.getFathomMeetingStats(A(args, 0)); },
+  bulkGetRecordingDownloadLinks: function (args) { return enterprise.bulkGetRecordingDownloadLinks(A(args, 0), A(args, 1)); },
   getEnterpriseFrontendConfig: function (args) { return enterprise.getEnterpriseFrontendConfig(A(args, 0)); },
 
   setOpenRouterApiKey: function (args) { return enterprise.setOpenRouterApiKey(A(args, 0), A(args, 1)); },

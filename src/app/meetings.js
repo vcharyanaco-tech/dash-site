@@ -467,11 +467,23 @@ function renderMeetingMinutes(data) {
   const actions = Array.isArray(minutes.actionItems) ? minutes.actionItems : [];
   const risks = Array.isArray(minutes.risks) ? minutes.risks : [];
   const meetingTitle = String((data && data.title) || 'Review meeting');
+  const highlights = Array.isArray(data && data.highlights) ? data.highlights : [];
   let html = '<div class="meeting-notes-wrap">';
   if (data && data.fathomUrl) {
     html += '<div class="meeting-notes-drive">' +
       '<span>&#128279; Fathom recording: <a href="' + escapeHtml(data.fathomUrl) + '" target="_blank" rel="noopener noreferrer">Open in Fathom</a></span>' +
       '</div>';
+  }
+  if (highlights.length) {
+    html += '<div class="card-ai-head"><span class="card-ai-title">Highlights (' + highlights.length + ')</span></div>' +
+      '<div class="meeting-notes-section"><ul class="meeting-notes-list">';
+    highlights.forEach(function (h) {
+      const title = escapeHtml(h.title || 'Highlight');
+      const note = h.note ? '<br><small>' + escapeHtml(h.note) + '</small>' : '';
+      const time = h.startTime ? ' (' + formatTimestamp(h.startTime) + (h.endTime ? ' - ' + formatTimestamp(h.endTime) : '') + ')' : '';
+      html += '<li><strong>' + title + '</strong>' + time + note + '</li>';
+    });
+    html += '</ul></div>';
   }
   if (summary) {
     html += '<div class="card-ai-head"><span class="card-ai-title">Summary</span></div>' +
@@ -627,10 +639,16 @@ function initFathomPanel() {
   const list = getEl('fathomList');
   const keyRow = getEl('fathomKeyRow');
   const loadBtn = getEl('fathomLoadBtn');
+  const statsBtn = getEl('fathomStatsBtn');
+  const bulkDownloadBtn = getEl('fathomBulkDownloadBtn');
   const status = getEl('fathomStatus');
+  const searchInput = getEl('fathomSearchInput');
   if (list) list.innerHTML = '';
   if (keyRow) keyRow.classList.add('hidden');
   if (loadBtn) loadBtn.disabled = false;
+  if (statsBtn) statsBtn.style.display = 'none';
+  if (bulkDownloadBtn) bulkDownloadBtn.style.display = 'none';
+  if (searchInput) searchInput.value = '';
   if (status) status.textContent = '';
   ApiService.getFathomStatus().then(function (data) {
     const f = data && data.fathom;
@@ -647,6 +665,8 @@ function initFathomPanel() {
       return;
     }
     if (loadBtn) loadBtn.style.display = 'inline-flex';
+    if (statsBtn) statsBtn.style.display = 'inline-flex';
+    if (bulkDownloadBtn) bulkDownloadBtn.style.display = 'inline-flex';
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
     if (status) status.textContent = err && err.message ? err.message : String(err);
@@ -710,13 +730,22 @@ function renderFathomMeetingList(items) {
   items.forEach(function (m, i) {
     const date = m.createdAt ? formatTimestamp(m.createdAt) : '';
     const actionCount = (m.actionItems && m.actionItems.length) || 0;
+    const highlightCount = (m.highlights && m.highlights.length) || 0;
+    const sharedWith = m.sharedWith || 'none';
+    const meetingUrl = m.meetingUrl || '';
     html += '<div class="fathom-meeting-item" role="button" tabindex="0" onclick="viewFathomMeeting(' + i + ')">' +
       '<div class="fathom-meeting-title">' + escapeHtml(m.title) + '</div>' +
       '<div class="fathom-meeting-meta">' + escapeHtml(date) +
       (m.recordedBy ? ' &middot; ' + escapeHtml(m.recordedBy) : '') +
-      (actionCount ? ' &middot; ' + actionCount + ' action item(s)' : '') + '</div>' +
+      (actionCount ? ' &middot; ' + actionCount + ' action item(s)' : '') +
+      (highlightCount ? ' &middot; ' + highlightCount + ' highlight(s)' : '') +
+      (sharedWith !== 'none' ? ' &middot; Shared: ' + escapeHtml(sharedWith) : '') + '</div>' +
+      (meetingUrl ? '<div class="fathom-meeting-meta"><a href="' + escapeHtml(meetingUrl) + '" target="_blank" rel="noopener noreferrer">Open in Fathom</a></div>' : '') +
       (m.summary ? '<div class="fathom-meeting-summary">' + escapeHtml(m.summary.substring(0, 220)) + '</div>' : '') +
+      '<div class="fathom-meeting-actions">' +
       '<span class="btn btn-small btn-secondary" style="pointer-events:none;">View notes</span>' +
+      (m.recordingId ? '<button class="btn btn-small btn-ghost" type="button" onclick="event.stopPropagation(); downloadRecording(\'' + escapeAttr(m.recordingId) + '\')">Download</button>' : '') +
+      '</div>' +
       '</div>';
   });
   html += '</div>';
@@ -741,6 +770,8 @@ function viewFathomMeeting(index) {
         dueDate: ''
       };
     });
+    // Merge highlights from both the meeting card and the content response
+    const highlights = (data.highlights && data.highlights.length) ? data.highlights : (m.highlights || []);
     renderMeetingMinutes({
       title: m.title,
       minutes: {
@@ -751,10 +782,150 @@ function viewFathomMeeting(index) {
       },
       transcript: data.transcript || '',
       transcriptChars: data.transcriptChars || 0,
-      fathomUrl: m.shareUrl || m.url || ''
+      fathomUrl: m.shareUrl || m.url || m.meetingUrl || '',
+      highlights: highlights
     });
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
     renderMeetingMinutesError(err && err.message ? err.message : String(err));
+  });
+}
+
+function downloadRecording(recordingId) {
+  if (!recordingId) return;
+  showOverlay('Requesting download link\u2026');
+  ApiService.getRecordingDownloadLink(recordingId).then(function (data) {
+    hideOverlay();
+    if (!data || data.success !== true) {
+      showToast((data && data.message) || 'Could not get download link.', 'error');
+      return;
+    }
+    if (data.downloadUrl) {
+      window.open(data.downloadUrl, '_blank');
+      showToast('Download link opened (valid for ~24 hours).', 'success');
+    } else {
+      showToast('No download URL returned.', 'warning');
+    }
+  }).catch(function (err) {
+    hideOverlay();
+    if (handleServerFailure(err)) return;
+    showToast('Download failed: ' + (err && err.message ? err.message : String(err)), 'error');
+  });
+}
+
+// Additional Fathom API features
+
+function searchFathomMeetings() {
+  const queryEl = getEl('fathomSearchInput');
+  const query = queryEl ? queryEl.value.trim() : '';
+  if (!query) {
+    // If no query, just reload all meetings
+    loadFathomMeetings();
+    return;
+  }
+  
+  const list = getEl('fathomList');
+  const status = getEl('fathomStatus');
+  if (list) list.innerHTML = '<p class="meeting-notes-hint" style="padding:6px 0;">Searching Fathom meetings\u2026</p>';
+  
+  ApiService.searchFathomMeetings({ query: query }).then(function (data) {
+    if (!data || data.success !== true) {
+      if (status) status.textContent = (data && data.message) || 'Search failed.';
+      return;
+    }
+    fathomMeetingsCache = data.items || [];
+    renderFathomMeetingList(fathomMeetingsCache);
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+    if (status) status.textContent = err && err.message ? err.message : String(err);
+  });
+}
+
+function showFathomStats() {
+  const status = getEl('fathomStatus');
+  if (status) status.textContent = 'Loading Fathom statistics\u2026';
+  
+  ApiService.getFathomMeetingStats().then(function (data) {
+    if (!data || data.success !== true) {
+      if (status) status.textContent = (data && data.message) || 'Could not load statistics.';
+      return;
+    }
+    
+    const stats = data.stats || {};
+    const statsHtml = '<div class="fathom-stats" style="padding:10px; background:var(--surface-secondary); border-radius:8px; margin-top:10px;">' +
+      '<div style="font-weight:600; margin-bottom:10px;">Fathom Meeting Statistics</div>' +
+      '<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">' +
+      '<div><strong>' + (stats.totalMeetings || 0) + '</strong><br>Total meetings</div>' +
+      '<div><strong>' + (stats.totalActionItems || 0) + '</strong><br>Total action items</div>' +
+      '<div><strong>' + (stats.averageActionItemsPerMeeting || 0) + '</strong><br>Avg action items/meeting</div>' +
+      '</div>';
+    
+    // Show recorded by breakdown
+    if (stats.recordedByCounts && Object.keys(stats.recordedByCounts).length) {
+      statsHtml += '<div style="margin-top:10px;"><strong>Recorded by:</strong><ul style="margin:5px 0 0 20px;">';
+      Object.keys(stats.recordedByCounts).forEach(function (name) {
+        statsHtml += '<li>' + escapeHtml(name) + ': ' + stats.recordedByCounts[name] + ' meeting(s)</li>';
+      });
+      statsHtml += '</ul></div>';
+    }
+    
+    statsHtml += '</div>';
+    
+    // Insert stats before the meeting list
+    const list = getEl('fathomList');
+    if (list) {
+      list.insertAdjacentHTML('afterbegin', statsHtml);
+    }
+    if (status) status.textContent = 'Statistics loaded.';
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+    if (status) status.textContent = err && err.message ? err.message : String(err);
+  });
+}
+
+function bulkDownloadRecordings() {
+  if (!fathomMeetingsCache.length) {
+    showToast('No meetings loaded. Load meetings first.', 'warning');
+    return;
+  }
+  
+  const recordingIds = fathomMeetingsCache
+    .filter(function (m) { return m.recordingId; })
+    .map(function (m) { return m.recordingId; });
+  
+  if (!recordingIds.length) {
+    showToast('No recordings available for download.', 'warning');
+    return;
+  }
+  
+  showOverlay('Requesting download links for ' + recordingIds.length + ' recording(s)\u2026');
+  
+  ApiService.bulkGetRecordingDownloadLinks(recordingIds).then(function (data) {
+    hideOverlay();
+    if (!data || data.success !== true) {
+      showToast((data && data.message) || 'Bulk download failed.', 'error');
+      return;
+    }
+    
+    const results = data.results || [];
+    const errors = data.errors || [];
+    
+    if (results.length) {
+      // Open download links in new tabs (browser may block popups)
+      results.forEach(function (r, i) {
+        setTimeout(function () {
+          if (r.downloadUrl) window.open(r.downloadUrl, '_blank');
+        }, i * 500); // Stagger to avoid popup blocker
+      });
+      showToast('Opened ' + results.length + ' download link(s). Links valid for ~24 hours.', 'success');
+    }
+    
+    if (errors.length) {
+      showToast(errors.length + ' recording(s) failed to get download links.', 'warning');
+    }
+  }).catch(function (err) {
+    hideOverlay();
+    if (handleServerFailure(err)) return;
+    showToast('Bulk download failed: ' + (err && err.message ? err.message : String(err)), 'error');
   });
 }

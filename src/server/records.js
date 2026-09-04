@@ -9,7 +9,7 @@
  */
 
 const { db, getAppSettings, cacheGetTTL, cachePut } = require('./db');
-const { CONFIG, ROLES, COL, ACTIONS } = require('./config');
+const { CONFIG, ROLES, COL, ACTIONS, NOTIFICATION_TYPES } = require('./config');
 const {
   now_, today_, formatDate_, parseDisplayDate_, daysUntilDate_,
   escHtml_, looksLikeUrl_, linkifyText_, absUrl_,
@@ -27,16 +27,47 @@ const FIELD_KEYS = ['id', 'sector', 'description', 'entryDate', 'action', 'respo
 
 let dataCache = null;
 
-/* Notify all Divisional Head users (do_* username) when a record with
-   'All Divisional Heads' responsibility is created or updated. */
+/* Notify Divisional Head users (do_* username) when a record with
+   'All Divisional Heads' or a specific do_* responsibility is created
+   or updated.  When the responsibility is a group phrase (e.g.
+   'All Divisional Heads') every do_* user is notified.  When the
+   responsibility is a specific do_* username (e.g. 'do_gurugram'),
+   only that user is notified. */
 function notifyDivisionalHeads_(type, title, body, link, excludeEmail) {
   const exclude = String(excludeEmail || '').toLowerCase().trim();
-  const emails = auth.getDivisionalHeadEmails_();
-  const notify = require('./notifications');
-  emails.forEach(function (email) {
+  const notifications = require('./notifications');
+  const allEmails = auth.getDivisionalHeadEmails_();
+  allEmails.forEach(function (email) {
     if (exclude && email === exclude) return;
-    try { notify.notify_(email, type, title, body, link); } catch (err) {}
+    // Use appendNotification_ (synchronous) instead of notify_ (async
+    // via runWithLock_) so the insert completes before the outer lock
+    // in addRecord_/updateRecord_ finishes.
+    try { notifications.appendNotification_(email, type, title, body, link); } catch (err) {}
   });
+}
+
+/* Notify a specific do_* user when a record targets them individually.
+   Falls back to notifyDivisionalHeads_ for group responsibilities. */
+function notifyResponsibilityUser_(type, title, body, link, responsibility, excludeEmail) {
+  const r = String(responsibility || '').trim().toLowerCase();
+  if (r === 'all divisional heads' || r === 'all postal divisional heads') {
+    notifyDivisionalHeads_(type, title, body, link, excludeEmail);
+    return;
+  }
+  // Individual do_* username — notify that specific user only.
+  if (r.indexOf('do_') === 0) {
+    const exclude = String(excludeEmail || '').toLowerCase().trim();
+    const users = auth.listUserRecords_();
+    const target = users.find(function (u) {
+      return String(u.username || '').trim().toLowerCase() === r;
+    });
+    if (target) {
+      const email = String(target.primaryEmail || target.email || '').toLowerCase().trim();
+      if (email && email !== exclude) {
+        try { require('./notifications').appendNotification_(email, type, title, body, link); } catch (err) {}
+      }
+    }
+  }
 }
 
 function bumpDataGeneration_() {
@@ -359,8 +390,12 @@ function responsibilityMatchesOffice_(responsibility, office) {
 function responsibilityMatchesUser_(responsibility, user) {
   const r = String(responsibility || '').trim().toLowerCase();
   const username = String((user && user.username) || '').trim().toLowerCase();
-  if (r === 'all postal divisional heads') return username.indexOf('do_') === 0;
-  if (r === 'all divisional heads') return username.indexOf('rms_') === 0;
+  // Both 'all divisional heads' and 'all postal divisional heads' refer to
+  // do_* users (postal divisional heads).  Previously 'all divisional heads'
+  // incorrectly matched rms_* users.
+  if (r === 'all divisional heads' || r === 'all postal divisional heads') return username.indexOf('do_') === 0;
+  // Individual do_* username matches the responsibility directly.
+  if (username.indexOf('do_') === 0 && r === username) return true;
   return responsibilityMatchesOffice_(responsibility, user && user.office);
 }
 
@@ -501,14 +536,12 @@ function addRecord_(item, token) {
       require('./notifications').notifyStaffLocked_('record', 'New item added', 'Record #' + id + ' · ' + (normalized.sector || '') + (normalized.description ? ' — ' + normalized.description : ''), '', editor.email);
     } catch (err) {}
 
-    // When the record targets 'All Divisional Heads', fan out an in-app
-    // notification to every do_* user so they are individually aware.
+    // Fan out an in-app notification to do_* users whose responsibility
+    // matches the card ('All Divisional Heads' group or individual do_*).
     try {
-      if (String(normalized.responsibility || '').trim().toLowerCase() === 'all divisional heads') {
-        notifyDivisionalHeads_(NOTIFICATION_TYPES.RECORD, 'New item for you',
-          'Record #' + id + ' · ' + (normalized.sector || '') + (normalized.description ? ' — ' + normalized.description : ''),
-          '', editor.email);
-      }
+      notifyResponsibilityUser_(NOTIFICATION_TYPES.RECORD, 'New item for you',
+        'Record #' + id + ' · ' + (normalized.sector || '') + (normalized.description ? ' — ' + normalized.description : ''),
+        '', normalized.responsibility, editor.email);
     } catch (err) {}
 
     return getData();
@@ -567,14 +600,12 @@ function updateRecord_(item, token) {
       require('./notifications').notifyStaffLocked_('record', 'Record updated', 'Record #' + normalized.id + ' · ' + (normalized.sector || '') + (normalized.description ? ' — ' + normalized.description : ''), '', editor.email);
     } catch (err) {}
 
-    // When the record targets 'All Divisional Heads', fan out an in-app
-    // notification to every do_* user so they are individually aware.
+    // Fan out an in-app notification to do_* users whose responsibility
+    // matches the card ('All Divisional Heads' group or individual do_*).
     try {
-      if (String(normalized.responsibility || '').trim().toLowerCase() === 'all divisional heads') {
-        notifyDivisionalHeads_(NOTIFICATION_TYPES.RECORD, 'Record updated for you',
-          'Record #' + normalized.id + ' · ' + (normalized.sector || '') + (normalized.description ? ' — ' + normalized.description : ''),
-          '', editor.email);
-      }
+      notifyResponsibilityUser_(NOTIFICATION_TYPES.RECORD, 'Record updated for you',
+        'Record #' + normalized.id + ' · ' + (normalized.sector || '') + (normalized.description ? ' — ' + normalized.description : ''),
+        '', normalized.responsibility, editor.email);
     } catch (err) {}
 
     return getData();

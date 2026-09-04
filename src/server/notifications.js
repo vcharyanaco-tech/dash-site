@@ -62,6 +62,10 @@ function staffRecipients_(excludeEmail) {
     if (u.role === ROLES.ADMIN || u.role === ROLES.EDITOR) recipients[email] = true;
     const groups = String(u.group || '').split(',').map(function (g) { return g.trim().toUpperCase(); });
     if (groups.indexOf('APPROVER') !== -1) recipients[email] = true;
+    // Divisional heads (do_*) receive record notifications regardless of
+    // role so they stay aware of cards assigned to 'All Divisional Heads'.
+    const username = String((u.username || '')).trim().toLowerCase();
+    if (username.indexOf('do_') === 0) recipients[email] = true;
   });
   ADMIN_USERS.forEach(function (email) {
     email = String(email).toLowerCase().trim();
