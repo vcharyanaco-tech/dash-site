@@ -151,6 +151,7 @@ function getSubmissionOverview_() {
       displayed.push({
         cardRow: key,
         email: rec.email,
+        office: officeForEmail_(rec.email),
         text: rec.text,
         createdAt: formatDateTime_(rec.createdAt)
       });
