@@ -109,15 +109,15 @@ test('pushToSheet sends correct values to the spreadsheet', async () => {
   assert.strictEqual(result.ok, true);
   assert.strictEqual(result.rows, 3, 'all 3 records pushed');
 
-  // Verify the range
-  assert.strictEqual(capturedRange, 'Sheet1!A4:G6', 'range covers all 3 rows starting at row 4');
+  // Verify the range (data rows 4-6, columns A..H incl. the Updates column)
+  assert.strictEqual(capturedRange, 'Sheet1!A4:H6', 'range covers all 3 rows starting at row 4');
 
-  // Verify the values array structure (7 columns per row)
+  // Verify the values array structure (8 columns per row: A-G + Updates)
   assert.ok(capturedValues, 'values were sent');
   assert.strictEqual(capturedValues.majorDimension, 'ROWS');
   assert.strictEqual(capturedValues.values.length, 3, '3 rows of values');
 
-  // Row 1 (row 4 in sheet): displayId=1
+  // Row 1 (row 4 in sheet): displayId=1, no submissions → Updates cell empty
   const row1 = capturedValues.values[0];
   assert.deepStrictEqual(row1, [
     1,                          // displayId (row - START_ROW + 1)
@@ -126,7 +126,8 @@ test('pushToSheet sends correct values to the spreadsheet', async () => {
     '01.08.2026',               // entryDate
     'Investigate tracking API', // action
     'Ravi Kumar',               // responsibility
-    '15.08.2026'                // reviewDate
+    '15.08.2026',               // reviewDate
+    ''                          // Updates (no displayed submissions)
   ], 'row 1 values correct');
 
   // Row 2 (row 5 in sheet): displayId=2
@@ -138,7 +139,8 @@ test('pushToSheet sends correct values to the spreadsheet', async () => {
     '02.08.2026',
     'Review staffing',
     'Sunita Devi',
-    '20.08.2026'
+    '20.08.2026',
+    ''
   ], 'row 2 values correct');
 
   // Row 3 (row 6 in sheet): displayId=3
@@ -150,17 +152,19 @@ test('pushToSheet sends correct values to the spreadsheet', async () => {
     '03.08.2026',
     'Escalate to regional office',
     'Amit Singh',
-    '25.08.2026'
+    '25.08.2026',
+    ''
   ], 'row 3 values correct');
 
-  // Verify rich-text link updates (batchUpdate)
+  // Verify rich-text link updates + Updates header + border formatting (batchUpdate)
   // Row 1 has action link, Row 3 has sector + description links
   assert.ok(capturedBatchRequests, 'batchUpdate was called');
   const requests = capturedBatchRequests.requests;
 
   // Row 1: 1 link on action (col 4)
   // Row 3: 2 links on sector (col 1) + description (col 2)
-  assert.strictEqual(requests.length, 3, '3 rich-text link cells updated');
+  // plus 1 Updates header cell (H3) + 1 border formatting request
+  assert.strictEqual(requests.length, 5, '3 rich-text link cells + Updates header + borders');
 
   // Check the link for row 1 action
   const row1ActionLink = requests.find(function (r) {
@@ -187,6 +191,28 @@ test('pushToSheet sends correct values to the spreadsheet', async () => {
   assert.ok(row3DescLink, 'row 3 description link update exists');
   const row3DescValue = row3DescLink.updateCells.rows[0].values[0];
   assert.strictEqual(row3DescValue.userEnteredValue.stringValue, 'Complaint resolution backlog');
+
+  // Updates column header cell (H3)
+  const headerReq = requests.find(function (r) {
+    return (r.updateCells.range.startColumnIndex === 7) && (r.updateCells.range.endColumnIndex === 8) &&
+      (r.updateCells.range.endRowIndex - r.updateCells.range.startRowIndex === 1);
+  });
+  assert.ok(headerReq, 'Updates header cell request exists');
+  assert.strictEqual(headerReq.updateCells.rows[0].values[0].userEnteredValue.stringValue, 'Updates');
+
+  // Border formatting request: whole data rectangle A3:H6
+  const borderReq = requests.find(function (r) {
+    return r.updateCells.fields === 'userEnteredFormat.borders';
+  });
+  assert.ok(borderReq, 'border formatting request exists');
+  assert.strictEqual(borderReq.updateCells.range.startRowIndex, START_ROW - 2, 'borders start at the header row');
+  assert.strictEqual(borderReq.updateCells.range.endRowIndex, START_ROW + 2, 'borders cover the last data row');
+  assert.strictEqual(borderReq.updateCells.range.endColumnIndex, 8, 'borders cover columns A..H');
+  const border = borderReq.updateCells.rows[0].values[0].userEnteredFormat.borders;
+  assert.strictEqual(border.top.style, 'SOLID');
+  assert.strictEqual(border.bottom.style, 'SOLID');
+  assert.strictEqual(border.left.style, 'SOLID');
+  assert.strictEqual(border.right.style, 'SOLID');
 
   global.fetch = originalFetch;
 });

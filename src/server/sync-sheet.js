@@ -432,9 +432,35 @@ async function pullFromSheet() {
 
 // Field key -> 0-based column in the records sheet (A=id … G=reviewDate).
 const PUSH_FIELD_COLS = { sector: 1, description: 2, action: 4 };
+// The Updates column (H) is appended to each record row; border formatting is
+// applied across the whole data rectangle so any column that gets added later
+// automatically matches the existing grid style.
+const PUSH_UPDATES_COL = 7;
 
 function b64url(buf) {
   return Buffer.from(buf).toString('base64url');
+}
+
+// 'dd.MM.yyyy HH:mm' from a JS epoch, matching the dashboard's display format.
+function formatSheetTs_(ts) {
+  const d = new Date(Number(ts));
+  if (isNaN(d.getTime())) return '';
+  const p = function (n) { return String(n).padStart(2, '0'); };
+  return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '.' + d.getFullYear() +
+    ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+// One plain-text block per record card: every displayed submission, newest
+// first, prefixed with its office (or the author's email when no office) and
+// timestamp. Joined with newlines so a single cell shows all updates.
+function updatesCell_(subsByRow, row, officeForEmail) {
+  const list = subsByRow[row] || [];
+  if (!list.length) return '';
+  return list.map(function (s) {
+    const office = String(officeForEmail(s.email) || '').trim();
+    const who = office || s.email;
+    return '- ' + formatSheetTs_(s.createdAt) + ' [' + who + '] ' + String(s.text || '').trim();
+  }).join('\n');
 }
 
 // Signs an RS256 JWT for a Google service account and exchanges it for an
@@ -541,6 +567,15 @@ async function pushToSheet() {
   const rows = db.prepare('SELECT * FROM records ORDER BY row ASC').all();
   if (!rows.length) return { pushed: true, ok: true, rows: 0, reason: 'no records to push' };
 
+  const submissions = require('./submissions');
+  const subsByRow = {};
+  db.prepare('SELECT card_row, email, text, created_at FROM submissions WHERE displayed = 1 ORDER BY created_at DESC').all()
+    .forEach(function (s) {
+      const key = Number(s.card_row);
+      if (!subsByRow[key]) subsByRow[key] = [];
+      subsByRow[key].push(s);
+    });
+
   const values = rows.map(function (r) {
     return [
       Number(r.row) - START_ROW + 1,
@@ -549,11 +584,12 @@ async function pushToSheet() {
       String(r.entry_date || ''),
       String(r.action || ''),
       String(r.responsibility || ''),
-      String(r.review_date || '')
+      String(r.review_date || ''),
+      updatesCell_(subsByRow, Number(r.row), submissions.officeForEmail)
     ];
   });
   const lastRow = START_ROW + values.length - 1;
-  const range = SHEET_NAME + '!A' + START_ROW + ':G' + lastRow;
+  const range = SHEET_NAME + '!A' + START_ROW + ':H' + lastRow;
   const putUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + SOURCE_SPREADSHEET_ID +
     '/values/' + encodeURIComponent(range) + '?valueInputOption=RAW&access_token=' + encodeURIComponent(token);
   const putResp = await fetch(putUrl, {
@@ -601,20 +637,71 @@ async function pushToSheet() {
     });
   });
 
-  if (requests.length) {
-    const batchUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + SOURCE_SPREADSHEET_ID +
-      ':batchUpdate?access_token=' + encodeURIComponent(token);
-    const batchResp = await fetch(batchUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requests: requests })
-    });
-    if (!batchResp.ok) {
-      throw new Error('batchUpdate ' + batchResp.status + ': ' + (await batchResp.text()).slice(0, 300));
+  // Header label for the new Updates column (H).
+  requests.push({
+    updateCells: {
+      range: {
+        sheetId: sheetId,
+        startRowIndex: START_ROW - 2,
+        endRowIndex: START_ROW - 1,
+        startColumnIndex: PUSH_UPDATES_COL,
+        endColumnIndex: PUSH_UPDATES_COL + 1
+      },
+      rows: [{ values: [{ userEnteredValue: { stringValue: 'Updates' } }] }],
+      fields: 'userEnteredValue'
     }
+  });
+
+  // Borders across the whole data rectangle (header row + all data rows,
+  // columns A..H). Any field/column added later is automatically bordered to
+  // match the existing grid instead of being left unbordered.
+  const borderRequest = {
+    updateCells: {
+      range: {
+        sheetId: sheetId,
+        startRowIndex: START_ROW - 2,
+        endRowIndex: lastRow,
+        startColumnIndex: 0,
+        endColumnIndex: PUSH_UPDATES_COL + 1
+      },
+      rows: [{
+        values: [{
+          userEnteredFormat: {
+            borders: {
+              top: { style: 'SOLID' },
+              bottom: { style: 'SOLID' },
+              left: { style: 'SOLID' },
+              right: { style: 'SOLID' },
+              innerHorizontal: { style: 'SOLID' },
+              innerVertical: { style: 'SOLID' }
+            }
+          }
+        }]
+      }],
+      fields: 'userEnteredFormat.borders'
+    }
+  };
+  requests.push(borderRequest);
+
+  const batchUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + SOURCE_SPREADSHEET_ID +
+    ':batchUpdate?access_token=' + encodeURIComponent(token);
+  const batchResp = await fetch(batchUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests: requests })
+  });
+  if (!batchResp.ok) {
+    throw new Error('batchUpdate ' + batchResp.status + ': ' + (await batchResp.text()).slice(0, 300));
   }
 
-  return { pushed: true, ok: true, rows: rows.length, linkedCells: requests.length };
+  return {
+    pushed: true,
+    ok: true,
+    rows: rows.length,
+    linkedCells: requests.length - 2,
+    headers: 1,
+    borders: 1
+  };
 }
 
 module.exports = {

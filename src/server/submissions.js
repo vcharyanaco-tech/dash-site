@@ -309,6 +309,7 @@ module.exports = {
   deleteSubmission,
   markAllSubmissionsRead,
   toggleSubmissionDisplay,
+  officeForEmail: officeForEmail_,
   // Persist promptly (see records.js bumpDataGeneration_): the KV snapshot is
   // what Render restores on boot, so submission writes must reach it within
   // seconds, not up to the auto-sync interval.
