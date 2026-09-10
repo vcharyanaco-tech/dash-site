@@ -1,6 +1,6 @@
 /**
  * start.js — container entrypoint.
- * Boots the server and prints any startup error to stderr so Railway/Render
+ * Boots the server and prints any startup error to stderr so hosting-provider
  * logs reveal the real cause (native module load, db open, port bind) instead
  * of a silent exit that fails the healthcheck.
  */

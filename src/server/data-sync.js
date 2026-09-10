@@ -70,7 +70,7 @@ async function putBuf(url, buf) {
  *
  *  IMPORTANT: only restores when the local DB file is ABSENT (ephemeral
  *  disk, e.g. Render free after a redeploy). NEVER overwrite an existing
- *  DB: hosts with a persistent volume (Railway) run rolling deploys where
+ *  DB: hosts with a persistent volume run rolling deploys where
  *  the previous instance still has the file open in WAL mode — writing
  *  over it corrupts the database (observed 2026-08-14). */
 async function restoreData() {

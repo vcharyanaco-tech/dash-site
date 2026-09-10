@@ -2,14 +2,14 @@
 
 **Goal:** Replace the GAS backend at `dashboardharyana.site` with `dash-site`
 (the Node/SQLite port of the GAS backend plus the website) — built and tested on
-a separate Railway host first, then cut over once finalized, keeping GAS as a
-fallback during the soak period.
+a separate hosted backend first, then cut over once finalized, keeping GAS as a
+fallback during the soak period. Current hosting is Render (`render.yaml`); the
+former Railway staging host was decommissioned and all references removed.
 
-**Current status (2026-08-14): ✅ CUT OVER.** `dashboardharyana.site` is now
-served by the Node/SQLite backend through the Cloudflare Worker `dashv1-proxy`
-(SERVER_ORIGIN → Railway). The current dash-site frontend is served through the
-Worker too. GAS remains deployed but is only a manual fallback during the soak
-phase (Phase 5 pending).
+**Current status (2026-09-10): ✅ CUT OVER (Render).** `dashboardharyana.site`
+is served by the Node/SQLite backend through the Cloudflare Worker
+`dashv1-proxy` (SERVER_ORIGIN → the Render web service). The dash-site
+frontend is served through the Worker too.
 
 **Hard constraint (current):** No regressions on the live domain. During the
 soak phase the GAS Apps Script project stays untouched as a fallback; no DNS /
@@ -44,13 +44,14 @@ is kept per owner decision, but Pages stays pinned to the `*.github.io` URL).
    auth, tasks, reports, notifications behave identically to the live GAS app.
 4. Document any feature gaps found (none expected from code review).
 
-### Phase 1 — Stand up a separate staging host for `dash-site` (Railway) ✅ DONE
-> Staging is live at `https://dash-site-production-07cc.up.railway.app` and
-> serves the full site: `/api/health` ok, `/` landing page, `/app.html`
-> dashboard, and `assets/styles.css` + `assets/site.css` all 200. The
-> Dockerfile bundles the repo-root frontend into the image
-> (`DASH_STATIC_ROOT=/app/www`) so one Railway container serves both API and
-> website. Data (`data/`, SQLite + uploads) persists on a mounted volume.
+### Phase 1 — Stand up a staging host for `dash-site` ✅ DONE
+> The staging service (previously hosted on Railway; decommissioned and removed
+> from this repo) is now deployed from this repo via `render.yaml` and serves
+> the full site: `/api/health` ok, `/` landing page, `/app.html` dashboard, and
+> `assets/styles.css` + `assets/site.css` all 200. The Dockerfile bundles the
+> repo-root frontend into the image (`DASH_STATIC_ROOT=/app/www`) so one
+> container serves both API and website. Data (`data/`, SQLite + uploads)
+> persists via the KV backup bridge (Render free has an ephemeral filesystem).
 
 ### Phase 2 — Test & build on the staging host (iterate freely) ✅ DONE
 > Completed on 2026-08-13/14. Parity exercised via the API dispatcher and a
@@ -71,8 +72,8 @@ is kept per owner decision, but Pages stays pinned to the `*.github.io` URL).
 > verification during soak.)
 
 ### Phase 4 — Cutover ✅ EXECUTED (2026-08-13) — **was** 🔒 DEFERRED
-1. Set `SERVER_ORIGIN` (Worker secret) to the final hosted server URL
-   (`https://dash-site-production-07cc.up.railway.app`).
+1. Set `SERVER_ORIGIN` (Worker secret) to the final hosted server URL (the
+   Render service URL).
 2. Re-pointed the Cloudflare Worker `dashv1-proxy` — routes `/api*`,
    `/macros/*`, `/static/*` now forward to the Node server via
    `env.SERVER_ORIGIN`; enterprise routes (`/api/ai-insights`,
@@ -119,7 +120,7 @@ is kept per owner decision, but Pages stays pinned to the `*.github.io` URL).
 >   triggers. The origin spreadsheet was **kept** (it is still the manual
 >   "Sync from Google Sheet" source; archive it in Drive at the owner's call).
 
-> Note: file uploads live on disk under `data/uploads/` on the Railway volume.
+> Note: file uploads live on disk under `data/uploads/` on the host volume.
 > On serverless hosts, move them to R2 / object storage and update
 > `documents.resolveDocumentFile`.
 
@@ -144,4 +145,4 @@ is kept per owner decision, but Pages stays pinned to the `*.github.io` URL).
 - The spreadsheet's "review date background colour" is preserved as the
   `review_bg` column, so review-status logic is byte-for-byte equivalent.
 - The `SESSION_EXPORT_*.md` files record each session's work and the runbook
-  details (Railway project/env/service IDs, token refresh, SMTP vars).
+  details (service IDs, token refresh, SMTP vars).

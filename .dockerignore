@@ -9,4 +9,3 @@ data
 **/*.log
 .wrangler
 .dockerignore
-.railwayignore
