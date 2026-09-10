@@ -332,7 +332,7 @@ function buildCardHtml(item) {
     .map(function (s) {
       return `
         <div class="card-field submission-display">
-          <span class="field-label submission-display-label">Update by ${escapeHtml(s.email)} <span class="submission-display-time">${escapeHtml(formatTimestamp(s.createdAt))}</span></span>
+          <span class="field-label submission-display-label">Update by ${escapeHtml((s.office || '').trim() ? s.office : s.email)} <span class="submission-display-time">${escapeHtml(formatTimestamp(s.createdAt))}</span></span>
           <div class="field-value preserve-whitespace">${escapeHtml(s.text || '')}</div>
         </div>`;
     }).join('');

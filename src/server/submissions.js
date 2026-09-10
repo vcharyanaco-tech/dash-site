@@ -32,6 +32,20 @@ function readSubmissionRows_() {
   return db.prepare('SELECT * FROM submissions').all().map(submissionRecordFromRow_);
 }
 
+/** Office of the user who posted a submission (users.office). Users may carry
+ *  several emails in one row (comma-separated), so match any of them.
+ *  Returns '' when unknown — the client falls back to the email. */
+function officeForEmail_(email) {
+  const wanted = String(email || '').trim().toLowerCase();
+  if (!wanted) return '';
+  const rows = db.prepare('SELECT email, office FROM users').all();
+  for (let i = 0; i < rows.length; i++) {
+    const parts = String(rows[i].email || '').split(',').map(function (p) { return p.trim().toLowerCase(); });
+    if (parts.indexOf(wanted) !== -1) return String(rows[i].office || '');
+  }
+  return '';
+}
+
 function findSubmissionRecord_(id) {
   const rows = readSubmissionRows_();
   for (let i = 0; i < rows.length; i++) {
@@ -84,6 +98,7 @@ function visibleSubmission_(rec, user) {
     cardRow: rec.cardRow,
     cardId: rec.cardId,
     email: rec.email,
+    office: officeForEmail_(rec.email),
     text: rec.text,
     createdAt: formatDateTime_(rec.createdAt),
     updatedAt: formatDateTime_(rec.updatedAt),

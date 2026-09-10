@@ -427,6 +427,7 @@ function closeDialog(id) {
   if (!document.querySelector('.modal-backdrop:not(.hidden)')) {
     document.body.classList.remove('modal-open');
   }
+  if (typeof flushPendingAutoRefresh === 'function') flushPendingAutoRefresh();
 }
 
 /* ---------------------------------- Drag-resizable windows ---------------------------------- */
@@ -3153,7 +3154,7 @@ function buildCardHtml(item) {
     .map(function (s) {
       return `
         <div class="card-field submission-display">
-          <span class="field-label submission-display-label">Update by ${escapeHtml(s.email)} <span class="submission-display-time">${escapeHtml(formatTimestamp(s.createdAt))}</span></span>
+          <span class="field-label submission-display-label">Update by ${escapeHtml((s.office || '').trim() ? s.office : s.email)} <span class="submission-display-time">${escapeHtml(formatTimestamp(s.createdAt))}</span></span>
           <div class="field-value preserve-whitespace">${escapeHtml(s.text || '')}</div>
         </div>`;
     }).join('');
@@ -5568,6 +5569,7 @@ function renderClock(d) {
 
 var autoRefreshTimerId = null;
 var autoRefreshInFlight = false;
+var autoRefreshPending = false;
 
 function startAutoRefresh(intervalMs) {
   stopAutoRefresh();
@@ -5578,11 +5580,21 @@ function stopAutoRefresh() {
   if (autoRefreshTimerId) { clearInterval(autoRefreshTimerId); autoRefreshTimerId = null; }
 }
 
+// A dataChanged event arriving while a modal is open or the tab is hidden is
+// deferred instead of dropped, so edits are reflected as soon as the UI can
+// safely repaint (modal closed / tab visible) rather than on the next tick.
+function flushPendingAutoRefresh() {
+  if (!autoRefreshPending) return;
+  autoRefreshPending = false;
+  if (autoRefreshInFlight) return;
+  autoRefreshTick();
+}
+
 function autoRefreshTick() {
   if (autoRefreshInFlight) return;
   if (!getAuthToken()) return;
-  if (typeof document !== 'undefined' && document.hidden) return;
-  if (document.body.classList.contains('modal-open')) return;
+  if (typeof document !== 'undefined' && document.hidden) { autoRefreshPending = true; return; }
+  if (document.body.classList.contains('modal-open')) { autoRefreshPending = true; return; }
   autoRefreshInFlight = true;
   const seqAtStart = appState.submissionSeq || 0;
   ApiService.getAppData().then(function (data) {
@@ -5614,6 +5626,13 @@ function autoRefreshTick() {
   }).catch(function (err) {
     autoRefreshInFlight = false;
     if (handleServerFailure(err)) return;
+  });
+}
+
+// Flush any deferred refresh when the tab becomes visible again.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) flushPendingAutoRefresh();
   });
 }
 

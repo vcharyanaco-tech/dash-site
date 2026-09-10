@@ -578,6 +578,7 @@ async function forwardToServer(request, url, serverOrigin) {
   fwd.set('User-Agent', 'Mozilla/5.0');
 
   const isGetHead = request.method === 'GET' || request.method === 'HEAD';
+  const isSse = isGetHead && (String(request.headers.get('Accept') || '').includes('text/event-stream') || url.pathname.endsWith('/events'));
   const bodyText = isGetHead ? undefined : await request.text();
 
   let resp;
@@ -587,14 +588,25 @@ async function forwardToServer(request, url, serverOrigin) {
       headers: fwd,
       body: bodyText,
       redirect: 'follow',
-      // Workers free has no hard HTTP wall-time cap, but a hung backend (e.g.
-      // a cold start mid-redeploy) shouldn't leave the user waiting forever.
-      // 180s is generous even for long meeting transcriptions.
-      signal: AbortSignal.timeout(180000),
+      // SSE is a long-lived stream — appending the 180s bound would kill the
+      // connection mid-stream. The bound is only for bounded HTTP responses.
+      signal: isSse ? undefined : AbortSignal.timeout(180000),
     });
   } catch (fwdErr) {
     return maintenanceResponse_(fwdErr && fwdErr.message);
   }
+
+  if (isSse) {
+    // Pass the event stream straight through — buffering it (resp.arrayBuffer())
+    // would never complete for a connection that stays open, which is what kept
+    // the SSE real-time channel dead and left the dashboard on 60s polling.
+    const newHeaders = new Headers(resp.headers);
+    newHeaders.set('Content-Type', 'text/event-stream');
+    newHeaders.set('Cache-Control', 'no-cache, no-store');
+    newHeaders.set('Connection', 'keep-alive');
+    return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: newHeaders });
+  }
+
   if (resp.status === 502 || resp.status === 503 || resp.status === 504) {
     // Render free has no zero-downtime deploys: while the old instance is
     // down and the new one builds, the origin answers with a gateway error.

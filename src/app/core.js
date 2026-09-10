@@ -427,6 +427,7 @@ function closeDialog(id) {
   if (!document.querySelector('.modal-backdrop:not(.hidden)')) {
     document.body.classList.remove('modal-open');
   }
+  if (typeof flushPendingAutoRefresh === 'function') flushPendingAutoRefresh();
 }
 
 /* ---------------------------------- Drag-resizable windows ---------------------------------- */
