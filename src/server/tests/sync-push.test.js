@@ -163,8 +163,8 @@ test('pushToSheet sends correct values to the spreadsheet', async () => {
 
   // Row 1: 1 link on action (col 4)
   // Row 3: 2 links on sector (col 1) + description (col 2)
-  // plus 1 Updates header cell (H3) + 1 border formatting request
-  assert.strictEqual(requests.length, 5, '3 rich-text link cells + Updates header + borders');
+  // plus 1 title-cell stamp (A1) + 1 Updates header cell (H3) + 1 border request
+  assert.strictEqual(requests.length, 6, '3 rich-text link cells + title + Updates header + borders');
 
   // Check the link for row 1 action
   const row1ActionLink = requests.find(function (r) {
@@ -191,6 +191,15 @@ test('pushToSheet sends correct values to the spreadsheet', async () => {
   assert.ok(row3DescLink, 'row 3 description link update exists');
   const row3DescValue = row3DescLink.updateCells.rows[0].values[0];
   assert.strictEqual(row3DescValue.userEnteredValue.stringValue, 'Complaint resolution backlog');
+
+  // Title cell (A1): app name + today's date
+  const titleReq = requests.find(function (r) {
+    return r.updateCells && r.updateCells.range.startRowIndex === 0 &&
+      r.updateCells.range.startColumnIndex === 0 && r.updateCells.range.endColumnIndex === 1;
+  });
+  assert.ok(titleReq, 'title cell request exists');
+  const titleValue = titleReq.updateCells.rows[0].values[0].userEnteredValue.stringValue;
+  assert.match(titleValue, /^.* on \d{2}\.\d{2}\.\d{4}$/, 'title carries today\'s date');
 
   // Updates column header cell (H3)
   const headerReq = requests.find(function (r) {

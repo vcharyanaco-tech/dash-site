@@ -27,8 +27,9 @@
  */
 
 const crypto = require('crypto');
-const { db } = require('./db');
+const { db, getAppSettings } = require('./db');
 const { CONFIG } = require('./config');
+const { today_ } = require('./helpers');
 const settings = require('./settings');
 
 const SOURCE_SPREADSHEET_ID =
@@ -569,7 +570,7 @@ async function pushToSheet() {
 
   const submissions = require('./submissions');
   const subsByRow = {};
-  db.prepare('SELECT card_row, email, text, created_at FROM submissions WHERE displayed = 1 ORDER BY created_at DESC').all()
+  db.prepare('SELECT card_row, email, text, created_at AS createdAt FROM submissions WHERE displayed = 1 ORDER BY created_at DESC').all()
     .forEach(function (s) {
       const key = Number(s.card_row);
       if (!subsByRow[key]) subsByRow[key] = [];
@@ -637,6 +638,24 @@ async function pushToSheet() {
     });
   });
 
+  // Title cell (row 1, column A): app name stamped with today's date so the
+  // sheet's on-screen heading always matches the current day.
+  const titleHeading = (getAppSettings().appName || CONFIG.APP.NAME);
+  const stampedTitle = titleHeading + ' on ' + today_();
+  requests.push({
+    updateCells: {
+      range: {
+        sheetId: sheetId,
+        startRowIndex: 0,
+        endRowIndex: 1,
+        startColumnIndex: 0,
+        endColumnIndex: 1
+      },
+      rows: [{ values: [{ userEnteredValue: { stringValue: stampedTitle } }] }],
+      fields: 'userEnteredValue'
+    }
+  });
+
   // Header label for the new Updates column (H).
   requests.push({
     updateCells: {
@@ -690,9 +709,10 @@ async function pushToSheet() {
     pushed: true,
     ok: true,
     rows: rows.length,
-    linkedCells: requests.length - 2,
+    linkedCells: requests.length - 3,
     headers: 1,
-    borders: 1
+    borders: 1,
+    title: stampedTitle
   };
 }
 
