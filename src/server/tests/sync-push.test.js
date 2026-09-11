@@ -202,17 +202,18 @@ test('pushToSheet sends correct values to the spreadsheet', async () => {
 
   // Border formatting request: whole data rectangle A3:H6
   const borderReq = requests.find(function (r) {
-    return r.updateCells.fields === 'userEnteredFormat.borders';
+    return r.updateBorders;
   });
   assert.ok(borderReq, 'border formatting request exists');
-  assert.strictEqual(borderReq.updateCells.range.startRowIndex, START_ROW - 2, 'borders start at the header row');
-  assert.strictEqual(borderReq.updateCells.range.endRowIndex, START_ROW + 2, 'borders cover the last data row');
-  assert.strictEqual(borderReq.updateCells.range.endColumnIndex, 8, 'borders cover columns A..H');
-  const border = borderReq.updateCells.rows[0].values[0].userEnteredFormat.borders;
-  assert.strictEqual(border.top.style, 'SOLID');
-  assert.strictEqual(border.bottom.style, 'SOLID');
-  assert.strictEqual(border.left.style, 'SOLID');
-  assert.strictEqual(border.right.style, 'SOLID');
+  assert.strictEqual(borderReq.updateBorders.range.startRowIndex, START_ROW - 2, 'borders start at the header row');
+  assert.strictEqual(borderReq.updateBorders.range.endRowIndex, START_ROW + 2, 'borders cover the last data row');
+  assert.strictEqual(borderReq.updateBorders.range.endColumnIndex, 8, 'borders cover columns A..H');
+  assert.strictEqual(borderReq.updateBorders.top.style, 'SOLID');
+  assert.strictEqual(borderReq.updateBorders.bottom.style, 'SOLID');
+  assert.strictEqual(borderReq.updateBorders.left.style, 'SOLID');
+  assert.strictEqual(borderReq.updateBorders.right.style, 'SOLID');
+  assert.strictEqual(borderReq.updateBorders.innerHorizontal.style, 'SOLID');
+  assert.strictEqual(borderReq.updateBorders.innerVertical.style, 'SOLID');
 
   global.fetch = originalFetch;
 });

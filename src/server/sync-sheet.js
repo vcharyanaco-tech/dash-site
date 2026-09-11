@@ -654,9 +654,11 @@ async function pushToSheet() {
 
   // Borders across the whole data rectangle (header row + all data rows,
   // columns A..H). Any field/column added later is automatically bordered to
-  // match the existing grid instead of being left unbordered.
-  const borderRequest = {
-    updateCells: {
+  // match the existing grid instead of being left unbordered. The inner
+  // gridlines live on the `updateBorders` request — cell-level borders
+  // (userEnteredFormat.borders) only support top/bottom/left/right.
+  requests.push({
+    updateBorders: {
       range: {
         sheetId: sheetId,
         startRowIndex: START_ROW - 2,
@@ -664,24 +666,14 @@ async function pushToSheet() {
         startColumnIndex: 0,
         endColumnIndex: PUSH_UPDATES_COL + 1
       },
-      rows: [{
-        values: [{
-          userEnteredFormat: {
-            borders: {
-              top: { style: 'SOLID' },
-              bottom: { style: 'SOLID' },
-              left: { style: 'SOLID' },
-              right: { style: 'SOLID' },
-              innerHorizontal: { style: 'SOLID' },
-              innerVertical: { style: 'SOLID' }
-            }
-          }
-        }]
-      }],
-      fields: 'userEnteredFormat.borders'
+      top: { style: 'SOLID' },
+      bottom: { style: 'SOLID' },
+      left: { style: 'SOLID' },
+      right: { style: 'SOLID' },
+      innerHorizontal: { style: 'SOLID' },
+      innerVertical: { style: 'SOLID' }
     }
-  };
-  requests.push(borderRequest);
+  });
 
   const batchUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + SOURCE_SPREADSHEET_ID +
     ':batchUpdate?access_token=' + encodeURIComponent(token);
