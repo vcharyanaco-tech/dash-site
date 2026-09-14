@@ -33,6 +33,11 @@ services:
         value: https://dashboardharyana.site/api/backup
       - key: WORKER_API_TOKEN
         sync: false
+      # Google Sheets API key (read-only) so pulls capture cell hyperlinks into
+      # the DB. Secret — set the value in the Render dashboard (Service →
+      # Environment → GOOGLE_SHEETS_API_KEY); never commit the key itself.
+      - key: GOOGLE_SHEETS_API_KEY
+        sync: false
       # Email via the worker SMTP relay (SMTP ports are blocked on free)
       # Sync is button-only: no periodic sheet sync (see auto-sync.js default).
       - key: DASH_AUTO_SYNC_MINUTES
