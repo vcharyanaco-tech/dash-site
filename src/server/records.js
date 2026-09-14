@@ -615,10 +615,34 @@ function updateRecord_(item, token) {
 function dataRenumber_() {
   const rows = db.prepare('SELECT row FROM records ORDER BY row ASC').all();
   const startRow = CONFIG.SHEET.START_ROW;
-  const stmt = db.prepare('UPDATE records SET row = ? WHERE row = ?');
+  var stmt = db.prepare('UPDATE records SET row = ? WHERE row = ?');
+
+  // Collect every row that actually moves so we can remap child tables.
+  var moves = [];
   rows.forEach(function (r, i) {
-    const newRow = startRow + i;
-    if (Number(r.row) !== newRow) stmt.run(newRow, r.row);
+    var newRow = startRow + i;
+    if (Number(r.row) !== newRow) moves.push({ from: Number(r.row), to: newRow });
+  });
+  if (!moves.length) return;
+
+  // Renumber the records themselves (ascending — each target row has already
+  // been vacated by the previous move because every shift is downward).
+  moves.forEach(function (m) { stmt.run(m.to, m.from); });
+
+  // Every child table keyed by a record row number must follow its parent.
+  // Because values move downward (to < from) and we process in ascending
+  // order, each target slot has already been vacated by the prior move — no
+  // intermediate collisions occur.
+  var refs = [
+    { table: 'submissions', col: 'card_row' },
+    { table: 'tasks', col: 'record_row' },
+    { table: 'documents', col: 'record_row' },
+    { table: 'record_changes', col: 'record_row' },
+    { table: 'ask_ai_history', col: 'record_row' }
+  ];
+  refs.forEach(function (r) {
+    var upd = db.prepare('UPDATE ' + r.table + ' SET ' + r.col + ' = ? WHERE ' + r.col + ' = ?');
+    moves.forEach(function (m) { upd.run(m.to, m.from); });
   });
 }
 
@@ -629,6 +653,16 @@ function deleteRecord_(row, token) {
     const existing = db.prepare('SELECT * FROM records WHERE row = ?').get(Number(row));
     const deletedId = existing ? (Number(row) - CONFIG.SHEET.START_ROW + 1) : '';
     db.prepare('DELETE FROM records WHERE row = ?').run(Number(row));
+
+    // Cascade-delete child rows that reference the deleted row so they never
+    // get remapped onto the wrong record during renumbering.
+    const rNum = Number(row);
+    db.prepare('DELETE FROM submissions WHERE card_row = ?').run(rNum);
+    db.prepare('DELETE FROM tasks WHERE record_row = ?').run(rNum);
+    db.prepare('DELETE FROM documents WHERE record_row = ?').run(rNum);
+    db.prepare('DELETE FROM record_changes WHERE record_row = ?').run(rNum);
+    db.prepare('DELETE FROM ask_ai_history WHERE record_row = ?').run(rNum);
+
     dataRenumber_();
     bumpDataGeneration_();
 
