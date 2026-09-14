@@ -119,6 +119,8 @@ function renderProfile() {
 
   const addButton = getEl('addButton');
   if (addButton) addButton.style.display = appState.isEditor ? 'inline-flex' : 'none';
+  const showHiddenWrap = getEl('showHiddenWrap');
+  if (showHiddenWrap) showHiddenWrap.classList.toggle('hidden', !appState.isEditor);
   const meetingBtn = getEl('meetingNotesBtn');
   if (meetingBtn) meetingBtn.style.display = appState.isAdmin ? 'inline-flex' : 'none';
   updateMarkAllSubmissionsReadBtn();

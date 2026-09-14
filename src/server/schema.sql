@@ -25,6 +25,10 @@ CREATE TABLE IF NOT EXISTS records (
   -- dashboard). Rows created in the dashboard are never overwritten or pruned
   -- by a sheet pull.
   source TEXT NOT NULL DEFAULT 'sheet',
+  -- whether this record is shown on the dashboard (1) or hidden (0). Editors
+  -- and admins tick records they want to display; viewers only ever see
+  -- records with displayed = 1.
+  displayed INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER,
   updated_at INTEGER
 );

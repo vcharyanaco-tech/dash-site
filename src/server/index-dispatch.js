@@ -30,6 +30,7 @@ const dispatch = {
   addItem: function (args) { return records.addItem(A(args, 0), A(args, 1)); },
   updateItem: function (args) { return records.updateItem(A(args, 0), A(args, 1)); },
   deleteItem: function (args) { return records.deleteItem(A(args, 0), A(args, 1)); },
+  setRecordDisplay: function (args) { return records.setRecordDisplay(A(args, 0), A(args, 1), A(args, 2)); },
   markReviewDone: function (args) { return records.markReviewDone(A(args, 0), A(args, 1)); },
   markReviewNotDone: function (args) { return records.markReviewNotDone(A(args, 0), A(args, 1)); },
   generateReviewNotifications: function (args) { return records.generateReviewNotifications(A(args, 0)); },

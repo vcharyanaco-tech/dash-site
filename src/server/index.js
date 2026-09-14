@@ -166,7 +166,7 @@ app.post(API_PREFIX, async function (req, res) {
     // Broadcast real-time SSE events for data-mutating functions
     const dataFns = ['addItem', 'updateItem', 'deleteItem', 'markReviewDone', 'markReviewNotDone',
       'addSubmission', 'updateSubmission', 'deleteSubmission', 'toggleSubmissionDisplay',
-      'createTask', 'updateTask', 'deleteTask', 'login'];
+      'createTask', 'updateTask', 'deleteTask', 'setRecordDisplay', 'login'];
     if (dataFns.indexOf(fn) !== -1 && result && result.success !== false) {
       broadcast(fn === 'login' ? 'userLoggedIn' : 'dataChanged', { fn: fn });
     }

@@ -38,6 +38,7 @@ function applyFilters(preservePage) {
   const query = appState.searchQuery.toLowerCase();
   const sector = appState.sector;
   const review = appState.dashReviewFilter;
+  const showHidden = appState.dashShowHidden && appState.isEditor;
   appState.filtered = appState.items.filter(function (item) {
     const haystack = [item.sector, item.id, item.description, item.action, item.responsibility, item.reviewDate]
       .join(' ').toLowerCase();
@@ -46,7 +47,8 @@ function applyFilters(preservePage) {
       : review === 'notdue'
         ? item.reviewStatus !== 'due'
         : true;
-    return (!query || haystack.indexOf(query) !== -1) && (!sector || item.sector === sector) && reviewOk;
+    const displayOk = showHidden || item.displayed !== false;
+    return (!query || haystack.indexOf(query) !== -1) && (!sector || item.sector === sector) && reviewOk && displayOk;
   });
   // Reset to page 1 only when the filter inputs changed (search/sector); a
   // plain re-render after an edit/update/delete keeps the current page.
@@ -74,6 +76,11 @@ function handleDashReviewFilterChange() {
   updateFilterChips();
   renderDashboard();
   scheduleDashboardPrefsSave();
+}
+
+function handleDashShowHiddenChange() {
+  appState.dashShowHidden = getEl('dashShowHidden').checked;
+  renderDashboard();
 }
 
 function resetFilters() {
@@ -127,6 +134,29 @@ function removeChip(kind) {
   updateFilterChips();
   renderDashboard();
   if (kind === 'review') scheduleDashboardPrefsSave();
+}
+
+/* ---------------------------------- Dashboard: display toggle ---------------------------------- */
+
+/* Editors/admins tick which records show on the dashboard for everyone;
+   unticked (hidden) records only appear when "Show hidden" is on. */
+function toggleRecordDisplay(row, displayed) {
+  if (!appState.isEditor) { showToast('Editor access required', 'warning'); return; }
+  showOverlay(displayed ? 'Showing record…' : 'Hiding record…');
+  ApiService.setRecordDisplay(row, displayed).then(function (data) {
+    hideOverlay();
+    if (data && data.items) {
+      appState.items = data.items;
+      appState.summary = data.summary || {};
+    }
+    renderDashboard(true);
+    showToast(displayed ? 'Record is now displayed' : 'Record hidden from dashboard', 'success');
+  }).catch(function (err) {
+    hideOverlay();
+    if (handleServerFailure(err)) return;
+    renderDashboard(true);
+    showToast('Failed: ' + (err.message || err), 'error');
+  });
 }
 
 /* ---------------------------------- Dashboard: KPI cards ---------------------------------- */
@@ -374,10 +404,15 @@ function buildCardHtml(item) {
 
   const showId = dashboardColumnVisible_('id');
   const showActions = dashboardColumnVisible_('actions');
+  const displayToggleHtml = appState.isEditor ? `
+    <label class="display-toggle" title="${item.displayed !== false ? 'Hide this record from viewers' : 'Show this record to viewers'}">
+      <input type="checkbox" ${item.displayed !== false ? 'checked' : ''} onchange="toggleRecordDisplay('${escAttr(item.row)}', this.checked)">
+      <span>Display</span>
+    </label>` : '';
   return `
-    <article class="card ${item.reviewStatus === 'due' ? 'review-due' : ''}" data-row="${escAttr(item.row)}">
+    <article class="card ${item.reviewStatus === 'due' ? 'review-due' : ''} ${item.displayed === false ? 'card-hidden' : ''}" data-row="${escAttr(item.row)}">
       ${reviewBadgeHtml}
-      ${showId ? '<div class="card-title preserve-whitespace"><span class="id-badge">#' + escapeHtml(item.id) + '</span></div>' : ''}
+      ${showId ? '<div class="card-title preserve-whitespace"><span class="id-badge">#' + escapeHtml(item.id) + '</span>' + displayToggleHtml + '</div>' : ''}
       <div class="card-fields">${fieldsHtml || '<div class="card-field"><span class="field-label">Details</span><div class="field-value preserve-whitespace">No details available</div></div>'}${updateFieldsHtml}</div>
       ${showActions ? '<div class="card-footer"><div class="actions">' + actionsHtml + '</div></div>' : ''}
       ${aiPanelHtmlFromCache_(item.row)}
@@ -510,8 +545,8 @@ function buildTableRowHtml(item) {
   const linkPanel = linkPanelHtmlFromCache_(item.row);
   if (linkPanel) persistedPanels += '<tr class="ai-link-tr"><td colspan="8">' + linkPanel + '</td></tr>';
   return `
-    <tr class="row-clickable ${item.reviewStatus === 'due' ? 'row-flagged' : ''}" data-row="${escAttr(item.row)}" tabindex="0">
-      <td><span class="id-badge">#${escapeHtml(item.id)}</span></td>
+    <tr class="row-clickable ${item.reviewStatus === 'due' ? 'row-flagged' : ''} ${item.displayed === false ? 'row-hidden' : ''}" data-row="${escAttr(item.row)}" tabindex="0">
+      <td><span class="id-badge">#${escapeHtml(item.id)}</span>${appState.isEditor ? `<label class="display-toggle" title="${item.displayed !== false ? 'Hide this record from viewers' : 'Show this record to viewers'}"><input type="checkbox" ${item.displayed !== false ? 'checked' : ''} onchange="event.stopPropagation(); toggleRecordDisplay('${escAttr(item.row)}', this.checked)"><span></span></label>` : ''}</td>
       <td class="preserve-whitespace">${escapeHtml(item.sector || '')}</td>
       <td class="details-cell preserve-whitespace">${escapeHtml(item.description || '')}</td>
       <td class="action-cell ${item.reviewStatus === 'due' ? 'action-cell-due' : 'action-cell-ok'} preserve-whitespace">${item.actionHtml || renderLinkableText(item.action || '')}</td>

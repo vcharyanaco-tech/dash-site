@@ -82,6 +82,15 @@ if (!docColumns.some(function (c) { return String(c.name) === 'keep'; })) {
   db.exec('ALTER TABLE documents ADD COLUMN keep INTEGER NOT NULL DEFAULT 0');
 }
 
+/* ---- Migration: records.displayed (dashboard display toggle) ----
+   Editors/admins tick records to choose which ones show on the dashboard
+   (see records.js setRecordDisplay_). Older DBs lack the column; all existing
+   records were visible, so they default to displayed = 1. */
+const recordDisplayCols = db.prepare('PRAGMA table_info(records)').all();
+if (!recordDisplayCols.some(function (c) { return String(c.name) === 'displayed'; })) {
+  db.exec('ALTER TABLE records ADD COLUMN displayed INTEGER NOT NULL DEFAULT 1');
+}
+
 /* ---- Migration: username index ---- */
 db.exec("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username != ''");
 

@@ -1086,6 +1086,40 @@ body.sidebar-collapsed .nav-item.active { box-shadow: inset 0 0 0 2px var(--seco
   letter-spacing: .3px;
 }
 
+/* Display toggle: editors/admins tick which records show on the dashboard. */
+.display-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.display-toggle input { accent-color: var(--secondary); cursor: pointer; }
+
+/* Hidden records are dimmed so editors/admins can pick them out when the
+   "Show hidden" filter is active. */
+.card.card-hidden { opacity: .45; filter: saturate(.6); }
+.row-hidden td { opacity: .5; }
+
+/* "Show hidden" control in the filters row (rendered for editors/admins). */
+.filters-show-hidden {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.filters-show-hidden input { accent-color: var(--secondary); cursor: pointer; }
+.filters-show-hidden.hidden { display: none; }
+
 .card-fields { display: grid; gap: var(--sp-1); }
 
 /* Card field grouping: the top row (Description | Entry Date | Sector) and

@@ -96,6 +96,7 @@ const ApiService = {
   addItem: function (item) { return apiCall_('addItem', item, getAuthToken()); },
   updateItem: function (item) { return apiCall_('updateItem', item, getAuthToken()); },
   deleteItem: function (row) { return apiCall_('deleteItem', row, getAuthToken()); },
+  setRecordDisplay: function (row, displayed) { return apiCall_('setRecordDisplay', row, displayed, getAuthToken()); },
   markReviewDone: function (row) { return apiCall_('markReviewDone', row, getAuthToken()); },
   markReviewNotDone: function (row) { return apiCall_('markReviewNotDone', row, getAuthToken()); },
   login: function (email, password) { return apiCall_('login', email, password); },
@@ -232,6 +233,7 @@ const appState = {
   dashSortKey: 'id',
   dashSortDir: 'asc',
   dashReviewFilter: '',
+  dashShowHidden: false,
   permissions: {},
   notifications: { unread: 0, recent: [] }
 };

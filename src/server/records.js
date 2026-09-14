@@ -215,7 +215,8 @@ function rowToRowSpec_(row) {
     responsibility: row.responsibility || '',
     reviewDate: row.review_date || '',
     reviewBg: row.review_bg || CONFIG.COLORS.NORMAL,
-    links: normalizeLinksForStorage_(parseLinksRow_(row.links))
+    links: normalizeLinksForStorage_(parseLinksRow_(row.links)),
+    displayed: Number(row.displayed) !== 0
   };
 }
 
@@ -286,7 +287,8 @@ function buildItemFromRowSpec_(rowSpec) {
     linkUrls: linkUrls,
     linkTexts: linkTexts,
     // Full per-field link list (array form) for multi-link editing.
-    links: rowSpec.links
+    links: rowSpec.links,
+    displayed: rowSpec.displayed !== false
   };
 }
 
@@ -377,6 +379,13 @@ function getData() {
  * ============================================================ */
 
 function scopeItemsForUser_(items, user) {
+  const role = user && user.role;
+  // Viewers only ever see records that editors/admins have ticked to display;
+  // editors and admins get the full list (including hidden ones) so they can
+  // manage the display from the dashboard.
+  if (role === ROLES.VIEWER) {
+    return (items || []).filter(function (i) { return i.displayed !== false; });
+  }
   return items;
 }
 
@@ -715,6 +724,37 @@ function markReviewNotDone_(row, token) {
 }
 
 /* ============================================================
+ * Display toggle (admin + editor)
+ * ============================================================ */
+
+function setRecordDisplay_(row, displayed, token) {
+  const editor = auth.requireEditor(token);
+
+  return runWithLock_(function () {
+    const n = Number(row);
+    const existing = db.prepare('SELECT * FROM records WHERE row = ?').get(n);
+    if (!existing) throw new Error('Record not found.');
+
+    const next = displayed ? 1 : 0;
+    const current = Number(existing.displayed !== undefined ? existing.displayed : 1);
+    if (next !== current) {
+      db.prepare('UPDATE records SET displayed = ?, updated_at = ? WHERE row = ?').run(next, Date.now(), n);
+      try {
+        require('./audit').logAudit_(
+          next ? ACTIONS.RECORD_DISPLAY : ACTIONS.RECORD_HIDE,
+          String(n),
+          { id: n - CONFIG.SHEET.START_ROW + 1, displayed: !!next },
+          editor.email
+        );
+      } catch (err) {}
+      bumpDataGeneration_();
+    }
+
+    return getAppData(token);
+  });
+}
+
+/* ============================================================
  * Public wrappers (port of code.gs)
  * ============================================================ */
 
@@ -731,6 +771,10 @@ async function addItem(item, token) {
 async function deleteItem(row, token) {
   await deleteRecord_(row, token);
   return getAppData(token);
+}
+
+function setRecordDisplay(row, displayed, token) {
+  return setRecordDisplay_(row, displayed, token);
 }
 
 function markReviewDone(row, token) {
@@ -885,6 +929,7 @@ module.exports = {
   updateItem,
   addItem,
   deleteItem,
+  setRecordDisplay,
   markReviewDone,
   getRecordHistory,
   markReviewNotDone,
