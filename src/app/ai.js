@@ -521,7 +521,7 @@ function openLinkPreview(url, title) {
   const titleEl = getEl('previewModalTitle');
   if (titleEl) titleEl.textContent = title || 'Preview';
   if (openNew) openNew.href = url;
-  previewZoom = 100;
+  previewZoom = 80;
   applyPreviewZoom();
   frame.src = toEmbeddableUrl(url) || '';
   openDialog('previewModal');
@@ -538,7 +538,7 @@ function closeLinkPreview() {
    preview) can be zoomed in/out. Zoom buttons call these directly; trackpad
    pinch (browsers send Ctrl+wheel) is wired by wirePreviewPinch(). */
 
-let previewZoom = 100;
+let previewZoom = 80;
 
 function applyPreviewZoom() {
   const frame = getEl('previewFrame');
@@ -554,7 +554,7 @@ function adjustPreviewZoom(delta) {
 
 function previewZoomIn() { adjustPreviewZoom(10); }
 function previewZoomOut() { adjustPreviewZoom(-10); }
-function previewZoomReset() { previewZoom = 100; applyPreviewZoom(); }
+function previewZoomReset() { previewZoom = 80; applyPreviewZoom(); }
 
 /* Trackpad pinch-to-zoom (and Ctrl+scroll on a mouse) scales the preview. */
 function wirePreviewPinch() {
