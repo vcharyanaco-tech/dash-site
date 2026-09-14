@@ -27,9 +27,11 @@
  */
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const { db, getAppSettings } = require('./db');
 const { CONFIG } = require('./config');
-const { today_ } = require('./helpers');
+const { parseCsv_, today_ } = require('./helpers');
 const settings = require('./settings');
 
 const SOURCE_SPREADSHEET_ID =
@@ -107,15 +109,21 @@ function cellValue(cell, fallback) {
 //   displayRow (1-based, = sheet row - START_ROW + 1) -> { action: [...], ... }
 // where each field's value is an array of { url, text } links extracted from
 // rich-text runs. Falls back to cell.hyperlink for single-link cells.
-async function fetchHyperlinks() {
-  if (!API_KEY) return null;
+// Accepts either an OAuth access token (write path) or falls back to the
+// configured API key; returns null when neither is available.
+async function fetchHyperlinks(token) {
+  if (!token && !API_KEY) return null;
   const range = SHEET_NAME + '!A' + START_ROW + ':Z';
   const fields = 'sheets.data.rowData.values(userEnteredValue,formattedValue,hyperlink,textFormatRuns(format.link,startIndex))';
-  const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + SOURCE_SPREADSHEET_ID +
+  let url = 'https://sheets.googleapis.com/v4/spreadsheets/' + SOURCE_SPREADSHEET_ID +
     '?ranges=' + encodeURIComponent(range) +
     '&includeGridData=true' +
-    '&fields=' + encodeURIComponent(fields) +
-    '&key=' + encodeURIComponent(API_KEY);
+    '&fields=' + encodeURIComponent(fields);
+  if (token) {
+    url += '&access_token=' + encodeURIComponent(token);
+  } else {
+    url += '&key=' + encodeURIComponent(API_KEY);
+  }
   const resp = await fetch(url);
   if (!resp.ok) {
     throw new Error('Sheets API ' + resp.status + ': ' + (await resp.text()).slice(0, 200));
@@ -546,6 +554,97 @@ function parseRecordLinks_(raw) {
   }
 }
 
+const MIGRATION_CSV = path.join(__dirname, 'migration-export', 'records.csv');
+let migrationLinksCache_ = null;
+
+// Lazy-loads the original hyperlink snapshot bundled with the server
+// (migration-export/records.csv, column 8 = links JSON) keyed by display id.
+// The record *text* in that export is deliberately stale (start.js keeps the DB
+// authoritative), but it is the only remaining copy of the original links, so
+// push uses it as a low-priority fallback to restore links a values.update RAW
+// overwrite would otherwise destroy. Returns {} on any read/parse failure.
+function migrationLinksByDisplay_() {
+  if (migrationLinksCache_) return migrationLinksCache_;
+  const out = {};
+  try {
+    if (fs.existsSync(MIGRATION_CSV)) {
+      const rows = parseCsv_(fs.readFileSync(MIGRATION_CSV, 'utf8'));
+      rows.forEach(function (cols) {
+        const id = Number(cols[0]);
+        if (!id) return;
+        const raw = String(cols[7] || '').trim();
+        if (!raw || raw === '{}') return;
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') out[id] = parsed;
+        } catch (e) { /* malformed JSON — skip */ }
+      });
+    }
+  } catch (e) { /* unreadable — treat as no fallback */ }
+  migrationLinksCache_ = out;
+  return out;
+}
+
+// Union of the three link sources a push can draw from — DB (source of truth),
+// the migration snapshot (original links), and the sheet's current links (links
+// an editor added directly that the DB never saw). DB entries win on the same
+// (field, url); other sources fill in the gaps so no hyperlink is ever lost by
+// the values.update overwrite.
+function unionLinksForPush_(dbLinks, csvLinks, sheetLinks) {
+  const out = {};
+  LINK_FIELD_KEYS.forEach(function (key) {
+    const merged = [];
+    const seen = {};
+    [dbLinks, csvLinks, sheetLinks].forEach(function (src) {
+      if (!src || typeof src !== 'object' || Array.isArray(src)) return;
+      const list = Array.isArray(src[key]) ? src[key] : [];
+      list.forEach(function (l) {
+        if (!l || !l.url) return;
+        const url = String(l.url);
+        if (seen[url]) return;
+        seen[url] = true;
+        merged.push({ url: url, text: l.text != null ? String(l.text) : '' });
+      });
+    });
+    if (merged.length) out[key] = merged;
+  });
+  return out;
+}
+
+// Keeps only links whose display label appears verbatim in the cell text —
+// a link without a matching label can't be placed in a textFormatRuns request,
+// so emitting it would only waste an updateCells call.
+function renderableLinksForText_(text, list) {
+  const t = String(text || '');
+  return (Array.isArray(list) ? list : []).filter(function (l) {
+    const uri = String((l && l.url) || '');
+    const label = String((l && l.text) || '').trim();
+    return !!(uri && label && t.indexOf(label) !== -1);
+  });
+}
+
+// Strips a trailing " on dd.MM.yyyy" from the sheet's A1 title so a push can
+// preserve a custom heading (e.g. "Circle Office Haryana Dashboard") while
+// still refreshing the date. Returns null when nothing meaningful remains.
+function extractTitleHeading_(existingTitle) {
+  const t = String(existingTitle || '').trim();
+  if (!t) return null;
+  const heading = t.replace(/ on \d{2}\.\d{2}\.\d{4}$/, '').trim();
+  return heading || null;
+}
+
+// Reads the sheet's current A1 cell (the on-screen heading) via the values API.
+async function currentTitle_(token) {
+  const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + SOURCE_SPREADSHEET_ID +
+    '/values/' + encodeURIComponent(SHEET_NAME + '!A1') +
+    '?majorDimension=ROWS&access_token=' + encodeURIComponent(token);
+  const resp = await fetch(url);
+  if (!resp.ok) return '';
+  const json = await resp.json();
+  const cell = json && json.values && json.values[0] && json.values[0][0];
+  return String(cell || '');
+}
+
 // Writes every record back to the sheet: plain values for all 7 columns, then
 // rich-text cells (with hyperlink runs) for any field that has links.
 async function pushToSheet() {
@@ -567,6 +666,19 @@ async function pushToSheet() {
 
   const rows = db.prepare('SELECT * FROM records ORDER BY row ASC').all();
   if (!rows.length) return { pushed: true, ok: true, rows: 0, reason: 'no records to push' };
+
+  // Read the sheet's CURRENT hyperlinks (and A1 heading) BEFORE the values
+  // update overwrites the cells — values.update RAW destroys rich-text links,
+  // so anything still on the sheet must be captured now and re-applied after.
+  let sheetLinks = {};
+  let sheetTitle = '';
+  try {
+    const found = await fetchHyperlinks(token);
+    if (found) sheetLinks = found;
+  } catch (e) { /* links only preserved from DB/CSV fallback */ }
+  try {
+    sheetTitle = await currentTitle_(token);
+  } catch (e) { /* heading falls back to the app name */ }
 
   const submissions = require('./submissions');
   const subsByRow = {};
@@ -602,11 +714,18 @@ async function pushToSheet() {
     throw new Error('values.update ' + putResp.status + ': ' + (await putResp.text()).slice(0, 200));
   }
 
-  // Rich-text links: updateCells per linked cell.
+  // Rich-text links: updateCells per linked cell. Each row's links are the
+  // union of DB links + the bundled migration snapshot + the sheet's current
+  // links, so hyperlinks added anywhere survive the values.update overwrite.
   const sheetId = await sheetGridId_(token);
+  const migrationLinks = migrationLinksByDisplay_();
   const requests = [];
   rows.forEach(function (r, i) {
-    const links = parseRecordLinks_(r.links);
+    const links = unionLinksForPush_(
+      parseRecordLinks_(r.links),
+      migrationLinks[Number(r.row) - START_ROW + 1],
+      sheetLinks[Number(r.row) - START_ROW + 1]
+    );
     const sheetRow = START_ROW + i;
     const fieldTexts = {
       sector: String(r.sector || ''),
@@ -614,7 +733,7 @@ async function pushToSheet() {
       action: String(r.action || '')
     };
     Object.keys(PUSH_FIELD_COLS).forEach(function (key) {
-      const list = links[key] || [];
+      const list = renderableLinksForText_(fieldTexts[key], links[key]);
       if (!list.length) return;
       const col = PUSH_FIELD_COLS[key];
       requests.push({
@@ -638,9 +757,10 @@ async function pushToSheet() {
     });
   });
 
-  // Title cell (row 1, column A): app name stamped with today's date so the
-  // sheet's on-screen heading always matches the current day.
-  const titleHeading = (getAppSettings().appName || CONFIG.APP.NAME);
+  // Title cell (row 1, column A): the sheet's existing heading (if any) is
+  // preserved and re-stamped with today's date so the on-screen title always
+  // matches the current day without clobbering custom branding.
+  const titleHeading = extractTitleHeading_(sheetTitle) || (getAppSettings().appName || CONFIG.APP.NAME);
   const stampedTitle = titleHeading + ' on ' + today_();
   requests.push({
     updateCells: {
@@ -725,5 +845,8 @@ module.exports = {
   pushToSheetEnabled,
   _parseGviz: parseGviz,
   _gvizRows: gvizRows,
-  _buildTextRuns: buildTextRuns_
+  _buildTextRuns: buildTextRuns_,
+  _unionLinksForPush: unionLinksForPush_,
+  _renderableLinksForText: renderableLinksForText_,
+  _extractTitleHeading: extractTitleHeading_
 };

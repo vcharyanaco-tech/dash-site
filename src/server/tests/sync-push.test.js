@@ -56,8 +56,8 @@ function seedRecords() {
       responsibility: 'Amit Singh',
       review_date: '25.08.2026',
       links: JSON.stringify({
-        sector: [{ url: 'https://example.com/policy', text: 'Policy doc' }],
-        description: [{ url: 'https://example.com/report', text: 'Report' }]
+        sector: [{ url: 'https://example.com/policy', text: 'Customer Service' }],
+        description: [{ url: 'https://example.com/report', text: 'Complaint resolution backlog' }]
       }),
       source: 'app'
     }
@@ -98,6 +98,14 @@ test('pushToSheet sends correct values to the spreadsheet', async () => {
     if (u.includes('spreadsheets/') && u.includes('fields=sheets.properties')) {
       // sheetGridId_ call
       return { ok: true, json: async () => ({ sheets: [{ properties: { sheetId: SHEET_ID, title: 'Sheet1' } }] }) };
+    }
+    if (u.includes('includeGridData=true')) {
+      // fetchHyperlinks (push): no extra links currently on the sheet.
+      return { ok: true, json: async () => ({ sheets: [{ data: [{ rowData: [] }] }] }) };
+    }
+    if (u.includes('/values/Sheet1!A1')) {
+      // currentTitle_ (A1 heading read)
+      return { ok: true, json: async () => ({ values: [['Circle Office Haryana Dashboard on 11.08.2026']] }) };
     }
     throw new Error('unexpected fetch: ' + u);
   };
@@ -192,14 +200,14 @@ test('pushToSheet sends correct values to the spreadsheet', async () => {
   const row3DescValue = row3DescLink.updateCells.rows[0].values[0];
   assert.strictEqual(row3DescValue.userEnteredValue.stringValue, 'Complaint resolution backlog');
 
-  // Title cell (A1): app name + today's date
+  // Title cell (A1): existing heading preserved, date refreshed
   const titleReq = requests.find(function (r) {
     return r.updateCells && r.updateCells.range.startRowIndex === 0 &&
       r.updateCells.range.startColumnIndex === 0 && r.updateCells.range.endColumnIndex === 1;
   });
   assert.ok(titleReq, 'title cell request exists');
   const titleValue = titleReq.updateCells.rows[0].values[0].userEnteredValue.stringValue;
-  assert.match(titleValue, /^.* on \d{2}\.\d{2}\.\d{4}$/, 'title carries today\'s date');
+  assert.match(titleValue, /^Circle Office Haryana Dashboard on \d{2}\.\d{2}\.\d{4}$/, 'custom heading preserved, date refreshed');
 
   // Updates column header cell (H3)
   const headerReq = requests.find(function (r) {
@@ -320,4 +328,53 @@ test('buildTextRuns_ handles multiple links correctly', () => {
   // 'Part B' starts at index 11 in 'Part A and Part B end'
   assert.strictEqual(runs[2].startIndex, 11, 'link starts where label begins');
   assert.strictEqual(runs[2].format.link.uri, 'https://b.com');
+});
+
+test('unionLinksForPush_ merges DB, migration CSV and sheet links (DB wins)', () => {
+  const dbLinks = {
+    action: [{ url: 'https://db/1', text: 'DB label' }]
+  };
+  const csvLinks = {
+    action: [{ url: 'https://csv/1', text: 'CSV label' }],
+    sector: [{ url: 'https://csv/2', text: 'CSV sector' }]
+  };
+  const sheetLinks = {
+    action: [{ url: 'https://sheet/1', text: 'Sheet label' }]
+  };
+  const out = sync._unionLinksForPush(dbLinks, csvLinks, sheetLinks);
+  assert.deepStrictEqual(out.sector, [{ url: 'https://csv/2', text: 'CSV sector' }]);
+  assert.strictEqual(out.action.length, 3, 'all three sources kept');
+  assert.strictEqual(out.action[0].url, 'https://db/1', 'DB entry first');
+});
+
+test('unionLinksForPush_ dedupes by url keeping DB text', () => {
+  const dbLinks = {
+    action: [{ url: 'https://same', text: 'DB text' }]
+  };
+  const csvLinks = {
+    action: [{ url: 'https://same', text: 'CSV text' }]
+  };
+  const sheetLinks = {
+    action: [{ url: 'https://same', text: 'Sheet text' }]
+  };
+  const out = sync._unionLinksForPush(dbLinks, csvLinks, sheetLinks);
+  assert.strictEqual(out.action.length, 1, 'deduped on url');
+  assert.strictEqual(out.action[0].text, 'DB text', 'DB wins on same url');
+});
+
+test('renderableLinksForText_ keeps only links whose label is in the text', () => {
+  const out = sync._renderableLinksForText('Investigate tracking API now', [
+    { url: 'https://a.com', text: 'tracking API' },
+    { url: 'https://b.com', text: 'missing label' },
+    { url: 'https://c.com', text: ' ' }
+  ]);
+  assert.strictEqual(out.length, 1, 'only the matching label survives');
+  assert.strictEqual(out[0].url, 'https://a.com');
+});
+
+test('extractTitleHeading_ strips the date suffix but keeps the heading', () => {
+  assert.strictEqual(sync._extractTitleHeading('Circle Office Haryana Dashboard on 11.09.2026'), 'Circle Office Haryana Dashboard');
+  assert.strictEqual(sync._extractTitleHeading('India Post Dashboard'), 'India Post Dashboard');
+  assert.strictEqual(sync._extractTitleHeading(''), null);
+  assert.strictEqual(sync._extractTitleHeading('  '), null);
 });
