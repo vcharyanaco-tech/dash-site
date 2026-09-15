@@ -2378,6 +2378,21 @@ body.modal-open { overflow: hidden; }
 
 .submission-display-time { font-size: 11px; font-weight: 500; color: var(--muted); }
 
+/* "Show/Hide updates" toggle that collapses the update blocks on a card or in
+   the record detail dialog. Hiding the blocks is a per-browser preference and
+   is applied purely with CSS so the underlying data is untouched. */
+.card-updates { display: grid; gap: var(--sp-1); }
+.card-updates.updates-hidden { display: none; }
+.toggle-updates-btn { margin-left: 2px; }
+
+.detail-updates { display: grid; gap: var(--sp-1); margin-top: var(--sp-2); }
+.detail-updates .text-subheading { margin-bottom: 4px; display: block; }
+
+@media print {
+  .card-updates.updates-hidden { display: none; }
+  .toggle-updates-btn { display: none; }
+}
+
 /* ---------------------------------- Toasts ---------------------------------- */
 .toast-container {
   position: fixed;

@@ -335,13 +335,71 @@ function groupCardFields_(fields) {
   return { top: topFields, action: actionFields, bottom: bottomFields };
 }
 
+/* ---------------------------------- Show/Hide updates toggle ---------------------------------- */
+/* "Show/Hide updates" sits beside the Submit update button on every card (and
+   in the record detail dialog). Clicking it collapses or expands the update
+   blocks rendered on that card. State is persisted per-browser in
+   localStorage so a user's choices survive reloads and re-renders. */
+var updatesHiddenStorageKey_ = 'dashUpdatesHiddenByRow';
+
+function loadUpdatesHiddenByRow_() {
+  if (appState.updatesHiddenByRow && Object.keys(appState.updatesHiddenByRow).length) return;
+  try {
+    const raw = window.localStorage.getItem(updatesHiddenStorageKey_);
+    appState.updatesHiddenByRow = raw ? (JSON.parse(raw) || {}) : {};
+  } catch (err) {
+    appState.updatesHiddenByRow = {};
+  }
+}
+
+function saveUpdatesHiddenByRow_() {
+  try {
+    window.localStorage.setItem(updatesHiddenStorageKey_, JSON.stringify(appState.updatesHiddenByRow || {}));
+  } catch (err) { /* storage full or blocked — non-fatal, toggle stays in-memory */ }
+}
+
+function isRowUpdatesHidden_(row) {
+  loadUpdatesHiddenByRow_();
+  return !!(appState.updatesHiddenByRow || {})[String(row)];
+}
+
+/* Rebuild the update blocks for one row (shared by the card + detail dialog). */
+function rowUpdatesHtml_(row) {
+  return (appState.displayedSubmissions || [])
+    .filter(function (s) { return Number(s.cardRow) === Number(row); })
+    .map(function (s) {
+      return `
+        <div class="card-field submission-display">
+          <span class="field-label submission-display-label">Update by ${escapeHtml((s.office || '').trim() ? s.office : s.email)} <span class="submission-display-time">${escapeHtml(formatTimestamp(s.createdAt))}</span></span>
+          <div class="field-value preserve-whitespace">${escapeHtml(s.text || '')}</div>
+        </div>`;
+    }).join('');
+}
+
+/* Flip the show/hide state for a row, persist it, then sync every matching
+   card / dialog element in the DOM to the new state without a re-render. */
+function toggleCardUpdates(row, btn) {
+  loadUpdatesHiddenByRow_();
+  const key = String(row);
+  appState.updatesHiddenByRow[key] = !appState.updatesHiddenByRow[key];
+  saveUpdatesHiddenByRow_();
+
+  const hidden = appState.updatesHiddenByRow[key];
+  document.querySelectorAll('[data-updates-row="' + key + '"]').forEach(function (el) {
+    el.classList.toggle('updates-hidden', hidden);
+  });
+  document.querySelectorAll('[data-updates-toggle="' + key + '"]').forEach(function (el) {
+    el.textContent = hidden ? 'Show updates' : 'Hide updates';
+  });
+  if (btn) btn.textContent = hidden ? 'Show updates' : 'Hide updates';
+}
+
 function buildCardHtml(item) {
   const visibleFields = (item.displayFields || []).filter(function (field) {
     const key = dashboardColumnKey_(field && field.label);
     if (key === 'id') return false;
     return dashboardColumnVisible_(field && field.label);
   });
-
   const groups = groupCardFields_(visibleFields);
   const topRowHtml = groups.top.length
     ? `<div class="card-fields-row card-fields-row-top">${groups.top.map(function (f) { return cardFieldHtml_(item, f); }).join('')}</div>`
@@ -357,15 +415,12 @@ function buildCardHtml(item) {
   const subCount = (appState.submissionCounts || {})[item.row] || 0;
   const subFlash = !!(appState.submissionFlash || {})[item.row];
 
-  const updateFieldsHtml = (appState.displayedSubmissions || [])
+  const updateFieldsHtml = rowUpdatesHtml_(item.row);
+
+  const updatesCount = (appState.displayedSubmissions || [])
     .filter(function (s) { return Number(s.cardRow) === Number(item.row); })
-    .map(function (s) {
-      return `
-        <div class="card-field submission-display">
-          <span class="field-label submission-display-label">Update by ${escapeHtml((s.office || '').trim() ? s.office : s.email)} <span class="submission-display-time">${escapeHtml(formatTimestamp(s.createdAt))}</span></span>
-          <div class="field-value preserve-whitespace">${escapeHtml(s.text || '')}</div>
-        </div>`;
-    }).join('');
+    .length;
+  const updatesHidden = isRowUpdatesHidden_(item.row);
 
   const reviewBadgeHtml = item.reviewStatus === 'due'
     ? `<span class="review-badge review-due">Review due${appState.isAdmin ? `
@@ -390,6 +445,7 @@ function buildCardHtml(item) {
       <button class="btn btn-secondary btn-small" onclick="openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}')">Submit update</button>
       ${subCount > 0 ? `<span class="submission-badge${subFlash ? ' flash' : ''}">${subCount}</span>` : ''}
     </div>
+    ${updatesCount > 0 ? `<button class="btn btn-secondary btn-small toggle-updates-btn" data-updates-toggle="${escAttr(item.row)}" onclick="toggleCardUpdates('${escAttr(item.row)}', this)">${updatesHidden ? 'Show updates' : 'Hide updates'}</button>` : ''}
     <div class="menu-dropdown">
       <button class="btn btn-secondary btn-small" type="button" onclick="event.stopPropagation(); toggleDropdown(this);">Print</button>
       <span class="menu-dropdown-menu">
@@ -413,7 +469,7 @@ function buildCardHtml(item) {
     <article class="card ${item.reviewStatus === 'due' ? 'review-due' : ''} ${item.displayed === false ? 'card-hidden' : ''}" data-row="${escAttr(item.row)}">
       ${reviewBadgeHtml}
       ${showId ? '<div class="card-title preserve-whitespace"><span class="id-badge">#' + escapeHtml(item.id) + '</span>' + displayToggleHtml + '</div>' : ''}
-      <div class="card-fields">${fieldsHtml || '<div class="card-field"><span class="field-label">Details</span><div class="field-value preserve-whitespace">No details available</div></div>'}${updateFieldsHtml}</div>
+      <div class="card-fields">${fieldsHtml || '<div class="card-field"><span class="field-label">Details</span><div class="field-value preserve-whitespace">No details available</div></div>'}${updateFieldsHtml ? `<div class="card-updates${updatesHidden ? ' updates-hidden' : ''}" data-updates-row="${escAttr(item.row)}">${updateFieldsHtml}</div>` : ''}</div>
       ${showActions ? '<div class="card-footer"><div class="actions">' + actionsHtml + '</div></div>' : ''}
       ${aiPanelHtmlFromCache_(item.row)}
       ${linkPanelHtmlFromCache_(item.row)}

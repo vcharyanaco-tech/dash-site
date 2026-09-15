@@ -219,6 +219,10 @@ const appState = {
   submissionCounts: {},
   submissionFlash: {},
   displayedSubmissions: [],
+  // Per-row "hide the update blocks on the dashboard card / detail modal"
+  // state, persisted per-browser in localStorage so a user's show/hide
+  // choices survive reloads, pagination and background re-renders.
+  updatesHiddenByRow: {},
   responsibilities: [],
   reminders: [],
   counts: {},

@@ -28,7 +28,7 @@ function loadScript(src) {
 // session.js must load before dashboard.js (initApp, renderProfile).
 // dashboard.js must load before init.js (wireGlobalEvents calls renderDashboard).
 // init.js loads last (wires global events, calls initApp on window.load).
-const MODULE_VERSION = '2026.09.15a';
+const MODULE_VERSION = '2026.09.15b';
 const MODULES = [
   'i18n.js',         // i18n translations (EN + HI) — must load before app modules
   'core.js',         // Constants, EventBus, ApiService, state, helpers
