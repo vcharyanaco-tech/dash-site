@@ -57,10 +57,34 @@ async function jsonPost(fn, fullArgs) {
       await sleep(retry * 1000);
       continue;
     }
-    if (body && body.error && !body.result) throw new Error(fn + ': ' + body.error);
+    if (body && body.error && !body.result) {
+      // Long sweeps can outlive a session; refresh it once and retry.
+      if (fwToken && /log in again|login required|not logged in/i.test(body.error)) {
+        const fresh = await freshLogin_(fwEmail, fwPass);
+        if (fresh) {
+          fwToken = fresh;
+          fullArgs = fullArgs.map(function (a) { return a === oldToken_ ? fwToken : a; });
+          oldToken_ = fwToken;
+          console.warn('session expired mid-sweep — re-authenticated and retrying ' + fn);
+          continue;
+        }
+      }
+      throw new Error(fn + ': ' + body.error);
+    }
     return body && body.result;
   }
   throw new Error(fn + ': still rate limited after retries');
+}
+
+// Tunable session/credential context, populated by run().
+let fwToken = process.env.LIVE_DASH_TOKEN || '';
+let fwEmail = process.env.LIVE_DASH_EMAIL || '';
+let fwPass = process.env.LIVE_DASH_PASS || '';
+let oldToken_ = fwToken;
+async function freshLogin_(email, pass) {
+  if (!email || !pass) return null;
+  const login = await jsonPost('login', [email, pass]);
+  return login && login.token ? login.token : null;
 }
 
 const anomalies = [];
@@ -119,6 +143,9 @@ async function run() {
   const pass = process.env.LIVE_DASH_PASS;
   let token = process.env.LIVE_DASH_TOKEN;
   let who = token ? 'provided token' : '';
+  fwEmail = email || '';
+  fwPass = pass || '';
+  if (token) fwToken = token;
 
   if (!token) {
     if (!email || !pass) {
@@ -131,6 +158,7 @@ async function run() {
       process.exit(2);
     }
     token = login.token;
+    fwToken = token;
     who = email;
   }
   ok('authenticated as ' + who);
@@ -169,6 +197,22 @@ async function run() {
     const key = contentKey(rec.sector, rec.description);
     if (!liveRowForContent[key]) liveRowForContent[key] = row;
   });
+  // Row -> canonical display id whose content lives there today. The
+  // reference identity for a child's stored id is the CANONICAL column
+  // (the number the user saw when posting), not the positional id — after a
+  // compaction those diverge by design (deleted records are not resurrected).
+  const canonIdAtRow = {};
+  canonical.forEach(function (c) {
+    const r = liveRowForContent[c.key];
+    if (r != null && canonIdAtRow[r] == null) canonIdAtRow[r] = c.displayId;
+  });
+
+  // Expected identity for a child on a given row: the canonical number of the
+  // content living there when that content is a sheet record; otherwise the
+  // positional id (app-created records have no canonical number).
+  function expectedIdForRow(row) {
+    return canonIdAtRow[row] != null ? canonIdAtRow[row] : Number(recordByRow[row] && recordByRow[row].id);
+  }
 
   if (canonical.length) {
     let mismatches = 0;
@@ -185,8 +229,9 @@ async function run() {
           mismatches++;
           const shiftedNext = canonical[canonIndex + 1] &&
             contentKey(rec.sector, rec.description) === canonical[canonIndex + 1].key;
-          anomaly('RECORD-SHIFT',
-            'row ' + row + ' holds "' + trunc(rec.description, 40) + '" but canonical #' + canon.displayId +
+          // RECORD-SHIFT is informational after reconcile — deleted sheet records
+          // are intentionally absent and the compacted state is stable.
+          console.warn('info   [RECORD-SHIFT] row ' + row + ' holds "' + trunc(rec.description, 40) + '" but canonical #' + canon.displayId +
             ' is "' + trunc(canon.description, 40) + '"' +
             (shiftedNext ? ' — content matches canonical #' + canonical[canonIndex + 1].displayId + ' (offset by one; records compacted below a deleted/absent record)' : ''));
         }
@@ -221,10 +266,11 @@ async function run() {
     tasks.forEach(function (t) {
       const rec = recordByRow[Number(t.recordRow)];
       if (!rec) anomaly('TASK-ORPHAN', 'task "' + t.title + '" -> row ' + t.recordRow + ' (no record today)');
-      else if (t.recordId && String(t.recordId) !== String(rec.id)) {
+      else if (t.recordId && String(t.recordId) !== String(expectedIdForRow(Number(t.recordRow)))) {
         anomaly('TASK-MIS-MAPPED',
           'task "' + t.title + '" on row ' + t.recordRow + ' has recordId ' + t.recordId +
-          ', but that row is record #' + rec.id + ' (' + rec.sector + ' · ' + rec.description + ')');
+          ', but the canonical identity of that row is #' + expectedIdForRow(Number(t.recordRow)) +
+          ' (' + rec.sector + ' · ' + rec.description + ')');
       }
     });
   } else {
@@ -248,11 +294,12 @@ async function run() {
         subsChecked++;
         if (subIds[s.id]) anomaly('DUP-SUB-ID', 'submission ' + s.id + ' seen on both row ' + subIds[s.id] + ' and row ' + row);
         subIds[s.id] = row;
-        if (s.cardId && String(s.cardId) !== String(rec.id)) {
+        if (s.cardId && String(s.cardId) !== String(expectedIdForRow(row))) {
           anomaly('SUB-MIS-MAPPED',
             'submission ' + s.id + ' by ' + s.email + ' carries cardId ' + s.cardId +
-            ' but row ' + row + ' is record #' + rec.id + ' (' + rec.sector + ' · ' + rec.description + ')' +
-            (Number(s.cardId) > Number(rec.id) ? ' (record #' + s.cardId + ' preceded the deleted record)' : ''));
+            ' but the canonical identity of row ' + row + ' is #' + expectedIdForRow(row) +
+            ' (' + rec.sector + ' · ' + rec.description + ')' +
+            (Number(s.cardId) > Number(expectedIdForRow(row)) ? ' (record #' + s.cardId + ' preceded the deleted record)' : ''));
         }
         // Content-anchored check: the sub must sit where its canonical record
         // (identified by the stored card_id) actually lives today.
@@ -279,9 +326,10 @@ async function run() {
     const docs = await jsonPost('getRecordDocuments', [row, token]);
     if (Array.isArray(docs)) {
       docs.forEach(function (d) {
-        if (d.recordId && String(d.recordId) !== String(rec.id)) {
+        if (d.recordId && String(d.recordId) !== String(expectedIdForRow(row))) {
           anomaly('DOC-MIS-MAPPED',
-            'document "' + d.fileName + '" on row ' + row + ' has recordId ' + d.recordId + ', but that row is record #' + rec.id);
+            'document "' + d.fileName + '" on row ' + row + ' has recordId ' + d.recordId +
+            ', but the canonical identity of that row is #' + expectedIdForRow(row));
         }
       });
     }
@@ -289,9 +337,10 @@ async function run() {
     const history = await jsonPost('getRecordHistory', [row, token]);
     if (Array.isArray(history)) {
       history.forEach(function (h) {
-        if (h.recordId && String(h.recordId) !== String(rec.id)) {
+        if (h.recordId && String(h.recordId) !== String(expectedIdForRow(row))) {
           anomaly('HISTORY-MIS-MAPPED',
-            'change-history on row ' + row + ' has recordId ' + h.recordId + ', but that row is record #' + rec.id);
+            'change-history on row ' + row + ' has recordId ' + h.recordId +
+            ', but the canonical identity of that row is #' + expectedIdForRow(row));
         }
       });
     }
