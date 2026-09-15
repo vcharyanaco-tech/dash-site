@@ -239,11 +239,22 @@ function flushPendingAutoRefresh() {
   autoRefreshTick();
 }
 
+// True while any modal is on screen. Checks the body.modal-open scroll lock
+// first, then falls back to any visible .modal-backdrop so modals opened
+// without openDialog() (legacy path: openSubmissionsModal) are respected too.
+function hasOpenModal_() {
+  if (typeof document === 'undefined') return false;
+  if (document.body.classList.contains('modal-open')) return true;
+  return Array.prototype.some.call(document.querySelectorAll('.modal-backdrop'), function (b) {
+    return !b.classList.contains('hidden');
+  });
+}
+
 function autoRefreshTick() {
   if (autoRefreshInFlight) return;
   if (!getAuthToken()) return;
   if (typeof document !== 'undefined' && document.hidden) { autoRefreshPending = true; return; }
-  if (document.body.classList.contains('modal-open')) { autoRefreshPending = true; return; }
+  if (hasOpenModal_()) { autoRefreshPending = true; return; }
   autoRefreshInFlight = true;
   const seqAtStart = appState.submissionSeq || 0;
   ApiService.getAppData().then(function (data) {
@@ -252,6 +263,10 @@ function autoRefreshTick() {
       setAuthToken('');
       return;
     }
+    // A modal may have opened while this request was in flight. Repainting
+    // the dashboard then would clobber it, so defer the render here too;
+    // closeDialog()/visibilitychange flush the pending refresh later.
+    if (hasOpenModal_()) { autoRefreshPending = true; return; }
     if ((appState.submissionSeq || 0) !== seqAtStart) {
       // A submission changed while this request was in flight — the payload is
       // stale for submission fields and would revert the card's badge/updates.

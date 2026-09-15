@@ -28,6 +28,7 @@ function loadScript(src) {
 // session.js must load before dashboard.js (initApp, renderProfile).
 // dashboard.js must load before init.js (wireGlobalEvents calls renderDashboard).
 // init.js loads last (wires global events, calls initApp on window.load).
+const MODULE_VERSION = '2026.09.15a';
 const MODULES = [
   'i18n.js',         // i18n translations (EN + HI) — must load before app modules
   'core.js',         // Constants, EventBus, ApiService, state, helpers
@@ -53,9 +54,10 @@ const MODULES = [
 (async function () {
   for (const mod of MODULES) {
     try {
-      // i18n.js lives in src/, not src/app/
-      const src = mod === 'i18n.js' ? `src/${mod}` : `src/app/${mod}`;
-      await loadScript(src);
+      // i18n.js lives in src/, not src/app/. Every module gets a version query
+      // string so a stale browser cache is never served after a deploy.
+      const base = mod === 'i18n.js' ? 'src/' : 'src/app/';
+      await loadScript(base + mod + '?v=' + MODULE_VERSION);
     } catch (err) {
       console.error(`[entry.js] ${err.message}`);
     }

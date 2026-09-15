@@ -692,6 +692,10 @@ function refreshData() {
   showOverlay('Refreshing data…');
   ApiService.getAppData().then(function (data) {
     hideOverlay();
+    // A modal may have opened while the request was in flight — defer the
+    // repaint (and the toast) so the open modal is not disturbed; the
+    // closeDialog/visibility flush re-runs this refresh once it is safe.
+    if (hasOpenModal_()) { autoRefreshPending = true; return; }
     applyAppData(data);
     populateFilters();
     populateResponsibilitySelect();

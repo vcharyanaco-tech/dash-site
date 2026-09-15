@@ -298,6 +298,12 @@ function deleteItem(row) {
       appState.items = data.items || [];
       appState.summary = data.summary || {};
       appState.analytics = data.analytics || {};
+      // Deleting a record renumbers the rows below it, so the submission
+      // overview must follow the shift immediately (not on the next
+      // background refresh) or counts/badges point at the wrong records.
+      appState.submissionCounts = data.submissionCounts || {};
+      appState.submissionFlash = data.submissionFlash || {};
+      appState.displayedSubmissions = data.displayedSubmissions || [];
       renderDashboard(true);
       showToast('Record deleted', 'success');
     }).catch(function (err) {

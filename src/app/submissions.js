@@ -12,8 +12,12 @@ function openSubmissionsModal(row, cardId, onlyMine) {
   getEl('submissionText').placeholder = 'Write your update for record #' + cardId + '…';
   const subsModal = getEl('submissionsModal');
   subsModal.classList.remove('hidden');
-  restoreModalSize_(subsModal);
   loadSubmissions();
+  // Route through the shared dialog system so body.modal-open (scroll lock +
+  // the auto-refresh deferral guard) and the aria state stay consistent.
+  openDialog('submissionsModal');
+  const textarea = getEl('submissionText');
+  if (textarea) textarea.focus();
 }
 
 function closeSubmissionsModal() {
