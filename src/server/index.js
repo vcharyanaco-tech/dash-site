@@ -284,6 +284,11 @@ const VALIDATORS = {
     if (args.length < 4) return 'addSubmission requires (cardRow, cardId, text, token)';
     return null;
   },
+  reconcileRecordOrder: function (args) {
+    if (args.length < 2) return 'reconcileRecordOrder requires (dryRun, token)';
+    if (typeof args[0] !== 'boolean') return 'dryRun must be a boolean';
+    return null;
+  },
   uploadDocument: function (args) {
     if (args.length < 6) return 'uploadDocument requires (row, recordId, fileName, fileBytes, mimeType, token)';
     return null;

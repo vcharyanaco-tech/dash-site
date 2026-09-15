@@ -101,6 +101,27 @@ function cellValue(cell, fallback) {
   return String(cell.v);
 }
 
+// Canonical record list in sheet order (public gviz, no auth, read-only).
+// Serves as the reference ordering for reconcileRecordOrder (reconcile.js)
+// and the mapping-audit tool: displayId (1-based) == row - START_ROW + 1.
+function fetchCanonicalRecords() {
+  return fetchGviz().then(function (text) {
+    const resp = parseGviz(text);
+    return gvizRows(resp).map(function (r, i) {
+      return {
+        displayId: i + 1,
+        row: START_ROW + i,
+        sector: cellValue(r.c[1]),
+        description: cellValue(r.c[2]),
+        entryDate: cellValue(r.c[3]),
+        action: cellValue(r.c[4]),
+        responsibility: cellValue(r.c[5]),
+        reviewDate: cellValue(r.c[6])
+      };
+    });
+  });
+}
+
 /* ------------------------------------------------------------------ *
  * Sheets API read (public sheet + API key) — hyperlinks
  * ------------------------------------------------------------------ */
@@ -841,6 +862,7 @@ module.exports = {
   pullFromSheet,
   previewPullFromSheet,
   pushToSheet,
+  fetchCanonicalRecords,
   writeCredentialConfigured,
   pushToSheetEnabled,
   _parseGviz: parseGviz,
