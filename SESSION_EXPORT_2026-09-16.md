@@ -83,14 +83,14 @@ Full server suite now **121/121 pass, 0 fail, ~20s**; coverage 77.75% stmt /
 - Full suite: **152/152 pass**; secret scan green (167 tracked files).
 - Commits: `299975a` (1C unit) + `301e45d` (session-export doc), both pushed.
 
-## This continuation (1D investigation only)
+## This continuation (1D)
 
-User resumed the session, then paused before code changes. Everything in this
-continuation is **investigation / findings only** — nothing committed beyond the
-two pushed commits above. Full 1D findings in the "1D Investigation" section below.
+User resumed the session and greenlit Phase 1D. Implementation landed in the
+"Phase 1D — Implementation" section below (commit `c4e210a`); the investigation
+findings it was based on are preserved at the end as historical reference.
 
 ## Verification
-- `src/server`: `npm test` → 152/152 pass, 0 fail.
+- `src/server`: `npm test` → 196/196 pass, 0 fail (Phase 1D final); earlier 152/152.
 - `node --check` on touched server/front files → clean.
 - Secret scan → green (167 tracked files).
 - Lighthouse + p95 + bundle measurements in baseline doc.
@@ -101,12 +101,59 @@ two pushed commits above. Full 1D findings in the "1D Investigation" section bel
 2. `299975a` `fix:` phase-1C authorization audit — requireViewer login-gated,
    cookie-token aware audit/history reads, dispatch-level auth for enterprise
    config & cron ops; authz role-matrix test suite.
+3. `c4e210a` (this session, pending push) `feat:` phase-1D dispatch hardening —
+   cookie-token injection for 12 ops + 8 new validators + 44 tests.
 
 ## Deployment
 - Server change (`src/server/index.js`, run-tests.cjs) → Render auto-deploys.
 - `run-tests.cjs`/`smoke.test.js` are CI-only (no prod impact).
 
-## 1D Investigation (started, NO code changes yet — paused by user request)
+## Phase 1D — Implementation (third session unit)
+
+### What was done
+- **AUTH_ARG_INDEX + 12 ops now cookie-injected** (browser calls work with a
+  session cookie, no token arg):
+  `setRecordDisplay:2`, `generateReviewNotifications:0`,
+  `reconcileRecordOrder:1`, `exportFullBackup:0`, `adminSyncFromSheet:0`,
+  `adminPreviewSyncFromSheet:0`, `adminPushToSheet:0`, `setOpenRouterApiKey:0`,
+  `setGeminiApiKey:0`, `setGroqApiKey:0`, `setHuggingFaceApiKey:0`,
+  `setKiloApiKey:0` (`index.js` AUTH_ARG_INDEX).
+- **Middleware cookie-injection upgrade** (`index.js:223-233`): when a cookie
+  token is present and the token slot is absent/empty, the slot is filled; for
+  single-arg browser calls to token-first ops (e.g. `['apiKey']` on the
+  ApiKey setters where the data occupies the token slot), the data arg is
+  shifted aside (unshift) so the cookie token lands at args[0] before
+  validation.
+- **8 new VALIDATORS** (14 validator entries): `changePassword`,
+  `markReviewDone`, `markReviewNotDone`, `adminUpdateUser`, `emailReport`,
+  `getReportData`, `exportFullBackup`, plus the 5× `set*ApiKey` (empty/non-string
+  key rejected before reaching `requireAdmin`). Validator count: 10 → 22.
+- **Test suite:** new `src/server/tests/validators.test.js` — 44 tests:
+  malformed/missing-arg rejection for every new validator + cookie-injection
+  end-to-end for all 12 ops + viewer/editor role denials for markReview and
+  admin/API-key ops.
+- **Full suite: 196/196 pass** (was 152); coverage 79.30% stmt / 58.43% br,
+  `node --check` clean on both touched files.
+- Commit `c4e210a` (NOT yet pushed).
+
+## Pending Tasks
+1. **Push `c4e210a`** (or confirm before pushing).
+2. **Phase 1 — P0 Security (in progress):**
+   - 1C ✅ authorization audit + authz.test.js.
+   - 1D ✅ validators + AUTH_ARG_INDEX gaps closed (this session).
+   - 1E file-upload test coverage (size/MIME/name edge cases, bad base64, wrong
+     key) — next.
+   - 1B auth-cookie migration assessment (kill vestigial browser-token
+     `getAuthToken()` path → document cookie-only design).
+3. Phase 2 (measured perf): ship app.js monolith as prod load path, re-measure on
+   live DB/payloads, re-run Lighthouse with 4G throttle.
+4. Phase 3+ only after Phase 1/2 gates pass.
+
+### Stray files (not committed)
+- `src/server/D:/tmp` — test-suite leak (Windows-style absolute path); untracked,
+  do not commit.
+
+### 1D Investigation (historical reference — superseded by implementation above)
 
 Dispatching analysis (exact counts, run against `index-dispatch.js` / `index.js`):
 
@@ -129,20 +176,3 @@ Dispatching analysis (exact counts, run against `index-dispatch.js` / `index.js`
 - 1E upload audit scope confirmed: MIME allowlist + 25MB cap + base64 key regex +
   sanitized names + login-gated resolve already at `documents.js`; needs edge-case
   test coverage only.
-
-## Pending Tasks
-1. **Session export / commit review** — confirm and push (current work saved above).
-2. **Phase 1 — P0 Security (in progress, 1C done, 1D investigated):**
-   - 1C ✅ authorization audit + authz.test.js (see above).
-   - 1D (next): add VALIDATORS to high-value dispatch ops (markReviewDone/NotDone,
-     changePassword, adminUpdateUser, emailReport, getReportData, emit
-     validation-first where args are string/number-typed) + add missing
-     `AUTH_ARG_INDEX` entries (setRecordDisplay, generateReviewNotifications,
-     reconcileRecordOrder, exportFullBackup, admin*SyncFromSheet, adminPushToSheet,
-     *ApiKey setters) so cookie-based browser calls work.
-   - 1E file-upload test coverage (size/MIME/name edge cases, bad base64, wrong key).
-   - 1B auth-cookie migration assessment (kill vestigial browser-token `getAuthToken()`
-     path → document cookie-only design).
-3. Phase 2 (measured perf): ship app.js monolith as prod load path, re-measure on
-   live DB/payloads, re-run Lighthouse with 4G throttle.
-4. Phase 3+ only after Phase 1/2 gates pass.
