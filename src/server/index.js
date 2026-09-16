@@ -609,6 +609,237 @@ const VALIDATORS = {
   sendReviewDeadlinePushNotifications: function (args) {
     if (args.length < 1) return 'sendReviewDeadlinePushNotifications requires (token)';
     return null;
+  },
+  // ── 1F: read / informational ops (public, no token) ──────────────────────
+  getServerTime: function (args) {
+    if (args.length > 0) return 'getServerTime takes no arguments';
+    return null;
+  },
+  getData: function (args) {
+    if (args.length > 0) return 'getData takes no arguments';
+    return null;
+  },
+  getSyncStatus: function (args) {
+    if (args.length > 0) return 'getSyncStatus takes no arguments';
+    return null;
+  },
+  getReportTemplates: function (args) {
+    if (args.length > 0) return 'getReportTemplates takes no arguments';
+    return null;
+  },
+  getTranslations: function (args) {
+    if (args.length > 1) return 'getTranslations requires (lang)';
+    if (args.length === 1 && (typeof args[0] !== 'string' || !args[0].trim())) return 'lang must be a string';
+    return null;
+  },
+  requestPasswordReset: function (args) {
+    if (args.length < 1 || typeof args[0] !== 'string' || !args[0].trim()) return 'requestPasswordReset requires (identifier)';
+    return null;
+  },
+  // ── 1F: read / informational ops (token-only, token@0) ───────────────────
+  getAppData: function (args) {
+    if (args.length < 1) return 'getAppData requires (token)';
+    return null;
+  },
+  generateReviewNotifications: function (args) {
+    if (args.length < 1) return 'generateReviewNotifications requires (token)';
+    return null;
+  },
+  logout: function (args) {
+    if (args.length < 1) return 'logout requires (token)';
+    return null;
+  },
+  validateSession: function (args) {
+    if (args.length < 1) return 'validateSession requires (token)';
+    return null;
+  },
+  refreshSession: function (args) {
+    if (args.length < 1) return 'refreshSession requires (token)';
+    return null;
+  },
+  adminGetUsers: function (args) {
+    if (args.length < 1) return 'adminGetUsers requires (token)';
+    return null;
+  },
+  adminExportUsers: function (args) {
+    if (args.length < 1) return 'adminExportUsers requires (token)';
+    return null;
+  },
+  adminGetUserActivity: function (args) {
+    if (args.length < 1) return 'adminGetUserActivity requires (token)';
+    return null;
+  },
+  getAssignableUsers: function (args) {
+    if (args.length < 1) return 'getAssignableUsers requires (token)';
+    return null;
+  },
+  getMyNotifications: function (args) {
+    if (args.length < 1) return 'getMyNotifications requires (token)';
+    return null;
+  },
+  clearMyNotifications: function (args) {
+    if (args.length < 1) return 'clearMyNotifications requires (token)';
+    return null;
+  },
+  getTaskCounts: function (args) {
+    if (args.length < 1) return 'getTaskCounts requires (token)';
+    return null;
+  },
+  getMyTasks: function (args) {
+    if (args.length < 1) return 'getMyTasks requires (token)';
+    return null;
+  },
+  getDashboardPreferences: function (args) {
+    if (args.length < 1) return 'getDashboardPreferences requires (token)';
+    return null;
+  },
+  sendWhatsAppReviewReminders: function (args) {
+    if (args.length < 1) return 'sendWhatsAppReviewReminders requires (token)';
+    return null;
+  },
+  getAiInsights: function (args) {
+    if (args.length < 1) return 'getAiInsights requires (token)';
+    return null;
+  },
+  getAllAskLinkHistory: function (args) {
+    if (args.length < 1) return 'getAllAskLinkHistory requires (token)';
+    return null;
+  },
+  listMeetingFiles: function (args) {
+    if (args.length < 1) return 'listMeetingFiles requires (token)';
+    return null;
+  },
+  getFathomStatus: function (args) {
+    if (args.length < 1) return 'getFathomStatus requires (token)';
+    return null;
+  },
+  listFathomUsers: function (args) {
+    if (args.length < 1) return 'listFathomUsers requires (token)';
+    return null;
+  },
+  getFathomMeetingStats: function (args) {
+    if (args.length < 1) return 'getFathomMeetingStats requires (token)';
+    return null;
+  },
+  getEnterpriseFrontendConfig: function (args) {
+    if (args.length < 1) return 'getEnterpriseFrontendConfig requires (token)';
+    return null;
+  },
+  setupEnterpriseAddons: function (args) {
+    if (args.length < 1) return 'setupEnterpriseAddons requires (token)';
+    return null;
+  },
+  installEnterpriseTriggers: function (args) {
+    if (args.length < 1) return 'installEnterpriseTriggers requires (token)';
+    return null;
+  },
+  validateEnterpriseConfiguration: function (args) {
+    if (args.length < 1) return 'validateEnterpriseConfiguration requires (token)';
+    return null;
+  },
+  getEnterpriseHealth: function (args) {
+    if (args.length < 1) return 'getEnterpriseHealth requires (token)';
+    return null;
+  },
+  adminSyncFromSheet: function (args) {
+    if (args.length < 1) return 'adminSyncFromSheet requires (token)';
+    return null;
+  },
+  adminPreviewSyncFromSheet: function (args) {
+    if (args.length < 1) return 'adminPreviewSyncFromSheet requires (token)';
+    return null;
+  },
+  adminPushToSheet: function (args) {
+    if (args.length < 1) return 'adminPushToSheet requires (token)';
+    return null;
+  },
+  // ── 1F: read / informational ops (token-first with data) ──────────────────
+  getSubmissions: function (args) {
+    if (args.length < 1) return 'getSubmissions requires (token)';
+    return null;
+  },
+  getCardAiInsight: function (args) {
+    if (args.length < 2) return 'getCardAiInsight requires (token, row)';
+    if (args[1] === undefined || args[1] === null) return 'row is required';
+    return null;
+  },
+  getLinkContentAiInsight: function (args) {
+    if (args.length < 2) return 'getLinkContentAiInsight requires (token, row)';
+    if (args[1] === undefined || args[1] === null) return 'row is required';
+    return null;
+  },
+  askLinkAi: function (args) {
+    if (args.length < 3) return 'askLinkAi requires (token, row, question)';
+    if (typeof args[2] !== 'string' || !args[2].trim()) return 'question is required';
+    return null;
+  },
+  saveAskLinkHistory: function (args) {
+    if (args.length < 3) return 'saveAskLinkHistory requires (token, row, history)';
+    if (!Array.isArray(args[2])) return 'history must be an array';
+    return null;
+  },
+  getMeetingFile: function (args) {
+    if (args.length < 2) return 'getMeetingFile requires (token, name)';
+    if (typeof args[1] !== 'string' || !args[1].trim()) return 'name is required';
+    return null;
+  },
+  listFathomMeetings: function (args) {
+    if (args.length < 1) return 'listFathomMeetings requires (token)';
+    return null;
+  },
+  searchFathomMeetings: function (args) {
+    if (args.length < 1) return 'searchFathomMeetings requires (token)';
+    return null;
+  },
+  getFathomMeetingContent: function (args) {
+    if (args.length < 2) return 'getFathomMeetingContent requires (token, recordingId)';
+    if (args[1] === undefined || args[1] === null || args[1] === '') return 'recordingId is required';
+    return null;
+  },
+  getRecordingDownloadLink: function (args) {
+    if (args.length < 2) return 'getRecordingDownloadLink requires (token, recordingId)';
+    if (args[1] === undefined || args[1] === null || args[1] === '') return 'recordingId is required';
+    return null;
+  },
+  bulkGetRecordingDownloadLinks: function (args) {
+    if (args.length < 2) return 'bulkGetRecordingDownloadLinks requires (token, recordingIds)';
+    if (!Array.isArray(args[1])) return 'recordingIds must be an array';
+    return null;
+  },
+  // ── 1F: read / informational ops (append-token, token@1) ──────────────────
+  getRecordHistory: function (args) {
+    if (args.length < 2) return 'getRecordHistory requires (row, token)';
+    if (args[0] === undefined || args[0] === null) return 'row is required';
+    return null;
+  },
+  getRecordDocuments: function (args) {
+    if (args.length < 2) return 'getRecordDocuments requires (row, token)';
+    if (args[0] === undefined || args[0] === null) return 'row is required';
+    return null;
+  },
+  getAuditEntries: function (args) {
+    if (args.length < 2) return 'getAuditEntries requires (limit, token)';
+    return null;
+  },
+  getTasks: function (args) {
+    if (args.length < 2) return 'getTasks requires (filters, token)';
+    if (args[0] === undefined || args[0] === null || typeof args[0] !== 'object') return 'filters must be an object';
+    return null;
+  },
+  processMeetingRecording: function (args) {
+    if (args.length < 2) return 'processMeetingRecording requires (payload, token)';
+    if (!args[0] || typeof args[0] !== 'object') return 'payload must be an object';
+    return null;
+  },
+  transcribeMeetingSegment: function (args) {
+    if (args.length < 2) return 'transcribeMeetingSegment requires (payload, token)';
+    if (!args[0] || typeof args[0] !== 'object') return 'payload must be an object';
+    return null;
+  },
+  generateMeetingMinutes: function (args) {
+    if (args.length < 2) return 'generateMeetingMinutes requires (payload, token)';
+    if (!args[0] || typeof args[0] !== 'object') return 'payload must be an object';
+    return null;
   }
 };
 

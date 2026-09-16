@@ -18,7 +18,7 @@ const assert = require('node:assert');
 const { password } = require('./test-bootstrap');
 const { server } = require('../index');
 
-const AUTH_ERROR_RE = /login required|session expired|please log in|permission required/i;
+const AUTH_ERROR_RE = /login required|session expired|please log in|permission required|requires \(.*token\)/i;
 const ROW = { sector: 'Test', description: 'cookie-injection record', entryDate: '09.08.2026', action: 'Do nothing', responsibility: 'co_admin', reviewDate: '10.08.2026' };
 
 let port;

@@ -94,9 +94,9 @@ for (const [fn, args] of requireLoginOps) {
     await assert.rejects(
       post(fn, args),
       // Ops with validators reject malformed anonymous calls at the
-      // validation gate ("requires (token)"); the rest hit the auth
+      // validation gate ("requires (...)"); the rest hit the auth
       // gate. Either rejection satisfies the security intent.
-      /login required|session expired|please log in|requires \(token\)/i
+      /login required|session expired|please log in|requires \(.*token\)/i
     );
   });
 }
