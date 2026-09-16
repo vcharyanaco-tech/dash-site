@@ -457,7 +457,6 @@ function saveEditUser() {
     renderUsersTable(result.users || []);
     showToast(result.message || 'User updated', 'success');
     if (result.reAuth) {
-      setAuthToken('');
       try { window.sessionStorage.setItem(STORAGE_REAUTH_MSG, 'Your email was changed. Please log in with your new email.'); } catch (err) {}
       window.location.reload();
     }

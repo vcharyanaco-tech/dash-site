@@ -3,15 +3,17 @@
  * India Post Dashboard — Node port
  * tests/dispatch-client-args.test.js
  * Arg-order lock, auto-maintained: parses the REAL ApiService
- * block from app.js, evaluates each client call's arguments
- * (token position included), and replays them through
- * index-dispatch. Any auth error means the token landed in the
- * wrong slot — the bug class that made Meeting Notes throw
- * "Login required" and log the user out.
+ * block from app.js, evaluates each client call's data arguments,
+ * injects the session token at the AUTH_ARG_INDEX slot (mirroring
+ * the server's cookie-injection middleware), and replays them
+ * through index-dispatch. Any auth error means AUTH_ARG_INDEX
+ * diverged from the dispatch's expected token slot — the bug class
+ * that made Meeting Notes throw "Login required" and log the
+ * user out.
  *
  * Because it reads app.js directly, this never drifts: a new
- * client call is audited automatically, and a call whose token
- * position diverges from the dispatch fails the suite.
+ * client call is audited automatically, and a call whose data-arg
+ * order or auth slot diverges from the dispatch fails the suite.
  * ============================================================
  */
 
@@ -27,6 +29,7 @@ process.env.DASH_IMPORT_SKIP = '1';
 
 const { db } = require('../db');
 const dispatch = require('../index-dispatch');
+const { AUTH_ARG_INDEX } = require('../index');
 
 const APP_JS = path.join(__dirname, '..', '..', '..', 'app.js');
 const TOKEN = 'tok';
@@ -79,14 +82,20 @@ function parseClientCalls() {
   return calls;
 }
 
-// Evaluate a call's arg expressions with params bound to safe values and
-// getAuthToken() returning the real session token — exactly the args the
-// browser would send.
+// Evaluate a call's arg expressions with params bound to safe values, then
+// inject the session token at the AUTH_ARG_INDEX slot — mirroring the
+// server's cookie-injection middleware (the browser sends no token arg;
+// the HttpOnly dash_session cookie is the source of truth).
 function evalArgs(call) {
-  const names = call.params.concat('getAuthToken');
+  const names = call.params;
   const body = 'return [' + call.argExprs.join(',') + '];';
   const make = new (Function.prototype.bind.apply(Function, [null].concat(names, body)))();
-  return make.apply(null, call.params.map(function (p) { return VALUE[p]; }).concat(function () { return TOKEN; }));
+  const raw = make.apply(null, call.params.map(function (p) { return VALUE[p]; }));
+  const authIndex = AUTH_ARG_INDEX[call.api];
+  if (authIndex === undefined) return raw;
+  const args = raw.slice();
+  args.splice(authIndex, 0, TOKEN);
+  return args;
 }
 
 test('every app.js ApiService call authenticates through the dispatch', async function () {

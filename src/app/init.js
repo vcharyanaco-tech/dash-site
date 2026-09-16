@@ -305,7 +305,7 @@ function subscribeToPushNotifications() {
       });
     }).then(function (sub) {
       appState.pushSubscription = sub;
-      ApiService.subscribePush(getAuthToken(), sub.toJSON()).then(function () {
+      ApiService.subscribePush(sub.toJSON()).then(function () {
         showToast('Push notifications enabled!', 'success');
       }).catch(function (err) {
         showToast('Could not save push subscription: ' + (err.message || err), 'error');
@@ -321,7 +321,7 @@ function unsubscribeFromPushNotifications() {
     var endpoint = appState.pushSubscription.endpoint;
     appState.pushSubscription.unsubscribe().then(function () {
       appState.pushSubscription = null;
-      return ApiService.unsubscribePush(getAuthToken(), endpoint);
+      return ApiService.unsubscribePush(endpoint);
     }).then(function () {
       showToast('Push notifications disabled.', 'info');
     }).catch(function () {});

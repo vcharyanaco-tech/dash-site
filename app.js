@@ -12,7 +12,6 @@ const PAGE_SIZE = 10;
 const AUDIT_PAGE_SIZE = 20;
 const STORAGE_THEME = 'indiaPostDarkMode';
 const STORAGE_SIDEBAR = 'indiaPostSidebarCollapsed';
-const STORAGE_TOKEN = 'indiaPostAuthToken';
 const STORAGE_REAUTH_MSG = 'indiaPostReauthMsg';
 
 /* Original (pre-edit) email cell of the user being edited, used as the
@@ -92,101 +91,101 @@ function fetchApiWithRetry_(fn, args, attempt) {
 
 const ApiService = {
   getServerTime: function () { return apiCall_('getServerTime'); },
-  getAppData: function () { return apiCall_('getAppData', getAuthToken()); },
+  getAppData: function () { return apiCall_('getAppData'); },
   getData: function () { return apiCall_('getData'); },
-  addItem: function (item) { return apiCall_('addItem', item, getAuthToken()); },
-  updateItem: function (item) { return apiCall_('updateItem', item, getAuthToken()); },
-  deleteItem: function (row) { return apiCall_('deleteItem', row, getAuthToken()); },
-  setRecordDisplay: function (row, displayed) { return apiCall_('setRecordDisplay', row, displayed, getAuthToken()); },
-  markReviewDone: function (row) { return apiCall_('markReviewDone', row, getAuthToken()); },
-  markReviewNotDone: function (row) { return apiCall_('markReviewNotDone', row, getAuthToken()); },
+  addItem: function (item) { return apiCall_('addItem', item); },
+  updateItem: function (item) { return apiCall_('updateItem', item); },
+  deleteItem: function (row) { return apiCall_('deleteItem', row); },
+  setRecordDisplay: function (row, displayed) { return apiCall_('setRecordDisplay', row, displayed); },
+  markReviewDone: function (row) { return apiCall_('markReviewDone', row); },
+  markReviewNotDone: function (row) { return apiCall_('markReviewNotDone', row); },
   login: function (email, password) { return apiCall_('login', email, password); },
-  logout: function () { return apiCall_('logout', getAuthToken()); },
-  validateSession: function () { return apiCall_('validateSession', getAuthToken()); },
+  logout: function () { return apiCall_('logout'); },
+  validateSession: function () { return apiCall_('validateSession'); },
   requestPasswordReset: function (email) { return apiCall_('requestPasswordReset', email); },
-  changePassword: function (currentPassword, newPassword) { return apiCall_('changePassword', currentPassword, newPassword, getAuthToken()); },
-  adminGetUsers: function () { return apiCall_('adminGetUsers', getAuthToken()); },
-  adminAddUser: function (email, username, role, password, group, department, office) { return apiCall_('adminAddUser', email, username, role, password, group, department, office, getAuthToken()); },
-  adminUpdateUser: function (email, fields) { return apiCall_('adminUpdateUser', email, fields, getAuthToken()); },
-  adminExportUsers: function () { return apiCall_('adminExportUsers', getAuthToken()); },
-  adminImportUsers: function (csv) { return apiCall_('adminImportUsers', csv, getAuthToken()); },
-  adminGetUserActivity: function () { return apiCall_('adminGetUserActivity', getAuthToken()); },
-  adminDeleteUser: function (email) { return apiCall_('adminDeleteUser', email, getAuthToken()); },
-  adminResetPassword: function (email, newPassword) { return apiCall_('adminResetPassword', email, newPassword, getAuthToken()); },
-  adminEmailAllUsers: function (subject, body) { return apiCall_('adminEmailAllUsers', subject, body, getAuthToken()); },
-  adminSyncFromSheet: function () { return apiCall_('adminSyncFromSheet', getAuthToken()); },
-  adminPushToSheet: function () { return apiCall_('adminPushToSheet', getAuthToken()); },
-  adminPreviewSyncFromSheet: function () { return apiCall_('adminPreviewSyncFromSheet', getAuthToken()); },
-  exportFullBackup: function () { return apiCall_('exportFullBackup', getAuthToken()); },
+  changePassword: function (currentPassword, newPassword) { return apiCall_('changePassword', currentPassword, newPassword); },
+  adminGetUsers: function () { return apiCall_('adminGetUsers'); },
+  adminAddUser: function (email, username, role, password, group, department, office) { return apiCall_('adminAddUser', email, username, role, password, group, department, office); },
+  adminUpdateUser: function (email, fields) { return apiCall_('adminUpdateUser', email, fields); },
+  adminExportUsers: function () { return apiCall_('adminExportUsers'); },
+  adminImportUsers: function (csv) { return apiCall_('adminImportUsers', csv); },
+  adminGetUserActivity: function () { return apiCall_('adminGetUserActivity'); },
+  adminDeleteUser: function (email) { return apiCall_('adminDeleteUser', email); },
+  adminResetPassword: function (email, newPassword) { return apiCall_('adminResetPassword', email, newPassword); },
+  adminEmailAllUsers: function (subject, body) { return apiCall_('adminEmailAllUsers', subject, body); },
+  adminSyncFromSheet: function () { return apiCall_('adminSyncFromSheet'); },
+  adminPushToSheet: function () { return apiCall_('adminPushToSheet'); },
+  adminPreviewSyncFromSheet: function () { return apiCall_('adminPreviewSyncFromSheet'); },
+  exportFullBackup: function () { return apiCall_('exportFullBackup'); },
   getSyncStatus: function () { return apiCall_('getSyncStatus'); },
-  getMyNotifications: function () { return apiCall_('getMyNotifications', getAuthToken()); },
-  generateReviewNotifications: function () { return apiCall_('generateReviewNotifications', getAuthToken()); },
-  markNotificationsRead: function (ids) { return apiCall_('markNotificationsRead', ids, getAuthToken()); },
-  clearMyNotifications: function () { return apiCall_('clearMyNotifications', getAuthToken()); },
-  createTask: function (params) { return apiCall_('createTask', params, getAuthToken()); },
-  getTaskCounts: function () { return apiCall_('getTaskCounts', getAuthToken()); },
-  getTasks: function (filters) { return apiCall_('getTasks', filters || {}, getAuthToken()); },
-  getAssignableUsers: function () { return apiCall_('getAssignableUsers', getAuthToken()); },
-  getMyTasks: function () { return apiCall_('getMyTasks', getAuthToken()); },
-  updateTask: function (id, fields) { return apiCall_('updateTask', id, fields, getAuthToken()); },
-  deleteTask: function (id) { return apiCall_('deleteTask', id, getAuthToken()); },
-  getDashboardPreferences: function () { return apiCall_('getDashboardPreferences', getAuthToken()); },
-  saveDashboardPreferences: function (prefs) { return apiCall_('saveDashboardPreferences', prefs, getAuthToken()); },
+  getMyNotifications: function () { return apiCall_('getMyNotifications'); },
+  generateReviewNotifications: function () { return apiCall_('generateReviewNotifications'); },
+  markNotificationsRead: function (ids) { return apiCall_('markNotificationsRead', ids); },
+  clearMyNotifications: function () { return apiCall_('clearMyNotifications'); },
+  createTask: function (params) { return apiCall_('createTask', params); },
+  getTaskCounts: function () { return apiCall_('getTaskCounts'); },
+  getTasks: function (filters) { return apiCall_('getTasks', filters || {}); },
+  getAssignableUsers: function () { return apiCall_('getAssignableUsers'); },
+  getMyTasks: function () { return apiCall_('getMyTasks'); },
+  updateTask: function (id, fields) { return apiCall_('updateTask', id, fields); },
+  deleteTask: function (id) { return apiCall_('deleteTask', id); },
+  getDashboardPreferences: function () { return apiCall_('getDashboardPreferences'); },
+  saveDashboardPreferences: function (prefs) { return apiCall_('saveDashboardPreferences', prefs); },
   getReportTemplates: function () { return apiCall_('getReportTemplates'); },
-  getReportData: function (templateKey) { return apiCall_('getReportData', templateKey, getAuthToken()); },
-  getRecordDocuments: function (row) { return apiCall_('getRecordDocuments', row, getAuthToken()); },
-  uploadDocument: function (row, recordId, fileName, fileBytes, mimeType) { return apiCall_('uploadDocument', row, recordId, fileName, fileBytes, mimeType, getAuthToken()); },
-  deleteDocument: function (docId) { return apiCall_('deleteDocument', docId, getAuthToken()); },
-  setDocumentKeep: function (docId, keep) { return apiCall_('setDocumentKeep', docId, keep, getAuthToken()); },
-  getSubmissions: function (cardRow) { return apiCall_('getSubmissions', getAuthToken(), cardRow); },
-  addSubmission: function (cardRow, cardId, text) { return apiCall_('addSubmission', cardRow, cardId, text, getAuthToken()); },
-  updateSubmission: function (submissionId, text) { return apiCall_('updateSubmission', submissionId, text, getAuthToken()); },
-  lockSubmission: function (submissionId) { return apiCall_('lockSubmission', submissionId, getAuthToken()); },
-  unlockSubmission: function (submissionId) { return apiCall_('unlockSubmission', submissionId, getAuthToken()); },
-  deleteSubmission: function (submissionId) { return apiCall_('deleteSubmission', submissionId, getAuthToken()); },
-  toggleSubmissionDisplay: function (submissionId) { return apiCall_('toggleSubmissionDisplay', submissionId, getAuthToken()); },
-  markAllSubmissionsRead: function () { return apiCall_('markAllSubmissionsRead', getAuthToken()); },
-  getAuditEntries: function (limit) { return apiCall_('getAuditEntries', limit || 80, getAuthToken()); },
-  adminDeleteAuditRows: function (rowNumbers) { return apiCall_('adminDeleteAuditRows', rowNumbers, getAuthToken()); },
-  adminClearAudit: function () { return apiCall_('adminClearAudit', getAuthToken()); },
-  exportToSpreadsheet: function () { return apiCall_('exportToSpreadsheet', getAuthToken()); },
-  createPdfReport: function () { return apiCall_('createPdfReport', getAuthToken()); },
-  emailReport: function (recipient, templateKey) { return apiCall_('emailReport', getAuthToken(), recipient, templateKey); },
-  exportReviewCalendarIcs: function () { return apiCall_('exportReviewCalendarIcs', getAuthToken()); },
-  sendWhatsAppReviewReminders: function () { return apiCall_('sendWhatsAppReviewReminders', getAuthToken()); },
-  getAiInsights: function () { return apiCall_('getAiInsights', getAuthToken()); },
-  getCardAiInsight: function (row) { return apiCall_('getCardAiInsight', getAuthToken(), row); },
-  getLinkContentAiInsight: function (row) { return apiCall_('getLinkContentAiInsight', getAuthToken(), row); },
-  askLinkAi: function (row, question) { return apiCall_('askLinkAi', getAuthToken(), row, question); },
-  getAllAskLinkHistory: function () { return apiCall_('getAllAskLinkHistory', getAuthToken()); },
-  saveAskLinkHistory: function (row, history) { return apiCall_('saveAskLinkHistory', getAuthToken(), row, history); },
-  processMeetingRecording: function (payload) { return apiCall_('processMeetingRecording', payload, getAuthToken()); },
-  transcribeMeetingSegment: function (payload) { return apiCall_('transcribeMeetingSegment', payload, getAuthToken()); },
-  generateMeetingMinutes: function (payload) { return apiCall_('generateMeetingMinutes', payload, getAuthToken()); },
-  listMeetingFiles: function () { return apiCall_('listMeetingFiles', getAuthToken()); },
-  getMeetingFile: function (name) { return apiCall_('getMeetingFile', getAuthToken(), name); },
-  deleteMeetingFile: function (name) { return apiCall_('deleteMeetingFile', getAuthToken(), name); },
-  getFathomStatus: function () { return apiCall_('getFathomStatus', getAuthToken()); },
-  setFathomApiKey: function (apiKey) { return apiCall_('setFathomApiKey', getAuthToken(), apiKey); },
-  listFathomMeetings: function (opts) { return apiCall_('listFathomMeetings', getAuthToken(), opts || {}); },
-  getFathomMeetingContent: function (recordingId) { return apiCall_('getFathomMeetingContent', getAuthToken(), recordingId); },
-  getRecordingDownloadLink: function (recordingId) { return apiCall_('getRecordingDownloadLink', getAuthToken(), recordingId); },
-  listFathomUsers: function () { return apiCall_('listFathomUsers', getAuthToken()); },
-  searchFathomMeetings: function (opts) { return apiCall_('searchFathomMeetings', getAuthToken(), opts || {}); },
-  getFathomMeetingStats: function () { return apiCall_('getFathomMeetingStats', getAuthToken()); },
-  bulkGetRecordingDownloadLinks: function (recordingIds) { return apiCall_('bulkGetRecordingDownloadLinks', getAuthToken(), recordingIds); },
+  getReportData: function (templateKey) { return apiCall_('getReportData', templateKey); },
+  getRecordDocuments: function (row) { return apiCall_('getRecordDocuments', row); },
+  uploadDocument: function (row, recordId, fileName, fileBytes, mimeType) { return apiCall_('uploadDocument', row, recordId, fileName, fileBytes, mimeType); },
+  deleteDocument: function (docId) { return apiCall_('deleteDocument', docId); },
+  setDocumentKeep: function (docId, keep) { return apiCall_('setDocumentKeep', docId, keep); },
+  getSubmissions: function (cardRow) { return apiCall_('getSubmissions', cardRow); },
+  addSubmission: function (cardRow, cardId, text) { return apiCall_('addSubmission', cardRow, cardId, text); },
+  updateSubmission: function (submissionId, text) { return apiCall_('updateSubmission', submissionId, text); },
+  lockSubmission: function (submissionId) { return apiCall_('lockSubmission', submissionId); },
+  unlockSubmission: function (submissionId) { return apiCall_('unlockSubmission', submissionId); },
+  deleteSubmission: function (submissionId) { return apiCall_('deleteSubmission', submissionId); },
+  toggleSubmissionDisplay: function (submissionId) { return apiCall_('toggleSubmissionDisplay', submissionId); },
+  markAllSubmissionsRead: function () { return apiCall_('markAllSubmissionsRead'); },
+  getAuditEntries: function (limit) { return apiCall_('getAuditEntries', limit || 80); },
+  adminDeleteAuditRows: function (rowNumbers) { return apiCall_('adminDeleteAuditRows', rowNumbers); },
+  adminClearAudit: function () { return apiCall_('adminClearAudit'); },
+  exportToSpreadsheet: function () { return apiCall_('exportToSpreadsheet'); },
+  createPdfReport: function () { return apiCall_('createPdfReport'); },
+  emailReport: function (recipient, templateKey) { return apiCall_('emailReport', recipient, templateKey); },
+  exportReviewCalendarIcs: function () { return apiCall_('exportReviewCalendarIcs'); },
+  sendWhatsAppReviewReminders: function () { return apiCall_('sendWhatsAppReviewReminders'); },
+  getAiInsights: function () { return apiCall_('getAiInsights'); },
+  getCardAiInsight: function (row) { return apiCall_('getCardAiInsight', row); },
+  getLinkContentAiInsight: function (row) { return apiCall_('getLinkContentAiInsight', row); },
+  askLinkAi: function (row, question) { return apiCall_('askLinkAi', row, question); },
+  getAllAskLinkHistory: function () { return apiCall_('getAllAskLinkHistory'); },
+  saveAskLinkHistory: function (row, history) { return apiCall_('saveAskLinkHistory', row, history); },
+  processMeetingRecording: function (payload) { return apiCall_('processMeetingRecording', payload); },
+  transcribeMeetingSegment: function (payload) { return apiCall_('transcribeMeetingSegment', payload); },
+  generateMeetingMinutes: function (payload) { return apiCall_('generateMeetingMinutes', payload); },
+  listMeetingFiles: function () { return apiCall_('listMeetingFiles'); },
+  getMeetingFile: function (name) { return apiCall_('getMeetingFile', name); },
+  deleteMeetingFile: function (name) { return apiCall_('deleteMeetingFile', name); },
+  getFathomStatus: function () { return apiCall_('getFathomStatus'); },
+  setFathomApiKey: function (apiKey) { return apiCall_('setFathomApiKey', apiKey); },
+  listFathomMeetings: function (opts) { return apiCall_('listFathomMeetings', opts || {}); },
+  getFathomMeetingContent: function (recordingId) { return apiCall_('getFathomMeetingContent', recordingId); },
+  getRecordingDownloadLink: function (recordingId) { return apiCall_('getRecordingDownloadLink', recordingId); },
+  listFathomUsers: function () { return apiCall_('listFathomUsers'); },
+  searchFathomMeetings: function (opts) { return apiCall_('searchFathomMeetings', opts || {}); },
+  getFathomMeetingStats: function () { return apiCall_('getFathomMeetingStats'); },
+  bulkGetRecordingDownloadLinks: function (recordingIds) { return apiCall_('bulkGetRecordingDownloadLinks', recordingIds); },
   // Push notifications
-  subscribePush: function (subscription) { return apiCall_('subscribePush', subscription, getAuthToken()); },
-  unsubscribePush: function (endpoint) { return apiCall_('unsubscribePush', endpoint, getAuthToken()); },
-  sendReviewDeadlinePushNotifications: function () { return apiCall_('sendReviewDeadlinePushNotifications', getAuthToken()); },
+  subscribePush: function (subscription) { return apiCall_('subscribePush', subscription); },
+  unsubscribePush: function (endpoint) { return apiCall_('unsubscribePush', endpoint); },
+  sendReviewDeadlinePushNotifications: function () { return apiCall_('sendReviewDeadlinePushNotifications'); },
   // Weekly reports
-  sendWeeklyReport: function () { return apiCall_('sendWeeklyReport', getAuthToken()); },
+  sendWeeklyReport: function () { return apiCall_('sendWeeklyReport'); },
   // i18n
   getTranslations: function (lang) { return apiCall_('getTranslations', lang); },
   // Session refresh
-  refreshSession: function () { return apiCall_('refreshSession', getAuthToken()); },
+  refreshSession: function () { return apiCall_('refreshSession'); },
   // Admin CSV import
-  adminImportCsv: function (csvText) { return apiCall_('adminImportCsv', csvText, getAuthToken()); }
+  adminImportCsv: function (csvText) { return apiCall_('adminImportCsv', csvText); }
 };
 
 const appState = {
@@ -2287,17 +2286,7 @@ function cancelConfirmDialog() {
   if (cb) cb(false);
 }
 
-/* ---------------------------------- Auth token ---------------------------------- */
-
-function getAuthToken() {
-  return '';
-}
-
-function setAuthToken(token) {
-  if (!token) {
-    try { window.localStorage.removeItem(STORAGE_TOKEN); } catch (err) {}
-  }
-}
+/* ---------------------------------- Auth helpers ---------------------------------- */
 
 function isAuthError(message) {
   const msg = String(message || '');
@@ -2310,7 +2299,6 @@ function handleServerFailure(err) {
   hideOverlay();
   const msg = err && err.message ? err.message : String(err || 'Unknown error');
   if (isAuthError(msg)) {
-    setAuthToken('');
     showScreen('login');
     showToast('Session expired. Please log in again.', 'warning');
     return true;
@@ -2686,7 +2674,6 @@ function loadApp() {
     hideOverlay();
     hideSplash();
     if (!data || !data.user || !data.user.loggedIn) {
-      setAuthToken('');
       showScreen('login');
       return;
     }
@@ -2751,7 +2738,6 @@ function handleLogin(e) {
       showAuthMessage('loginMessage', (res && res.message) || 'Login failed.');
       return;
     }
-    setAuthToken(res.token);
     appState.mustChange = !!res.mustChange;
     showAuthMessage('loginMessage', '');
     loadApp();
@@ -2792,10 +2778,8 @@ function logout() {
   stopAutoRefresh();
   teardownRealtime();
   ApiService.logout().then(function () {
-    setAuthToken('');
     window.location.href = window.location.href.split('?')[0];
   }).catch(function () {
-    setAuthToken('');
     window.location.reload();
   });
 }
@@ -4779,7 +4763,6 @@ function saveEditUser() {
     renderUsersTable(result.users || []);
     showToast(result.message || 'User updated', 'success');
     if (result.reAuth) {
-      setAuthToken('');
       try { window.sessionStorage.setItem(STORAGE_REAUTH_MSG, 'Your email was changed. Please log in with your new email.'); } catch (err) {}
       window.location.reload();
     }
@@ -5718,7 +5701,6 @@ function autoRefreshTick() {
   ApiService.getAppData().then(function (data) {
     autoRefreshInFlight = false;
     if (!data || !data.user || !data.user.loggedIn) {
-      setAuthToken('');
       return;
     }
     // A modal may have opened while this request was in flight. Repainting
@@ -7024,7 +7006,7 @@ function subscribeToPushNotifications() {
       });
     }).then(function (sub) {
       appState.pushSubscription = sub;
-      ApiService.subscribePush(getAuthToken(), sub.toJSON()).then(function () {
+      ApiService.subscribePush(sub.toJSON()).then(function () {
         showToast('Push notifications enabled!', 'success');
       }).catch(function (err) {
         showToast('Could not save push subscription: ' + (err.message || err), 'error');
@@ -7040,7 +7022,7 @@ function unsubscribeFromPushNotifications() {
     var endpoint = appState.pushSubscription.endpoint;
     appState.pushSubscription.unsubscribe().then(function () {
       appState.pushSubscription = null;
-      return ApiService.unsubscribePush(getAuthToken(), endpoint);
+      return ApiService.unsubscribePush(endpoint);
     }).then(function () {
       showToast('Push notifications disabled.', 'info');
     }).catch(function () {});

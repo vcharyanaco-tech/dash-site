@@ -1,15 +1,5 @@
 
-/* ---------------------------------- Auth token ---------------------------------- */
-
-function getAuthToken() {
-  return '';
-}
-
-function setAuthToken(token) {
-  if (!token) {
-    try { window.localStorage.removeItem(STORAGE_TOKEN); } catch (err) {}
-  }
-}
+/* ---------------------------------- Auth helpers ---------------------------------- */
 
 function isAuthError(message) {
   const msg = String(message || '');
@@ -22,7 +12,6 @@ function handleServerFailure(err) {
   hideOverlay();
   const msg = err && err.message ? err.message : String(err || 'Unknown error');
   if (isAuthError(msg)) {
-    setAuthToken('');
     showScreen('login');
     showToast('Session expired. Please log in again.', 'warning');
     return true;
@@ -398,7 +387,6 @@ function loadApp() {
     hideOverlay();
     hideSplash();
     if (!data || !data.user || !data.user.loggedIn) {
-      setAuthToken('');
       showScreen('login');
       return;
     }
@@ -463,7 +451,6 @@ function handleLogin(e) {
       showAuthMessage('loginMessage', (res && res.message) || 'Login failed.');
       return;
     }
-    setAuthToken(res.token);
     appState.mustChange = !!res.mustChange;
     showAuthMessage('loginMessage', '');
     loadApp();
@@ -504,10 +491,8 @@ function logout() {
   stopAutoRefresh();
   teardownRealtime();
   ApiService.logout().then(function () {
-    setAuthToken('');
     window.location.href = window.location.href.split('?')[0];
   }).catch(function () {
-    setAuthToken('');
     window.location.reload();
   });
 }

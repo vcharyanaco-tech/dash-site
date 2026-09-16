@@ -223,14 +223,20 @@ app.post(API_PREFIX, async function (req, res) {
     const cookieToken = parseCookie_(req.headers.cookie || '')[SESSION_COOKIE] || '';
     const authIndex = AUTH_ARG_INDEX[fn];
     if (cookieToken && authIndex !== undefined) {
-      if (!args[authIndex]) {
+      const slot = args[authIndex];
+      const looksLikeToken = typeof slot === 'string' && /^[0-9a-f]{64}$/i.test(slot);
+      if (looksLikeToken) {
+        // Token slot already holds a session token — the cookie is authoritative.
         args[authIndex] = cookieToken;
-      }
-      // For ops where browser sends only the data arg (e.g. ['apiKey']),
-      // the data occupies the token slot. Move it aside and inject the
-      // cookie token at the correct position.
-      else if (authIndex === 0 && args.length === 1 && typeof args[0] === 'string') {
-        args.unshift(cookieToken);
+      } else {
+        // Slot is empty or holds data: for token-first ops the data commonly
+        // occupies the token slot (e.g. the browser sends ['apiKey'] or
+        // [cardRow] for a (token, data…) op). The HttpOnly cookie is the
+        // auth source of truth, so the cookie token is inserted at the
+        // documented index, shifting any data rightward. Session tokens are
+        // 64 hex chars (uuid_()+uuid_()), so real data (numbers, objects,
+        // short strings) never collides with this branch.
+        args.splice(authIndex, 0, cookieToken);
       }
     }
     // Item 8: Input validation for known functions
@@ -482,4 +488,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, server, dispatch };
+module.exports = { app, server, dispatch, AUTH_ARG_INDEX, VALIDATORS };

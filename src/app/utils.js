@@ -260,7 +260,6 @@ function autoRefreshTick() {
   ApiService.getAppData().then(function (data) {
     autoRefreshInFlight = false;
     if (!data || !data.user || !data.user.loggedIn) {
-      setAuthToken('');
       return;
     }
     // A modal may have opened while this request was in flight. Repainting

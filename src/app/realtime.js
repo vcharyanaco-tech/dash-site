@@ -81,7 +81,6 @@ function sessionRefreshTick() {
       // Session expired or invalid — log out
       stopSessionRefresh();
       disconnectSse();
-      setAuthToken('');
       showScreen('login');
       showToast('Session expired. Please log in again.', 'warning');
     }
