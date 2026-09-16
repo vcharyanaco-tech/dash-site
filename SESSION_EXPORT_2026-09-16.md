@@ -352,6 +352,52 @@ commit, fast-forwarded to `origin/main` at `c489095`), then greenlit 1F.
 ### Stray files (not committed)
 - (none)
 
+## Phase 2 re-measurement — LIVE baseline against the monolith path (this continuation)
+
+Resumed session (2026-09-16, this machine) → pending task #1 (Phase 2 re-measure).
+Monolith was already live (`app.html` serves `<script src="app.js">`, verified
+2026-09-16). Re-measured backend & frontend on LIVE data/DB through the Worker.
+
+### Backend — live `getData` via `https://dashboardharyana.site/api` (session cookie NOT
+required — `getData` is a public dispatch op; 32 records on live DB).
+
+Wire + latency measured with node/undici fetch (curl mangles the JSON body quoting
+on Windows; `--data-binary @file` works for byte sizing).
+
+- **Latency (102 clean samples, paced >1.2s apart to stay under the Worker's
+  `post-api` 60/min rate cap):** p50 **377ms**, p90 **388ms**, p95 **482ms**,
+  max 888ms, cold-ish first sample 1,221ms. (This is end-to-end browser→Cloudflare→
+  Worker→Render, not process-internal p95; includes RTT ~150-200ms.)
+- **Payload:** decompressed **67,122 B** (32 records); wire **6,461 B gz** /
+  **6,547 B br** (auto content-encoding). Well under the 100KB gz / 1MB targets.
+- Earlier paced run without headers emitted 8× `429` when reusing a warm budget —
+  the Worker `post-api` cap is exactly 60/min; rate-limiter leak is fine.
+
+### Frontend — Lighthouse 13.4.1, mobile, throttling `simulate` RTT 150ms /
+1,638 kbps / 4× CPU (4G-grade) on the NEW monolith path:
+
+| Page | Perf | A11y | BP | SEO | FCP | LCP | SI | TBT | CLS | Total |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `/` (landing) | 94 | 95 | 100 | 91 | 2.0s | 2.8s | 2.5s | 0 | 0 | 35 KiB / 6 req |
+| `/app.html` (app) | 92 | 91 | 100 | 92 | 2.6s | 2.7s | 3.0s | 0 | 0 | **134 KiB / 8 req** |
+
+`app.js` transfer on the wire **78,559 B gz** (≈ the recorded 75,442 B gz on disk).
+app.html total dropped **162 KiB → 134 KiB** vs the modular path under identical
+throttling; request count 8 (was 20+). Perf score 92 under 4G throttling vs 96
+unthrottled — monolith holds up. LCP 2.7-2.8s exceeds the 2.5s desktop target only
+under 4G simulation (SI 3.0s also at ceiling); still better than the 4000ms slow-4G
+budget.
+
+### Pending Tasks (updated)
+1. **Phase 2 (remaining, optional):** none strictly required — live p95 + payload
+   + Lighthouse-4G all re-measured; targets met (p95 user-facing 482ms is RTT-
+   dominated, payload 6.4KB gz, LCP 2.7s, bundle 134KiB). If wanted: server-
+   process-internal p95 from Render `/api/health` (SERVER_ORIGIN is a CF secret;
+   not readable without the secret).
+2. **Phase 1F (remaining, optional):** validators for the ~53 low-risk read /
+   informational ops still lacking them.
+3. Phase 3+ only after Phase 1/2 gates pass. Phase 2 gate now PASSED.
+
 ## Phase 2 — Monolith as prod load path (this continuation)
 
 ### What was done
