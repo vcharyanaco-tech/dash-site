@@ -660,17 +660,105 @@ Second Phase-3 item in the user-ordered sequence **5 → 7 → 9 → 3**.
 - `ef5beb7` — `feat:` phase-3 part-5 — My Day operational dashboard (pushed to
   origin/main).
 
+### Phased work 2 — Part 7 record detail drawer + Presentation Mode
+
+> Phase 3 order from the improvement prompt was extended by the user on-session:
+> implement the Presentation / slideshow prompt
+> (`dash-site-presentation-mode-big-pickle.md`) within the plan before continuing.
+> Part 7 (record detail drawer) shipped first, then Presentation Mode.
+
+### What was done — Part 7 record detail drawer
+- `src/app/core.js` — `ApiService.getRecordHistory(row)` client method (GET
+  `/api/records/:row/history`, mapper = identity) alongside `getRecordDocuments`.
+- `src/app/detail.js` — rewritten (291 lines): `openRecordDetail` now drives a
+  right-side **drawer**. Sections: status + key fields, link(s) with
+  `detailLinksHtml_`, a "Show/Hide submissions" toggle (reuses `toggleCardUpdates`),
+  related tasks via `loadDetailTasks_` (`ApiService.getTasks({ recordRow })`),
+  change history via `loadDetailHistory_` (`getRecordHistory` +
+  `formatTimestamp`), and AI insights (`detailAskAi_` reuses
+  `cardAiPanelHtml_`/`loadCardAi`). Actions: Edit, Create task (opens
+  `openTaskModal`), Add submission, Attach document, Mark review done /
+  Mark not done (admin), Ask AI, Close, Download PDF, Delete record
+  (confirmation + soft-delete). Documents functions preserved
+  (`loadRecordDocuments`, `handleDocUpload`, `toggleDocKeep`, `deleteRecordDoc`).
+- `app.html` — `#recordDetailModal` made a drawer via
+  `modal-backdrop modal-drawer-backdrop` / `modal-card modal-card-drawer`;
+  new containers `#recordDetailTasks` + `#recordDetailHistory`; styles
+  cache-buster `2026.09.16c`.
+- `assets/styles.css` — `.modal-drawer-backdrop`, `.modal-card-drawer`,
+  `@keyframes slide-in-right`, `.detail-links-section`, `.detail-section-block`,
+  `.detail-task-row`, `.detail-history-row` (+200 lines incl. Presentation CSS).
+- `src/app/tasks.js` — `openTaskModal(recordRow)` optional prefill param.
+
+### What was done — Presentation / Slideshow Mode
+- `src/app/presentation.js` (new, 355 lines). Slide source = the SAME
+  filtered + sorted dataset the dashboard currently shows
+  (`sortedItems()`), so filter/sort context is respected; no full reload, no
+  index changes. Reuses `groupCardFields_`/`cardFieldHtml_`/`rowUpdatesHtml_`
+  so slides render like cards; only **two** record actions exposed —
+  "Show / Hide submissions" (reuses `toggleCardUpdates` + `isRowUpdatesHidden_`,
+  relabels) and "Mark as Completed" (admin-gated, mirrors `markReviewDone`
+  flow, updates `reviewStatus`, re-renders slide + `renderDashboard(true)`).
+- Entry points: dashboard **Present** button (`togglePresentationMode()`) +
+  **Ctrl/Cmd+Shift+P**; exit via **Esc** (presentation closes first),
+  Exit button, or toggle. Keyboard nav: ArrowRight/PageDown →
+  next, ArrowLeft/PageUp → previous; Prev/Next on-screen buttons; touch
+  swipe (60px threshold, wires once per open, ignores interactive targets
+  `button/a/iframe/input/textarea/select/[data-pres-updates]/.card-updates`).
+  Position indicator "7 / 42" via `#presentationCounter`.
+- Keyboard handling uses **capture-phase** listeners registered at module
+  load (`wirePresentationEvents_()`), so Escape closes the slideshow ahead of
+  the dashboard's own Escape handler; guarded against typing targets and
+  never hijacks keys while any `.modal-backdrop:not(.hidden)` (confirm /
+  link preview) is open.
+- Links inside slides reuse the existing in-page preview popup (iframe, 80%
+  default zoom) rather than a new tab — same as dashboard cards. Link
+  **warming**: `warmPresentationLinks_` preconnects `<link rel="preconnect">`
+  per origin (deduped) and issues best-effort no-cors fetches for link URLs
+  (`MAX_CONCURRENCY: 2`, 8s AbortController timeout); all aborted and
+  preconnect elements removed on exit (`removePresentationPreconnects_`).
+- `app.html` — Present button in `.section-actions` (after Refresh,
+  aria-label "Presentation mode"); `#presentationOverlay` (`.presentation-open`
+  class toggles display), `#presentationStage`, Prev/Next round nav buttons,
+  topbar with `#presentationExityBtn` + `#presentationCounter`.
+- `assets/styles.css` — `.presentation-overlay` (fixed, full-screen,
+  z-index above modals so links still preview on top), `.presentation-stage`,
+  `.presentation-slide-card`, `.presentation-slide-head`,
+  `.presentation-slide-actions`, `.presentation-nav-btn`,
+  `.presentation-topbar`, `.presentation-counter`, mobile breakpoints, and a
+  print rule hiding the overlay.
+- Registered in `src/app/manifest.json` (after `myday`) + `src/app/entry.js`
+  MODULES (after `'myday.js'`).
+
+### Verification
+- `node build/build-app.js` → **21 modules, 8,561 lines**; split round-trip
+  byte-exact; **always `git diff src/app` after split** (split rewrites modules
+  from `app.js`).
+- `node --check` clean on `app.js`, `src/app/presentation.js`,
+  `src/app/detail.js`, `src/app/core.js`, `src/app/tasks.js`.
+- CSS braces **709/709**; undefined `var()` **0**; `color-mix` already in use
+  (33 occurrences, consistent); mojibake **0** on all changed files
+  (em-dashes/`` ✓`` etc. intact).
+- Server suite **352/352 pass, 0 fail**.
+- Live (git push = deploy, Worker serves raw-GitHub main): served `app.html`
+  contains `togglePresentationMode` + `presentationOverlay` +
+  `modal-drawer-backdrop` and css cache-buster `2026.09.16c`; served `app.js`
+  contains `presentationMarkDone_`, `wirePresentationEvents_`,
+  `getRecordHistory`; served `styles.css` contains `.presentation-overlay` +
+  `.modal-drawer-backdrop`.
+
+### Commits
+- `161c1ef` — `feat:` phase-3 part-7 + presentation mode — record detail
+  drawer, slideshow over current dataset (pushed to origin/main).
+
 ### Pending (Phase 3, user order 5 → 7 → 9 → 3)
-1. **Part 7 — Record detail drawer**: expand `openRecordDetail` into a full
-   drawer — title/description, status, dates, responsibility, linked documents
-   + submissions + tasks, change history, AI insights, and actions (Edit,
-   Create task, Add submission, Attach document, Mark review done, Ask AI).
-2. **Part 9 — Actionable notifications**: unread/read split, grouping,
+1. **Part 9 — Actionable notifications**: unread/read split, grouping,
    priority, per-item action buttons, push, history, preferences.
-3. **Part 3 — PWA update cue**: cached shell, background update, version
+2. **Part 3 — PWA update cue**: cached shell, background update, version
    detection, "New version available — Update" UI, safe activation, offline
    indicator, offline activity center (queued/syncing/synced/failed/conflict).
-4. Phase 4+ remains gated (must not start).
+3. Phase 4+ remains gated (must not start).
 
 ### Stray files (not committed)
-- (none)
+- `dash-site-presentation-mode-big-pickle.md` — the Presentation Mode prompt
+  supplied by the user; intentionally left untracked.
