@@ -78,11 +78,14 @@ function populateTaskAssigneeDropdown() {
   populateMultiSelectOptions('taskAssigneeMs', options);
 }
 
-function openTaskModal() {
+function openTaskModal(recordRow) {
   // Reset editing state if opening fresh
   if (!appState.editingTaskId) {
     getEl('taskModalTitle').textContent = 'New task';
     closeTaskModal(); // Clear all fields
+  }
+  if (recordRow !== undefined && recordRow !== null && recordRow !== '') {
+    getEl('taskRecordRow').value = String(recordRow);
   }
   
   // Load and populate users dropdown

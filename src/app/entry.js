@@ -47,6 +47,7 @@ const MODULES = [
   'edit.js',         // Edit modal, review badge
   'submissions.js',  // Submissions modal
   'myday.js',        // My Day operational dashboard
+  'presentation.js', // Presentation / slideshow mode
   'realtime.js',     // SSE real-time, session refresh, keyboard shortcuts
   'init.js',         // About, offline, push, language toggle (loads last)
 ];

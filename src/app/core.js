@@ -134,6 +134,7 @@ const ApiService = {
   getReportTemplates: function () { return apiCall_('getReportTemplates'); },
   getReportData: function (templateKey) { return apiCall_('getReportData', templateKey); },
   getRecordDocuments: function (row) { return apiCall_('getRecordDocuments', row); },
+  getRecordHistory: function (row) { return apiCall_('getRecordHistory', row); },
   uploadDocument: function (row, recordId, fileName, fileBytes, mimeType) { return apiCall_('uploadDocument', row, recordId, fileName, fileBytes, mimeType); },
   deleteDocument: function (docId) { return apiCall_('deleteDocument', docId); },
   setDocumentKeep: function (docId, keep) { return apiCall_('setDocumentKeep', docId, keep); },
