@@ -59,15 +59,42 @@ Full server suite now **121/121 pass, 0 fail, ~20s**; coverage 77.75% stmt /
 - `src/server/run-tests.cjs` — `--test-concurrency=1` (deterministic suite).
 - `src/server/tests/smoke.test.js` — cookie capture + send on `GET /api/files/:key`.
 
+## Phase 1C — Authorization audit (second session unit)
+
+### What was done
+- **R3 fixed:** `requireViewer()` no-op → `auth.requireLogin_(token)` (`auth.js:499`).
+  `getAuditEntries`/`getRecordHistory` now require a valid session.
+- **Cookie-token wiring:** `getAuditEntries` + `getRecordHistory` added to
+  `AUTH_ARG_INDEX` (token at index 1); dispatch forwards the token to
+  `getAuditEntries(limit, token)`; client call updated (`app.js` + `src/app/core.js`)
+  to send `getAuthToken()` so the replay test stays green.
+- **Dispatch-level auth for previously-unauthenticated ops** (module `if (token)`
+  guards preserved so the Bearer-gated cron path keeps working via direct calls):
+  - `getAiInsights` (admin), `sendWeeklyReport` (admin),
+    `sendReviewDeadlinePushNotifications` (login)
+  - `setupEnterpriseAddons`, `installEnterpriseTriggers` (admin)
+  - `validateEnterpriseConfiguration`, `getEnterpriseHealth`,
+    `getEnterpriseFrontendConfig` (login) + added to `AUTH_ARG_INDEX` (token @0)
+- **Tests:** new `src/server/tests/authz.test.js` — 31-test role matrix
+  (anonymous → rejected for 8 login-gated ops; viewer/editor/admin expectations
+  for AI, weekly report, enterprise setup, CRUD, audit admin ops, object-level
+  guards). `new-endpoints.test.js` cron-mode test rewritten to assert anonymous
+  public dispatch is now rejected. `smoke.test.js` `getAuditEntries` now passes token.
+- Full suite: **152/152 pass**; secret scan green (167 tracked files).
+- Commits: `299975a` (1C unit, pushed to origin/main).
+
 ## Verification
-- `src/server`: `npm test` → 121/121 pass, 0 fail (~20s).
-- `node --check` on all three touched server files → clean.
+- `src/server`: `npm test` → 152/152 pass, 0 fail.
+- `node --check` on touched server/front files → clean.
+- Secret scan → green (167 tracked files).
 - Lighthouse + p95 + bundle measurements in baseline doc.
-- Secret scan green.
 
 ## Commits
-1. (this session) `fix:` phase-0 P0: API-error handler dropped responses (fn scoping);
+1. (earlier) `fix:` phase-0 P0: API-error handler dropped responses (fn scoping);
    make test suite deterministic (--test-concurrency=1); smoke-test cookie auth; docs.
+2. `299975a` `fix:` phase-1C authorization audit — requireViewer login-gated,
+   cookie-token aware audit/history reads, dispatch-level auth for enterprise
+   config & cron ops; authz role-matrix test suite.
 
 ## Deployment
 - Server change (`src/server/index.js`, run-tests.cjs) → Render auto-deploys.
@@ -75,13 +102,15 @@ Full server suite now **121/121 pass, 0 fail, ~20s**; coverage 77.75% stmt /
 
 ## Pending Tasks
 1. **Session export / commit review** — confirm and push.
-2. **Ask owner to continue in order → Phase 1 — P0 Security:**
-   - 1C **fix `requireViewer()` no-op** (auth.js) → `getAuditEntries` /
-     `getRecordHistory` unauthenticated via dispatch — top confirmed gap.
-   - New `tests/authz.test.js` covering every dispatch op (no-token, viewer,
-     editor/admin matrix, object-level checks).
-   - 1D extend VALIDATORS to all dispatch ops; 1E file-upload test coverage.
-   - 1B auth-cookie migration assessment (kill vestigial browser-token path).
+2. **Phase 1 — P0 Security (in progress, 1C done):**
+   - 1C ✅ authorization audit + authz.test.js (see above). Phase 1 gate items left:
+     object-level row-id checks for every doc/task/submission/record op + full
+     dispatch-op matrix in authz.test.js (matrix covers the top gaps; extend if the
+     gate reviewer wants full coverage).
+   - 1D extend VALIDATORS to all dispatch ops; 1E file-upload test coverage
+     (size/MIME/name edge cases).
+   - 1B auth-cookie migration assessment (kill vestigial browser-token path
+     `getAuthToken()` → document cookie-only design).
 3. Phase 2 (measured perf): ship app.js monolith as prod load path, re-measure on
    live DB/payloads, re-run Lighthouse with 4G throttle.
 4. Phase 3+ only after Phase 1/2 gates pass.
