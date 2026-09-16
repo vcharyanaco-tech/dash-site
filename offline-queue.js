@@ -103,6 +103,27 @@
     });
   }
 
+  function showUpdateBanner() {
+    var banner = document.getElementById('updateBanner');
+    if (!banner) return;
+    banner.classList.remove('hidden');
+    var label = document.getElementById('updateLabel');
+    if (label) label.textContent = 'A new version of the dashboard is available.';
+    renderQueueStatus();
+  }
+
+  function hideUpdateBanner() {
+    var banner = document.getElementById('updateBanner');
+    if (!banner) return;
+    banner.classList.add('hidden');
+  }
+
+  function applyUpdate() {
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
+    }
+  }
+
   function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
     window.addEventListener('load', function () {
@@ -116,10 +137,17 @@
               if (typeof window.showToast === 'function') {
                 window.showToast('A new dashboard version is available. Reload to update.', 'info');
               }
+              showUpdateBanner();
             }
           });
         });
       }).catch(function () {});
+    });
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (typeof window.showToast === 'function') {
+        window.showToast('Dashboard updated. Reloading…', 'info');
+      }
+      window.location.reload();
     });
   }
 
@@ -160,6 +188,17 @@
       });
     }
   });
+
+  window.applyUpdate = function () {
+    applyUpdate();
+    if (typeof window.showToast === 'function') {
+      window.showToast('Updating… Reloading.', 'info');
+    }
+  };
+
+  window.dismissUpdate = function () {
+    hideUpdateBanner();
+  };
 
   renderQueueStatus();
 })();

@@ -918,7 +918,64 @@ User requested: sync from origin main, then continue pending tasks 1, 2, 3
 1. `(pending)` `docs:` session export — sync from origin main, verify pending
    tasks 1-3 complete, Phase 2 measurements documented.
 
+## Phase 3 Part 3 — PWA update experience (this continuation)
+
+Implemented the Part 3 update-UX block (Phase 2, now unblocked after
+Phase 1/2 gates pass). The offline queue already had `updatefound`
+detection + a toast; this session wires it into a full user-facing
+update flow.
+
+### What was done
+
+1. **"New version available — Update" UI.** Added `#updateBanner`
+   (`banner banner-info`) to `app.html` alongside the offline banner,
+   with a label, an **Update** button (calls `applyUpdate()`) and a
+   **Dismiss** button. CSS uses existing `.banner`/`.banner-info`/
+   `.btn`/`.btn-primary`/`.btn-ghost`/`.btn-small` classes.
+
+2. **Apply update flow.** `offline-queue.js`:
+   - `applyUpdate()` — sends `{ type: 'SKIP_WAITING' }` message to the
+     active SW controller, triggering `self.skipWaiting()` in `sw.js`.
+   - `controllerchange` listener on `navigator.serviceWorker` — when
+     the new SW takes control, shows "Dashboard updated. Reloading…"
+     toast and reloads the page.
+   - `showUpdateBanner()` / `hideUpdateBanner()` — show/hide the
+     update banner based on SW state.
+
+3. **Safe SW activation.** `sw.js` added `message` event handler:
+   receives `SKIP_WAITING` from the client and calls
+   `self.skipWaiting()`. Activation already calls `skipWaiting()` on
+   install + `clients.claim()` — now user-gated via the Update button.
+
+4. **Offline status indicator & clear transitions** (already existed,
+   verified working):
+   - `app.html #offlineBanner` — toggled via `updateOfflineBanner()`
+     on load + `online`/`offline` window events.
+   - `app.js` `online` event — shows "You are back online" toast.
+   - `offline-queue.js` `online` event — flushes queued mutations
+     when connection returns.
+   - `offline-queue.js` `renderQueueStatus()` — updates banner label
+     to show pending/failed action counts.
+
+### Verification
+- `node build/build-app.js` → 21 modules, 8,803 lines; `node build/split-app.js`
+  byte-exact round-trip.
+- `node --check` clean on sw.js, offline-queue.js, app.js, init.js.
+- Full server suite: **368/368 pass**, 0 fail (~23s). Coverage 80.07% stmt /
+  62.33% br / 85.48% fn.
+- Git diff: only `app.html`, `app.js`, `offline-queue.js`, `sw.js` modified
+  (no source file corruption from split-app).
+
+### Files changed
+- `app.html` — added `#updateBanner` with Update/Dismiss buttons
+- `sw.js` — added `message` event handler for `SKIP_WAITING`
+- `offline-queue.js` — `applyUpdate`/`dismissUpdate`/`showUpdateBanner`/
+  `hideUpdateBanner` functions, `controllerchange` listener, wire-up
+- `app.js` — rebuilt (offline-queue.js folded into monolith)
+
 ### Pending Tasks
-1. Phase 3+ only after Phase 1/2 gates pass. (Gate: Phase 1 PASS, Phase 2 PASS.)
-2. PWA update cue (Part 3) — Phase 3, user order 5→7→9→3, only remaining
-   Phase-3 item.
+1. Phase 3 Part 3b — PWA offline improvements (offline activity center
+   with queued/syncing/synced/failed/conflict states) — Phase 4 gated.
+2. Phase 3 Part 9 — Actionable notifications — already done upstream
+   (commit 584484a).
+3. Phase 4+ remains gated.
