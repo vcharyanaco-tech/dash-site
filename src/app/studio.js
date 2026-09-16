@@ -142,6 +142,9 @@ const COMMAND_ACTIONS = [
 var CMD_RESULTS = [];
 var CMD_SELECTED_IDX = 0;
 var RECENT_KEY = 'ipd_cmd_recent_v1';
+var CMD_SEARCH_DEBOUNCE = null;
+var CMD_SEARCHING = false;
+var CMD_SEARCH_GEN = 0;
 
 function getRecentItems() {
   try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) { return []; }
@@ -234,6 +237,7 @@ function filterCommands(query) {
   list.innerHTML = html;
   CMD_SELECTED_IDX = 0;
   highlightSelected();
+  if (q.length >= 3) paletteSearch(q);
 }
 
 function highlightSelected() {
@@ -259,6 +263,96 @@ function executeCommand(key) {
     var item = (appState.items || []).find(function (i) { return String(i.row) === String(row); });
     if (item) openRecordDetail(item.row);
   }
+}
+
+/* Async cross-data search (tasks, users) */
+function paletteSearch(query) {
+  CMD_SEARCH_GEN++;
+  var gen = CMD_SEARCH_GEN;
+  if (CMD_SEARCH_DEBOUNCE) clearTimeout(CMD_SEARCH_DEBOUNCE);
+  CMD_SEARCH_DEBOUNCE = setTimeout(function () {
+    var q = String(query || '').toLowerCase().trim();
+    if (q.length < 3) { hideSearching(); return; }
+    CMD_SEARCHING = true;
+    showSearching();
+    var taskPromise = ApiService.getMyTasks().catch(function () { return []; });
+    var userPromise = ApiService.getAssignableUsers().catch(function () { return []; });
+    Promise.all([taskPromise, userPromise]).then(function (results) {
+      if (gen !== CMD_SEARCH_GEN) return;
+      CMD_SEARCHING = false;
+      var tasks = results[0];
+      var users = results[1];
+      var taskResults = tasks.filter(function (t) {
+        return String(t.title || '').toLowerCase().indexOf(q) !== -1 ||
+          String(t.description || '').toLowerCase().indexOf(q) !== -1;
+      }).slice(0, 6).map(function (t) {
+        return {
+          key: 'task-' + (t.id || t.row || ''),
+          label: String(t.title || '').slice(0, 80),
+          subtitle: 'Task',
+          category: 'Tasks',
+          action: function () { openTaskModal(); closeCommandPalette(); }
+        };
+      });
+      var userResults = users.filter(function (u) {
+        return String(u.email || '').toLowerCase().indexOf(q) !== -1 ||
+          String(u.username || '').toLowerCase().indexOf(q) !== -1 ||
+          String(u.name || '').toLowerCase().indexOf(q) !== -1;
+      }).slice(0, 6).map(function (u) {
+        return {
+          key: 'user-' + (u.email || u.username || ''),
+          label: String(u.name || u.email || '').slice(0, 60) + ' <' + String(u.email || '').slice(0, 40) + '>',
+          subtitle: 'User',
+          category: 'Users',
+          action: function () { closeCommandPalette(); showToast('User profile: ' + (u.email || u.username), 'info'); }
+        };
+      });
+      CMD_RESULTS = [];
+      var html = '';
+      if (taskResults.length) html += '<div style="padding:8px 16px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Tasks</div>';
+      taskResults.forEach(function (item) {
+        var idx = CMD_RESULTS.length;
+        html += '<div class="command-item" data-cmd="' + escAttr(item.key) + '" data-idx="' + idx + '" onclick="executeCommand(\'' + escAttr(item.key) + '\')">' +
+          '<span>' + escapeHtml(item.label) + '</span>' +
+          '<span style="margin-left:auto;color:var(--muted);font-size:12px;">' + escapeHtml(item.subtitle || '') + '</span></div>';
+        CMD_RESULTS.push({ key: item.key, action: item.action });
+      });
+      if (userResults.length) html += '<div style="padding:8px 16px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Users</div>';
+      userResults.forEach(function (item) {
+        var idx = CMD_RESULTS.length;
+        html += '<div class="command-item" data-cmd="' + escAttr(item.key) + '" data-idx="' + idx + '" onclick="executeCommand(\'' + escAttr(item.key) + '\')">' +
+          '<span>' + escapeHtml(item.label) + '</span>' +
+          '<span style="margin-left:auto;color:var(--muted);font-size:12px;">' + escapeHtml(item.subtitle || '') + '</span></div>';
+        CMD_RESULTS.push({ key: item.key, action: item.action });
+      });
+      var list = getEl('commandList');
+      if (list) {
+        var spinner = list.querySelector('.palette-searching');
+        if (spinner) spinner.remove();
+        if (html) list.insertAdjacentHTML('beforeend', html);
+      }
+      hideSearching();
+      highlightSelected();
+    });
+  }, 150);
+}
+
+function showSearching() {
+  var list = getEl('commandList');
+  if (!list) return;
+  if (list.querySelector('.palette-searching')) return;
+  var div = document.createElement('div');
+  div.className = 'palette-searching';
+  div.style.cssText = 'padding:12px 16px;color:var(--muted);font-size:12px;text-align:center;';
+  div.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;margin-right:6px;vertical-align:middle;"></span>Searching…';
+  list.appendChild(div);
+}
+
+function hideSearching() {
+  var list = getEl('commandList');
+  if (!list) return;
+  var el = list.querySelector('.palette-searching');
+  if (el) el.remove();
 }
 
 function paletteNavigate(dir) {

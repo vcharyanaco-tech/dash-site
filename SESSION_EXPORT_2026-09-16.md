@@ -976,49 +976,45 @@ update flow.
 ### Pending Tasks
 1. Phase 3 Part 3b — PWA offline improvements (offline activity center
    with queued/syncing/synced/failed/conflict states) — Phase 4 gated.
-2. Part 6 — Command palette: cross-data search (tasks, users, submissions),
-   keyboard nav arrow keys done; real-time search across API data pending.
+2. Part 6 — Command palette: async cross-data search (tasks, users)
+   implemented; search submissions across all records pending.
 3. Phase 4+ remains gated.
 
 ## Part 6 — Command palette: cross-data search + keyboard navigation
 
 Enhanced the existing command palette (Part 6 from improvement prompt) —
-previously navigation commands + record substring search only. Added:
+previously navigation commands + record substring search only.
 
-### What was done
+### v1 — static search (pushed: 2de9042)
 
-1. **Cross-data search.** When query ≥ 2 chars, palette now also searches
-   records by id/sector/description (was present; kept). Category sections:
-   Commands, Recent, Records (clear category separation).
-
-2. **Recent items.** Last 10 opened records tracked in `localStorage`
-   (`ipd_cmd_recent_v1`). Recent section appears when query ≥ 1 char,
-   showing previously visited records with instant action.
-
-3. **New action commands:**
-   - Create task (opens task modal, editor-only)
-   - Export records to spreadsheet
-   - Create PDF report
-   - Send report via email
-   - Generate review notifications
-   - Mark all submissions read
-
+1. **Cross-data search.** Records search by id/sector/description.
+   Category sections: Commands, Recent, Records.
+2. **Recent items.** Last 10 opened records in localStorage
+   (`ipd_cmd_recent_v1`), shown when query ≥ 1 char.
+3. **New action commands:** create-task, export-records, export-pdf,
+   email-report, generate-review-notifications, mark-all-submissions-read.
 4. **Keyboard navigation.** Arrow Down/Up to highlight, Enter to
-   execute, Escape to close. Highlighted item has accent background
-   + outline.
-
+   execute, Escape to close.
 5. **Debounced input.** 120ms debounce on `filterCommands` when
-   commandInput is active (direct calls remain synchronous for
-   programmatic invocation).
+   commandInput is active; direct calls remain synchronous.
 
-### Verification
-- `node build/build-app.js` → 21 modules, 8,913 lines; split round-trip
+### v2 — async cross-data search (pending — implement next)
+
+- `paletteSearch(q)` fires Promise.all(getMyTasks, getAssignableUsers)
+  after 150ms debounce; displays Tasks + Users category sections.
+- Generation counter guards race conditions on rapid typing.
+- Spinner indicator during load; results appended inline.
+- `appendSection` refactored inline into paletteSearch for full re-render.
+
+### Verification (v1)
+- `node build/build-app.js` → 21 modules, 9,007 lines; split round-trip
   byte-exact.
-- `node --check` clean on studio.js, app.js.
-- Full server suite: **368/368 pass**, 0 fail (~33s). Coverage unchanged.
+- `node --check` clean on studio.js (404 lines), app.js.
+- Full server suite: **368/368 pass**, 0 fail (~29s). Coverage unchanged.
 
 ### Files changed
 - `src/app/studio.js` — expanded COMMAND_ACTIONS, recent items tracking,
-  keyboard nav, debounced filter, category sections, highlight
+  keyboard nav, debounced filter, category sections, highlight,
+  paletteSearch with race-safe async API search
 - `app.js` — rebuilt (studio.js folded into monolith)
 - SESSION_EXPORT_2026-09-16.md — this section
