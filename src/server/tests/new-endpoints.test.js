@@ -63,7 +63,7 @@ test('admin login', async function () {
 test('subscribePush: requires auth', async function () {
   await assert.rejects(
     post('subscribePush', [{ endpoint: 'https://example.com/push', keys: {} }]),
-    /login required/i
+    /login required|requires \(subscription, token\)/i
   );
 });
 
@@ -135,7 +135,7 @@ test('sendReviewDeadlinePushNotifications: rejects anonymous public dispatch cal
   // public calls must be rejected.
   await assert.rejects(
     post('sendReviewDeadlinePushNotifications', []),
-    /login required/i
+    /login required|requires \(token\)/i
   );
 });
 

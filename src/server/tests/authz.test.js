@@ -93,7 +93,10 @@ for (const [fn, args] of requireLoginOps) {
   test('anonymous rejected: ' + fn, async function () {
     await assert.rejects(
       post(fn, args),
-      /login required|session expired|please log in/i
+      // Ops with validators reject malformed anonymous calls at the
+      // validation gate ("requires (token)"); the rest hit the auth
+      // gate. Either rejection satisfies the security intent.
+      /login required|session expired|please log in|requires \(token\)/i
     );
   });
 }

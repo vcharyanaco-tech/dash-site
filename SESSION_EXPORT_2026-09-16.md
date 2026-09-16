@@ -292,3 +292,62 @@ Dispatching analysis (exact counts, run against `index-dispatch.js` / `index.js`
 
 ### Stray files (not committed)
 - (none — `src/server/D:/tmp` deleted after push)
+
+## Phase 1F implementation (this continuation)
+
+User resumed the session after sync (dropped the stray local `test-users-import.csv`
+commit, fast-forwarded to `origin/main` at `c489095`), then greenlit 1F.
+
+### What was done
+- **28 new VALIDATORS** in `index.js` (22 → **50/103** covered):
+  - Admin-mutating: `adminImportUsers`, `adminResetPassword`, `adminEmailAllUsers`,
+    `adminImportCsv`, `adminDeleteAuditRows`, `adminClearAudit`.
+  - File/data deletion: `deleteDocument`, `deleteMeetingFile`, `deleteSubmission`,
+    `deleteTask`.
+  - Other high-risk mutating: `updateTask`, `updateSubmission`, `lockSubmission`,
+    `unlockSubmission`, `toggleSubmissionDisplay`, `markAllSubmissionsRead`,
+    `setRecordDisplay`, `setDocumentKeep`, `saveDashboardPreferences`,
+    `markNotificationsRead`, `subscribePush`, `unsubscribePush`, `setFathomApiKey`,
+    `exportReviewCalendarIcs`, `createPdfReport`, `exportToSpreadsheet`,
+    `sendWeeklyReport`, `sendReviewDeadlinePushNotifications`.
+- **Tests:** `validators.test.js` +44 malformed/missing-arg validator cases
+  (75 total validator cases). **3 new bearer/cron regression tests**: a real
+  session token passed as an ARG (no cookie) still authenticates
+  (`adminGetUsers`, `createTask` success; garbage token rejected) — documents
+  the service-to-service / cron path preserved after the generalized
+  cookie-injection middleware.
+- **3 existing authz assertions relaxed** (`authz.test.js`,
+  `new-endpoints.test.js`): ops with new validators now reject anonymous
+  malformed calls at the *validation* gate ("requires (token)") instead of the
+  auth gate ("Login required") — same security intent, different message.
+
+### Verification
+- Full suite: **285/285 pass**, 0 fail (~28s). Coverage 79.62% stmt / 61.09% br /
+  84.07% fn (up from 79.30/58.43 pre-1E).
+- `node --check` clean on `index.js` + `validators.test.js`.
+
+### Files changed
+- `src/server/index.js` — 28 new VALIDATORS.
+- `src/server/tests/validators.test.js` — +44 validator cases, +3 bearer/cron tests.
+- `src/server/tests/authz.test.js` — relaxed anonymous-rejection regex.
+- `src/server/tests/new-endpoints.test.js` — relaxed 2 anonymous-rejection regexes.
+
+### Commits (this continuation)
+1. `(pending)` `feat:` phase-1F validator hardening — 28 new validators for
+   admin/data-mutating + file-deletion ops; bearer/cron token-as-arg regression
+   tests; full suite 229→285 pass.
+
+### Pending Tasks
+1. **1F (remaining, optional, incremental):** validators for lower-risk read /
+   informational ops still lacking them (~53 ops): `getSubmissions`,
+   `getRecordDocuments`, `getRecordHistory`, enterprise AI/meeting/Fathom reads,
+   `getTasks`, `getAssignableUsers`, `getDashboardPreferences`,
+   `getMyNotifications`, `markAllSubmissionsRead` already done, task/report
+   helpers, `validateSession`, `refreshSession`, `logout`, session/enterprise
+   config reads, etc.
+2. **Phase 2 (measured perf):** ship `app.js` monolith as prod load path,
+   re-measure on live DB/payloads, re-run Lighthouse with 4G throttle.
+3. Phase 3+ only after Phase 1/2 gates pass.
+
+### Stray files (not committed)
+- (none)

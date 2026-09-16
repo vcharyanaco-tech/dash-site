@@ -110,6 +110,62 @@ const validatorCases = [
   { fn: 'setHuggingFaceApiKey', goodArgs: [adminToken, 'key'], badArgs: [adminToken, ''], msg: /apiKey is required/ },
   { fn: 'setKiloApiKey', goodArgs: [adminToken, 'key'], badArgs: [], msg: /setKiloApiKey requires/ },
   { fn: 'setKiloApiKey', goodArgs: [adminToken, 'key'], badArgs: [adminToken, ''], msg: /apiKey is required/ },
+  // ── 1F: admin-mutating validators ────────────────────────────────────────
+  { fn: 'adminImportUsers', goodArgs: ['Email,Role\nx@y.com,VIEWER', adminToken], badArgs: [], msg: /adminImportUsers requires/ },
+  { fn: 'adminImportUsers', goodArgs: ['Email,Role\nx@y.com,VIEWER', adminToken], badArgs: ['', adminToken], msg: /csv content is required/ },
+  { fn: 'adminResetPassword', goodArgs: ['x@y.com', 'NewPass1!', adminToken], badArgs: [], msg: /adminResetPassword requires/ },
+  { fn: 'adminResetPassword', goodArgs: ['x@y.com', 'NewPass1!', adminToken], badArgs: ['', 'NewPass1!', adminToken], msg: /email is required/ },
+  { fn: 'adminResetPassword', goodArgs: ['x@y.com', 'NewPass1!', adminToken], badArgs: ['x@y.com', '', adminToken], msg: /newPassword is required/ },
+  { fn: 'adminEmailAllUsers', goodArgs: ['Subject', 'Body', adminToken], badArgs: [], msg: /adminEmailAllUsers requires/ },
+  { fn: 'adminEmailAllUsers', goodArgs: ['Subject', 'Body', adminToken], badArgs: ['', 'Body', adminToken], msg: /subject is required/ },
+  { fn: 'adminEmailAllUsers', goodArgs: ['Subject', 'Body', adminToken], badArgs: ['Subject', '', adminToken], msg: /body is required/ },
+  { fn: 'adminImportCsv', goodArgs: ['Email,Name\nx@y.com,Test', adminToken], badArgs: [], msg: /adminImportCsv requires/ },
+  { fn: 'adminImportCsv', goodArgs: ['Email,Name\nx@y.com,Test', adminToken], badArgs: ['', adminToken], msg: /csvText is required/ },
+  { fn: 'adminDeleteAuditRows', goodArgs: [[1, 2], adminToken], badArgs: [], msg: /adminDeleteAuditRows requires/ },
+  { fn: 'adminDeleteAuditRows', goodArgs: [[1, 2], adminToken], badArgs: ['not-array', adminToken], msg: /rowNumbers must be an array/ },
+  { fn: 'adminClearAudit', goodArgs: [adminToken], badArgs: [], msg: /adminClearAudit requires/ },
+  // ── 1F: file / data deletion validators ──────────────────────────────────
+  { fn: 'deleteDocument', goodArgs: ['doc123', adminToken], badArgs: [], msg: /deleteDocument requires/ },
+  { fn: 'deleteDocument', goodArgs: ['doc123', adminToken], badArgs: [null, adminToken], msg: /docId is required/ },
+  { fn: 'deleteMeetingFile', goodArgs: [adminToken, 'file.pdf'], badArgs: [], msg: /deleteMeetingFile requires/ },
+  { fn: 'deleteMeetingFile', goodArgs: [adminToken, 'file.pdf'], badArgs: [adminToken, ''], msg: /name is required/ },
+  { fn: 'deleteSubmission', goodArgs: ['sub123', adminToken], badArgs: [], msg: /deleteSubmission requires/ },
+  { fn: 'deleteSubmission', goodArgs: ['sub123', adminToken], badArgs: [null, adminToken], msg: /submissionId is required/ },
+  { fn: 'deleteTask', goodArgs: ['task123', adminToken], badArgs: [], msg: /deleteTask requires/ },
+  { fn: 'deleteTask', goodArgs: ['task123', adminToken], badArgs: [null, adminToken], msg: /id is required/ },
+  // ── 1F: other high-risk mutating validators ──────────────────────────────
+  { fn: 'updateTask', goodArgs: ['task123', { status: 'DONE' }, adminToken], badArgs: [], msg: /updateTask requires/ },
+  { fn: 'updateTask', goodArgs: ['task123', { status: 'DONE' }, adminToken], badArgs: [null, { status: 'DONE' }, adminToken], msg: /id is required/ },
+  { fn: 'updateTask', goodArgs: ['task123', { status: 'DONE' }, adminToken], badArgs: ['task123', null, adminToken], msg: /fields must be an object/ },
+  { fn: 'updateSubmission', goodArgs: ['sub123', 'New text', adminToken], badArgs: [], msg: /updateSubmission requires/ },
+  { fn: 'updateSubmission', goodArgs: ['sub123', 'New text', adminToken], badArgs: [null, 'New text', adminToken], msg: /submissionId is required/ },
+  { fn: 'updateSubmission', goodArgs: ['sub123', 'New text', adminToken], badArgs: ['sub123', '', adminToken], msg: /text is required/ },
+  { fn: 'lockSubmission', goodArgs: ['sub123', adminToken], badArgs: [], msg: /lockSubmission requires/ },
+  { fn: 'lockSubmission', goodArgs: ['sub123', adminToken], badArgs: [null, adminToken], msg: /submissionId is required/ },
+  { fn: 'unlockSubmission', goodArgs: ['sub123', adminToken], badArgs: [], msg: /unlockSubmission requires/ },
+  { fn: 'unlockSubmission', goodArgs: ['sub123', adminToken], badArgs: [null, adminToken], msg: /submissionId is required/ },
+  { fn: 'toggleSubmissionDisplay', goodArgs: ['sub123', adminToken], badArgs: [], msg: /toggleSubmissionDisplay requires/ },
+  { fn: 'toggleSubmissionDisplay', goodArgs: ['sub123', adminToken], badArgs: [null, adminToken], msg: /submissionId is required/ },
+  { fn: 'markAllSubmissionsRead', goodArgs: [adminToken], badArgs: [], msg: /markAllSubmissionsRead requires/ },
+  { fn: 'setRecordDisplay', goodArgs: [1, true, adminToken], badArgs: [], msg: /setRecordDisplay requires/ },
+  { fn: 'setRecordDisplay', goodArgs: [1, true, adminToken], badArgs: [1, 'yes', adminToken], msg: /displayed must be a boolean/ },
+  { fn: 'setDocumentKeep', goodArgs: ['doc123', true, adminToken], badArgs: [], msg: /setDocumentKeep requires/ },
+  { fn: 'setDocumentKeep', goodArgs: ['doc123', true, adminToken], badArgs: ['doc123', 'yes', adminToken], msg: /keep must be a boolean/ },
+  { fn: 'saveDashboardPreferences', goodArgs: [{ layout: 'grid' }, adminToken], badArgs: [], msg: /saveDashboardPreferences requires/ },
+  { fn: 'saveDashboardPreferences', goodArgs: [{ layout: 'grid' }, adminToken], badArgs: [null, adminToken], msg: /prefs must be an object/ },
+  { fn: 'markNotificationsRead', goodArgs: [['id1'], adminToken], badArgs: [], msg: /markNotificationsRead requires/ },
+  { fn: 'markNotificationsRead', goodArgs: [['id1'], adminToken], badArgs: ['not-array', adminToken], msg: /ids must be an array/ },
+  { fn: 'subscribePush', goodArgs: [{ endpoint: 'https://example.com', keys: {} }, adminToken], badArgs: [], msg: /subscribePush requires/ },
+  { fn: 'subscribePush', goodArgs: [{ endpoint: 'https://example.com', keys: {} }, adminToken], badArgs: [null, adminToken], msg: /subscription must be an object/ },
+  { fn: 'unsubscribePush', goodArgs: ['https://example.com/ep', adminToken], badArgs: [], msg: /unsubscribePush requires/ },
+  { fn: 'unsubscribePush', goodArgs: ['https://example.com/ep', adminToken], badArgs: ['', adminToken], msg: /endpoint is required/ },
+  { fn: 'setFathomApiKey', goodArgs: [adminToken, 'sk-test'], badArgs: [], msg: /setFathomApiKey requires/ },
+  { fn: 'setFathomApiKey', goodArgs: [adminToken, 'sk-test'], badArgs: [adminToken, ''], msg: /apiKey is required/ },
+  { fn: 'exportReviewCalendarIcs', goodArgs: [adminToken], badArgs: [], msg: /exportReviewCalendarIcs requires/ },
+  { fn: 'createPdfReport', goodArgs: [adminToken], badArgs: [], msg: /createPdfReport requires/ },
+  { fn: 'exportToSpreadsheet', goodArgs: [adminToken], badArgs: [], msg: /exportToSpreadsheet requires/ },
+  { fn: 'sendWeeklyReport', goodArgs: [adminToken], badArgs: [], msg: /sendWeeklyReport requires/ },
+  { fn: 'sendReviewDeadlinePushNotifications', goodArgs: [adminToken], badArgs: [], msg: /sendReviewDeadlinePushNotifications requires/ },
 ];
 
 for (const c of validatorCases) {
@@ -264,4 +320,47 @@ test('viewer rejected: setKiloApiKey', async function () {
     post('setKiloApiKey', [viewerToken, 'key']),
     /admin permission required/i
   );
+});
+
+// ------------------------------------------------------------------
+// Bearer/cron regression: a real session token passed as an ARG (no
+// cookie) must still authenticate — documents the service-to-service
+// / cron path preserved after the generalized cookie-injection
+// middleware (see index.js cookie splice).
+// ------------------------------------------------------------------
+
+test('bearer/cron: token-as-arg authenticates adminGetUsers (no cookie)', async function () {
+  const resp = await fetch('http://127.0.0.1:' + port + '/api', {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ function: 'adminGetUsers', args: [adminToken] })
+  });
+  const body = await resp.json();
+  assert.ok(!body.error, 'expected success, got error: ' + (body.error || ''));
+  assert.ok(Array.isArray(body.result), 'adminGetUsers result should be an array');
+});
+
+test('bearer/cron: token-as-arg authenticates createTask (no cookie)', async function () {
+  const resp = await fetch('http://127.0.0.1:' + port + '/api', {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ function: 'createTask', args: [{ title: 'Bearer cron task' }, adminToken] })
+  });
+  const body = await resp.json();
+  assert.ok(!body.error, 'expected success, got error: ' + (body.error || ''));
+  const result = body.result;
+  assert.ok(result && result.id, 'createTask should return a task with id');
+  if (result && result.id) {
+    await post('deleteTask', [result.id, adminToken]);
+  }
+});
+
+test('bearer/cron: garbage token-as-arg rejected (no cookie)', async function () {
+  const resp = await fetch('http://127.0.0.1:' + port + '/api', {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ function: 'adminGetUsers', args: ['deadbeef' + '0'.repeat(58)] })
+  });
+  const body = await resp.json();
+  assert.ok(body.error, 'expected error for garbage bearer token');
 });

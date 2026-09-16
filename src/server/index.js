@@ -467,6 +467,148 @@ const VALIDATORS = {
     if (args.length < 2) return 'setKiloApiKey requires (token, apiKey)';
     if (typeof args[1] !== 'string' || !args[1].trim()) return 'apiKey is required';
     return null;
+  },
+  // ── 1F: admin-mutating ops ───────────────────────────────────────────────
+  adminImportUsers: function (args) {
+    if (args.length < 2) return 'adminImportUsers requires (csv, token)';
+    if (typeof args[0] !== 'string' || !args[0].trim()) return 'csv content is required';
+    return null;
+  },
+  adminResetPassword: function (args) {
+    if (args.length < 3) return 'adminResetPassword requires (email, newPassword, token)';
+    if (typeof args[0] !== 'string' || !args[0].trim()) return 'email is required';
+    if (typeof args[1] !== 'string' || !args[1].trim()) return 'newPassword is required';
+    return null;
+  },
+  adminEmailAllUsers: function (args) {
+    if (args.length < 3) return 'adminEmailAllUsers requires (subject, body, token)';
+    if (typeof args[0] !== 'string' || !args[0].trim()) return 'subject is required';
+    if (typeof args[1] !== 'string' || !args[1].trim()) return 'body is required';
+    return null;
+  },
+  adminImportCsv: function (args) {
+    if (args.length < 2) return 'adminImportCsv requires (csvText, token)';
+    if (typeof args[0] !== 'string' || !args[0].trim()) return 'csvText is required';
+    return null;
+  },
+  adminDeleteAuditRows: function (args) {
+    if (args.length < 2) return 'adminDeleteAuditRows requires (rowNumbers, token)';
+    if (!Array.isArray(args[0])) return 'rowNumbers must be an array';
+    return null;
+  },
+  adminClearAudit: function (args) {
+    if (args.length < 1) return 'adminClearAudit requires (token)';
+    return null;
+  },
+  // ── 1F: file / data deletion ops ─────────────────────────────────────────
+  deleteDocument: function (args) {
+    if (args.length < 2) return 'deleteDocument requires (docId, token)';
+    if (!args[0] && args[0] !== 0) return 'docId is required';
+    return null;
+  },
+  deleteMeetingFile: function (args) {
+    if (args.length < 2) return 'deleteMeetingFile requires (token, name)';
+    if (typeof args[1] !== 'string' || !args[1].trim()) return 'name is required';
+    return null;
+  },
+  deleteSubmission: function (args) {
+    if (args.length < 2) return 'deleteSubmission requires (submissionId, token)';
+    if (!args[0] && args[0] !== 0) return 'submissionId is required';
+    return null;
+  },
+  deleteTask: function (args) {
+    if (args.length < 2) return 'deleteTask requires (id, token)';
+    if (!args[0] && args[0] !== 0) return 'id is required';
+    return null;
+  },
+  // ── 1F: other high-risk mutating ops ─────────────────────────────────────
+  updateTask: function (args) {
+    if (args.length < 3) return 'updateTask requires (id, fields, token)';
+    if (!args[0] && args[0] !== 0) return 'id is required';
+    if (!args[1] || typeof args[1] !== 'object') return 'fields must be an object';
+    return null;
+  },
+  updateSubmission: function (args) {
+    if (args.length < 3) return 'updateSubmission requires (submissionId, text, token)';
+    if (!args[0] && args[0] !== 0) return 'submissionId is required';
+    if (typeof args[1] !== 'string' || !args[1].trim()) return 'text is required';
+    return null;
+  },
+  lockSubmission: function (args) {
+    if (args.length < 2) return 'lockSubmission requires (submissionId, token)';
+    if (!args[0] && args[0] !== 0) return 'submissionId is required';
+    return null;
+  },
+  unlockSubmission: function (args) {
+    if (args.length < 2) return 'unlockSubmission requires (submissionId, token)';
+    if (!args[0] && args[0] !== 0) return 'submissionId is required';
+    return null;
+  },
+  toggleSubmissionDisplay: function (args) {
+    if (args.length < 2) return 'toggleSubmissionDisplay requires (submissionId, token)';
+    if (!args[0] && args[0] !== 0) return 'submissionId is required';
+    return null;
+  },
+  markAllSubmissionsRead: function (args) {
+    if (args.length < 1) return 'markAllSubmissionsRead requires (token)';
+    return null;
+  },
+  setRecordDisplay: function (args) {
+    if (args.length < 3) return 'setRecordDisplay requires (row, displayed, token)';
+    if (!args[0] && args[0] !== 0) return 'row is required';
+    if (typeof args[1] !== 'boolean') return 'displayed must be a boolean';
+    return null;
+  },
+  setDocumentKeep: function (args) {
+    if (args.length < 3) return 'setDocumentKeep requires (docId, keep, token)';
+    if (!args[0] && args[0] !== 0) return 'docId is required';
+    if (typeof args[1] !== 'boolean') return 'keep must be a boolean';
+    return null;
+  },
+  saveDashboardPreferences: function (args) {
+    if (args.length < 2) return 'saveDashboardPreferences requires (prefs, token)';
+    if (!args[0] || typeof args[0] !== 'object') return 'prefs must be an object';
+    return null;
+  },
+  markNotificationsRead: function (args) {
+    if (args.length < 2) return 'markNotificationsRead requires (ids, token)';
+    if (!Array.isArray(args[0])) return 'ids must be an array';
+    return null;
+  },
+  subscribePush: function (args) {
+    if (args.length < 2) return 'subscribePush requires (subscription, token)';
+    if (!args[0] || typeof args[0] !== 'object') return 'subscription must be an object';
+    return null;
+  },
+  unsubscribePush: function (args) {
+    if (args.length < 2) return 'unsubscribePush requires (endpoint, token)';
+    if (typeof args[0] !== 'string' || !args[0].trim()) return 'endpoint is required';
+    return null;
+  },
+  setFathomApiKey: function (args) {
+    if (args.length < 2) return 'setFathomApiKey requires (token, apiKey)';
+    if (typeof args[1] !== 'string' || !args[1].trim()) return 'apiKey is required';
+    return null;
+  },
+  exportReviewCalendarIcs: function (args) {
+    if (args.length < 1) return 'exportReviewCalendarIcs requires (token)';
+    return null;
+  },
+  createPdfReport: function (args) {
+    if (args.length < 1) return 'createPdfReport requires (token)';
+    return null;
+  },
+  exportToSpreadsheet: function (args) {
+    if (args.length < 1) return 'exportToSpreadsheet requires (token)';
+    return null;
+  },
+  sendWeeklyReport: function (args) {
+    if (args.length < 1) return 'sendWeeklyReport requires (token)';
+    return null;
+  },
+  sendReviewDeadlinePushNotifications: function (args) {
+    if (args.length < 1) return 'sendReviewDeadlinePushNotifications requires (token)';
+    return null;
   }
 };
 
