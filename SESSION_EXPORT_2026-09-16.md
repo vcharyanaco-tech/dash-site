@@ -531,3 +531,61 @@ path, folding in the three modules that were previously loaded separately
 
 ### Stray files (not committed)
 - (none)
+
+## Phase 3 part-21 — CSS semantic tokens pass (commit `11d9f27`)
+
+### What was done
+- **Canonical semantic color tokens added** (`--color-bg`, `--color-surface`,
+  `--color-surface-2/3`, `--color-text`, `--color-text-strong`, `--color-muted`,
+  `--color-primary/-hover/-soft`, `--color-secondary/-hover/-soft`,
+  `--color-accent`, `--color-border/-strong`, `--color-success/-soft`,
+  `--color-warning/-soft`, `--color-danger/-soft`, `--color-info/-soft`,
+  `--color-focus-ring`, `--color-overlay`, `--color-on-solid: #fff`). They are
+  defined as `var()` **aliases** in `:root`, so `body.dark-mode` overrides of
+  the underlying tokens apply automatically (single source of truth).
+- **Z-index scale added** (`--z-*`: topbar 30, sidebar 40, popover 60, dropdown
+  100, backdrop 90, auth 1000, float 1490, modal 1500, overlay 1800, toast
+  2000, splash 3000). Refactored 12 global z-index literals to the tokens;
+  component-local stacking (table pin 1–6, badges 5, card menus 20, resize
+  handles 5, mobile backdrop 35 — documented as below `--z-sidebar`) kept
+  literal inside their own containers.
+- **Breakpoint tokens** (`--bp-xs 520 / --bp-sm 760 / --bp-md 900 / --bp-lg
+  1024`) documented as the single source of truth; `@media` must keep literal
+  values (CSS cannot read custom properties in queries) — a comment enforces
+  the match.
+- **Form-state tokens** (`--input-bg/-border/-focus-ring/-invalid-border/
+  -invalid-ring/-readonly-bg/-placeholder`) wired into `.input/.select/
+  .textarea` incl. `::placeholder`, focus ring, invalid ring, readonly.
+- **Fixed 9 drift bugs**: `--font-mono`, `--fs-2xl/sm/xs`, `--surface-alt`,
+  `--surface-raised`, `--text-muted`, `--bg-surface`, `--border-color` were
+  used by components but **never defined** → silently inherited. All defined
+  now (verified: `var()` usage audit shows zero undefined tokens).
+- **Added `--brand-gold`** (#c9861f) for the footer org credit; refactored
+  analytics trend colors (#2e7d32/#c62828 → `--color-success/-danger`), the
+  sync-preview add/upd/rem chips (#e8f5e9 etc. → semantic soft tokens, which
+  also gives them proper dark-mode variants), and **18 `#fff` text-on-solid
+  literals** → `--color-on-solid`. `--dt-*` table mini-theme (light + dark
+  pairs) and print/brand-chip whites left intentional.
+- **Cache bump**: `SW_VERSION` → `2026.09.16a` (`sw.js`), styles.css
+  cache-buster → `?v=2026.09.16a` (`app.html`).
+
+### Verification
+- `var()` undefined-token audit: 0 missing (`--text-muted` etc. now resolve).
+- CSS brace balance: 634/634 balanced.
+- Reverted one bad attempt: a `WriteAllText` round-trip mojibake'd all
+  non-ASCII (em-dashes/↕↑↓/·) — restored via `git checkout`, redone with the
+  UTF-8-safe edit tool; final file retains all 7 em-dashes + sort arrows.
+- `node --check sw.js` OK; server suite **352/352 pass, 0 fail**.
+
+### Files changed
+- `assets/styles.css` — token layer, z/breakpoint/form tokens, semantic
+  color refactors, 9 drift fixes.
+- `sw.js` — SW_VERSION → `2026.09.16a`.
+- `app.html` — `assets/styles.css?v=2026.09.16a`.
+
+### Commits
+- `11d9f27` — `feat:` phase-3 part-21 — CSS semantic tokens pass (pushed to
+  origin/main).
+
+### Stray files (not committed)
+- (none)
