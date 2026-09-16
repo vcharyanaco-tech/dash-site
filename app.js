@@ -6690,13 +6690,39 @@ const COMMAND_ACTIONS = [
   { key: 'goto-tasks', label: 'Go to Tasks', shortcut: 'G T', action: function () { openTab('tasks'); closeCommandPalette(); } },
   { key: 'refresh', label: 'Refresh data', shortcut: 'R', action: function () { refreshData(); closeCommandPalette(); } },
   { key: 'add-record', label: 'Add new record', shortcut: 'N', action: function () { openAddModal(); closeCommandPalette(); }, requireEditor: true },
+  { key: 'create-task', label: 'Create task', shortcut: '', action: function () { openTaskModal(); closeCommandPalette(); }, requireEditor: true },
   { key: 'toggle-theme', label: 'Toggle dark mode', shortcut: 'T', action: function () { toggleDarkMode(); closeCommandPalette(); } },
-  { key: 'logout', label: 'Sign out', shortcut: 'Q', action: function () { handleLogout(); closeCommandPalette(); } }
+  { key: 'logout', label: 'Sign out', shortcut: 'Q', action: function () { handleLogout(); closeCommandPalette(); } },
+  { key: 'export-records', label: 'Export records to spreadsheet', shortcut: '', action: function () { exportToSpreadsheet(); closeCommandPalette(); } },
+  { key: 'export-pdf', label: 'Create PDF report', shortcut: '', action: function () { createPdfReport(); closeCommandPalette(); } },
+  { key: 'email-report', label: 'Send report via email', shortcut: '', action: function () { openEmailReportDialog(); closeCommandPalette(); } },
+  { key: 'generate-review-notifications', label: 'Generate review notifications', shortcut: '', action: function () { ApiService.generateReviewNotifications().then(function () { showToast('Review notifications generated.', 'success'); }).catch(function (e) { showToast('Could not generate.', 'error'); }); closeCommandPalette(); } },
+  { key: 'mark-all-submissions-read', label: 'Mark all submissions read', shortcut: '', action: function () { markAllSubmissionsRead(); closeCommandPalette(); } }
 ];
+
+var CMD_RESULTS = [];
+var CMD_SELECTED_IDX = 0;
+var RECENT_KEY = 'ipd_cmd_recent_v1';
+
+function getRecentItems() {
+  try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) { return []; }
+}
+
+function saveRecentItems(items) {
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(items.slice(0, 10))); } catch (e) {}
+}
+
+function addRecentItem(item) {
+  var recent = getRecentItems().filter(function (r) { return r.key !== item.key; });
+  recent.unshift(item);
+  saveRecentItems(recent);
+}
 
 function openCommandPalette() {
   openDialog('commandPalette');
   const input = getEl('commandInput');
+  CMD_RESULTS = [];
+  CMD_SELECTED_IDX = 0;
   if (input) {
     input.value = '';
     input.focus();
@@ -6724,39 +6750,123 @@ function filterCommands(query) {
         key: 'record-' + item.row,
         label: 'Record #' + item.id + ' — ' + (item.sector || ''),
         subtitle: (item.description || '').slice(0, 60),
-        action: function () { openRecordDetail(item.row); closeCommandPalette(); }
+        category: 'Records',
+        action: function () { openRecordDetail(item.row); closeCommandPalette(); addRecentItem({ key: 'record-' + item.row, label: 'Record #' + item.id, type: 'record' }); }
       };
     });
   }
-  let html = '';
-  if (actions.length) {
-    html += '<div style="padding:8px 16px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Commands</div>';
-    actions.forEach(function (cmd) {
-      html += '<div class="command-item" data-cmd="' + escAttr(cmd.key) + '" onclick="executeCommand(\'' + escAttr(cmd.key) + '\')">' +
-        '<span>' + escapeHtml(cmd.label) + '</span>' +
-        '<span class="command-shortcut">' + escapeHtml(cmd.shortcut || '') + '</span></div>';
+  var recent = [];
+  if (q.length >= 1) {
+    recent = getRecentItems().filter(function (r) {
+      return String(r.label).toLowerCase().indexOf(q) !== -1;
+    }).slice(0, 5).map(function (r) {
+      return {
+        key: r.key,
+        label: r.label,
+        subtitle: '',
+        category: 'Recent',
+        action: function () {
+          if (r.type === 'record') {
+            var row = r.key.replace('record-', '');
+            openRecordDetail(row);
+          }
+          closeCommandPalette();
+        }
+      };
     });
   }
-  if (records.length) {
-    html += '<div style="padding:8px 16px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Records</div>';
-    records.forEach(function (rec) {
-      html += '<div class="command-item" data-cmd="' + escAttr(rec.key) + '" onclick="executeCommand(\'' + escAttr(rec.key) + '\')">' +
-        '<span>' + escapeHtml(rec.label) + '</span>' +
-        '<span style="color:var(--muted);font-size:12px;">' + escapeHtml(rec.subtitle || '') + '</span></div>';
+  CMD_RESULTS = [];
+  var html = '';
+  function addSection(title, items) {
+    if (!items.length) return;
+    html += '<div style="padding:8px 16px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">' + escapeHtml(title) + '</div>';
+    items.forEach(function (item) {
+      var idx = CMD_RESULTS.length;
+      html += '<div class="command-item" data-cmd="' + escAttr(item.key) + '" data-idx="' + idx + '" onclick="executeCommand(\'' + escAttr(item.key) + '\')">' +
+        '<span>' + escapeHtml(item.label) + '</span>' +
+        '<span style="margin-left:auto;color:var(--muted);font-size:12px;">' + escapeHtml(item.shortcut || item.subtitle || '') + '</span></div>';
+      CMD_RESULTS.push({ key: item.key, action: item.action });
     });
   }
+  addSection('Commands', actions);
+  addSection('Recent', recent);
+  addSection('Records', records);
   if (!html) html = '<div style="padding:16px;color:var(--muted);text-align:center;">No results</div>';
   list.innerHTML = html;
+  CMD_SELECTED_IDX = 0;
+  highlightSelected();
+}
+
+function highlightSelected() {
+  var items = document.querySelectorAll('#commandList .command-item');
+  items.forEach(function (el, i) {
+    if (i === CMD_SELECTED_IDX) {
+      el.style.background = 'var(--accent-soft, rgba(37,99,235,0.1))';
+      el.style.outline = '1px solid var(--accent, #2563eb)';
+    } else {
+      el.style.background = '';
+      el.style.outline = '';
+    }
+  });
 }
 
 function executeCommand(key) {
-  const action = COMMAND_ACTIONS.find(function (a) { return a.key === key; });
+  var found = CMD_RESULTS.find(function (r) { return r.key === key; });
+  if (found) { found.action(); return; }
+  var action = COMMAND_ACTIONS.find(function (a) { return a.key === key; });
   if (action && !action.requireEditor) action.action();
   else if (key.indexOf('record-') === 0) {
-    const row = key.replace('record-', '');
-    const item = (appState.items || []).find(function (i) { return String(i.row) === String(row); });
+    var row = key.replace('record-', '');
+    var item = (appState.items || []).find(function (i) { return String(i.row) === String(row); });
     if (item) openRecordDetail(item.row);
   }
+}
+
+function paletteNavigate(dir) {
+  var total = CMD_RESULTS.length;
+  if (!total) return;
+  CMD_SELECTED_IDX = (CMD_SELECTED_IDX + dir + total) % total;
+  highlightSelected();
+}
+
+function paletteActivate() {
+  if (CMD_RESULTS[CMD_SELECTED_IDX]) executeCommand(CMD_RESULTS[CMD_SELECTED_IDX].key);
+}
+
+/* Keyboard navigation inside palette */
+(function () {
+  var origOpen = openCommandPalette;
+  var overrideInstalled = false;
+  openCommandPalette = function () {
+    origOpen();
+    if (!overrideInstalled) {
+      var input = getEl('commandInput');
+      if (input) {
+        input.removeEventListener('keydown', paletteKeydown);
+        input.addEventListener('keydown', paletteKeydown);
+      }
+      overrideInstalled = true;
+    }
+  };
+
+  function paletteKeydown(e) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); paletteNavigate(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); paletteNavigate(-1); }
+    else if (e.key === 'Enter') { e.preventDefault(); paletteActivate(); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeCommandPalette(); }
+  }
+})();
+
+/* Debounced filter for oninput (keeps direct calls synchronous) */
+var _filterTimer = null;
+var _origFilterCommands = filterCommands;
+function filterCommands(query) {
+  if (document.activeElement && document.activeElement.id === 'commandInput') {
+    if (_filterTimer) clearTimeout(_filterTimer);
+    _filterTimer = setTimeout(function () { _origFilterCommands(query); }, 120);
+    return;
+  }
+  _origFilterCommands(query);
 }
 
 /* ---------------------------------- Edit modal ---------------------------------- */

@@ -976,6 +976,49 @@ update flow.
 ### Pending Tasks
 1. Phase 3 Part 3b — PWA offline improvements (offline activity center
    with queued/syncing/synced/failed/conflict states) — Phase 4 gated.
-2. Phase 3 Part 9 — Actionable notifications — already done upstream
-   (commit 584484a).
+2. Part 6 — Command palette: cross-data search (tasks, users, submissions),
+   keyboard nav arrow keys done; real-time search across API data pending.
 3. Phase 4+ remains gated.
+
+## Part 6 — Command palette: cross-data search + keyboard navigation
+
+Enhanced the existing command palette (Part 6 from improvement prompt) —
+previously navigation commands + record substring search only. Added:
+
+### What was done
+
+1. **Cross-data search.** When query ≥ 2 chars, palette now also searches
+   records by id/sector/description (was present; kept). Category sections:
+   Commands, Recent, Records (clear category separation).
+
+2. **Recent items.** Last 10 opened records tracked in `localStorage`
+   (`ipd_cmd_recent_v1`). Recent section appears when query ≥ 1 char,
+   showing previously visited records with instant action.
+
+3. **New action commands:**
+   - Create task (opens task modal, editor-only)
+   - Export records to spreadsheet
+   - Create PDF report
+   - Send report via email
+   - Generate review notifications
+   - Mark all submissions read
+
+4. **Keyboard navigation.** Arrow Down/Up to highlight, Enter to
+   execute, Escape to close. Highlighted item has accent background
+   + outline.
+
+5. **Debounced input.** 120ms debounce on `filterCommands` when
+   commandInput is active (direct calls remain synchronous for
+   programmatic invocation).
+
+### Verification
+- `node build/build-app.js` → 21 modules, 8,913 lines; split round-trip
+  byte-exact.
+- `node --check` clean on studio.js, app.js.
+- Full server suite: **368/368 pass**, 0 fail (~33s). Coverage unchanged.
+
+### Files changed
+- `src/app/studio.js` — expanded COMMAND_ACTIONS, recent items tracking,
+  keyboard nav, debounced filter, category sections, highlight
+- `app.js` — rebuilt (studio.js folded into monolith)
+- SESSION_EXPORT_2026-09-16.md — this section
