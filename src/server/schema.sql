@@ -96,7 +96,9 @@ CREATE TABLE IF NOT EXISTS notifications (
   body TEXT NOT NULL DEFAULT '',
   link TEXT NOT NULL DEFAULT '',
   created_at INTEGER,
-  read_at INTEGER
+  read_at INTEGER,
+  priority INTEGER NOT NULL DEFAULT 0,
+  record_row INTEGER NOT NULL DEFAULT 0
 );
 
 

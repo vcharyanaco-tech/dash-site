@@ -8,7 +8,7 @@
  */
 
 const { db } = require('./db');
-const { CONFIG, ROLES, ACTIONS } = require('./config');
+const { CONFIG, ROLES, ACTIONS, NOTIFICATION_PRIORITY } = require('./config');
 const { uuid_, now_, formatDate_, runWithLock_ } = require('./helpers');
 const auth = require('./auth');
 
@@ -198,7 +198,7 @@ function addSubmission(cardRow, cardId, text, token) {
 
     try { require('./audit').logAudit_(ACTIONS.SUBMISSION_ADD, cardRow, { id: id, cardRow: cardRow, text: content }, user.email); } catch (err) {}
     try {
-      require('./notifications').notifyStaffLocked_('submission', 'New submission', 'Update submitted on record #' + cardRow + ' by ' + user.email + '.', '', user.email);
+      require('./notifications').notifyStaffLocked_('submission', 'New submission', 'Update submitted on record #' + cardRow + ' by ' + user.email + '.', '', user.email, { priority: NOTIFICATION_PRIORITY.HIGH, recordRow: Number(cardRow) });
     } catch (err) {}
     try { require('./data-sync').requestBackup(); } catch (err) {}
     return submissionsForCard_(cardRow, user);

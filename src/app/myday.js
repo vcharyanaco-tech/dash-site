@@ -199,7 +199,7 @@ function renderMyDayContent_(panel, data) {
         escapeHtml(n.title || 'Notification'),
         escapeHtml(truncate_(n.body || '', 80)),
         formatNotifTime(n.createdAt),
-        '<button class="btn btn-secondary btn-small" type="button" onclick="event.stopPropagation(); openNotification(\'' + escAttr(n.id) + '\', \'' + escAttr(n.type || 'system') + '\')">Open</button>'
+        '<button class="btn btn-secondary btn-small" type="button" onclick="event.stopPropagation(); openNotification(\'' + escAttr(n.id) + '\', \'' + escAttr(n.type || 'system') + '\', \'' + escAttr(String(n.recordRow || 0)) + '\')">Open</button>'
       );
     }));
   }

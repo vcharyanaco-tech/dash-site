@@ -293,6 +293,21 @@ const NOTIFICATION_TYPES = Object.freeze({
   SYSTEM: 'system'
 });
 
+// Maps notification type -> localized display key (for grouping + prefs).
+const NOTIFICATION_LOCALIZED_TYPES = Object.freeze({
+  record: 'Record',
+  submission: 'Submission',
+  user: 'User',
+  system: 'System'
+});
+
+// Notification priority bands: NORMAL (0) and HIGH (1). High-priority items
+// surface an urgent badge in the bell dropdown / notification center.
+const NOTIFICATION_PRIORITY = Object.freeze({
+  NORMAL: 0,
+  HIGH: 1
+});
+
 const NOTIFICATION_RECENT_LIMIT = 30;
 
 /* ---------- Audit.gs constants ---------- */
@@ -446,6 +461,8 @@ module.exports = {
   NOTIFICATION_SHEET_HEADERS,
   NOTIFICATION_COL,
   NOTIFICATION_TYPES,
+  NOTIFICATION_LOCALIZED_TYPES,
+  NOTIFICATION_PRIORITY,
   NOTIFICATION_RECENT_LIMIT,
   AUDIT_SHEET,
   DOC_SHEET_HEADERS,

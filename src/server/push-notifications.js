@@ -137,6 +137,8 @@ function sendReviewDeadlinePushNotifications(token) {
   const users = require('./auth').listUserRecords_();
   let sent = 0;
 
+  const notifications = require('./notifications');
+
   items.forEach(function (item) {
     if (item.reviewStatus === 'done') return;
     const days = helpers.daysUntilDate_(item.reviewDate);
@@ -148,6 +150,8 @@ function sendReviewDeadlinePushNotifications(token) {
       const email = String(user.primaryEmail || '').toLowerCase().trim();
       if (!email || !helpers.isValidEmail_(email)) return;
       if (!records.responsibilityMatchesUser_(responsibility, user)) return;
+
+      if (!notifications.allowTypeFor_(email, 'push')) return;
 
       const result = sendPushNotifications(
         'Review due tomorrow: #' + item.id,

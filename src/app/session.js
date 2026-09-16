@@ -5,7 +5,11 @@ function isAuthError(message) {
   const msg = String(message || '');
   return msg.indexOf('Login required') !== -1 ||
     msg.indexOf('Session expired') !== -1 ||
-    msg.indexOf('Please log in') !== -1;
+    msg.indexOf('Please log in') !== -1 ||
+    // Server-side token validators reject anonymous calls with
+    // 'getAppData requires (token)' & co — these must route the user to
+    // the login screen, not to the "Error loading app" panel.
+    /requires \(.*token\)/i.test(msg);
 }
 
 function handleServerFailure(err) {
@@ -127,13 +131,48 @@ function updateMarkAllSubmissionsReadBtn() {
 
 /* ---------------------------------- Notifications ---------------------------------- */
 
+const NOTIF_TYPE_LABELS = {
+  record: 'Records',
+  submission: 'Submissions',
+  user: 'User',
+  system: 'System'
+};
+const NOTIF_TYPE_ORDER = ['record', 'submission', 'user', 'system'];
+
 function loadNotifications(silent) {
   return ApiService.getMyNotifications().then(function (data) {
     appState.notifications = data || { unread: 0, recent: [] };
+    appState.notifPrefs = (data && data.prefs) || null;
     renderNotifications();
+    renderNotificationPrefsControls();
   }).catch(function (err) {
     if (!silent && handleServerFailure(err)) return;
   });
+}
+
+/* Group a notification list by type (stable by NOTIF_TYPE_ORDER). Returns an
+   array of { type, label, items } for the dropdown / notification center. */
+function groupNotifications_(items) {
+  const groups = [];
+  NOTIF_TYPE_ORDER.forEach(function (type) {
+    const grouped = (items || []).filter(function (n) { return String(n.type || 'system') === type; });
+    if (grouped.length) groups.push({ type: type, label: NOTIF_TYPE_LABELS[type] || type, items: grouped });
+  });
+  return groups;
+}
+
+function notifPriorityClass_(n) {
+  return Number(n && n.priority) >= 1 ? ' notif-priority-high' : '';
+}
+
+function notifActionHtml_(n) {
+  const parts = [];
+  if (!n.readAt) {
+    parts.push('<button class="btn btn-ghost btn-small notif-mark-read" type="button" onclick="event.stopPropagation(); markNotificationRead(\'' + escAttr(n.id) + '\')">Mark read</button>');
+  }
+  parts.push('<button class="btn btn-secondary btn-small" type="button" onclick="event.stopPropagation(); openNotification(\'' + escAttr(n.id) + '\', \'' + escAttr(n.type || 'system') + '\', \'' + escAttr(String(n.recordRow || 0)) + '\')">' +
+    (Number(n.recordRow || 0) ? 'Open record' : 'Open') + '</button>');
+  return parts.join('');
 }
 
 function renderNotifications() {
@@ -148,16 +187,153 @@ function renderNotifications() {
   const empty = getEl('notifEmpty');
   const recent = n.recent || [];
   if (list) {
-    list.innerHTML = (recent.map(function (item) {
-      const unreadClass = item.readAt ? '' : ' notif-item-unread';
-      return '<li class="notif-item' + unreadClass + '" data-notif-id="' + escAttr(String(item.id || '')) + '" data-notif-type="' + escAttr(String(item.type || 'system')) + '">' +
-        '<div class="notif-item-title">' + escapeHtml(item.title) + '</div>' +
-        '<div class="notif-item-body">' + escapeHtml(item.body) + '</div>' +
-        '<div class="notif-item-time">' + escapeHtml(formatNotifTime(item.createdAt)) + '</div>' +
-        '</li>';
-    }).join('')) || '<li class="notif-item-empty">No notifications yet.</li>';
+    const groups = groupNotifications_(recent);
+    list.innerHTML = groups.map(function (g) {
+      return '<li class="notif-group" role="group" aria-label="' + escAttr(g.label) + '">' +
+        '<div class="notif-group-title">' + escapeHtml(g.label) + ' <span class="notif-group-count">' + g.items.length + '</span></div>' +
+        '<ul class="notif-group-list">' + g.items.map(function (item) {
+          const unreadClass = item.readAt ? '' : ' notif-item-unread';
+          return '<li class="notif-item' + unreadClass + notifPriorityClass_(item) + '" data-notif-id="' + escAttr(String(item.id || '')) + '" data-notif-type="' + escAttr(String(item.type || 'system')) + '">' +
+            '<div class="notif-item-title">' + (Number(item.priority) >= 1 ? '<span class="notif-urgent" title="Urgent">&#9888;</span> ' : '') + escapeHtml(item.title) + '</div>' +
+            '<div class="notif-item-body">' + escapeHtml(item.body) + '</div>' +
+            '<div class="notif-item-meta"><span class="notif-item-time">' + escapeHtml(formatNotifTime(item.createdAt)) + '</span>' +
+            '<span class="notif-item-actions">' + notifActionHtml_(item) + '</span></div>' +
+            '</li>';
+        }).join('') + '</ul></li>';
+    }).join('') || '<li class="notif-item-empty">No notifications yet.</li>';
   }
   if (empty) empty.classList.toggle('hidden', !!(recent && recent.length));
+}
+
+function openNotificationCenter() {
+  closeNotificationsPanel();
+  loadNotifications(true).then(function () {
+    const modal = getEl('notifCenterModal');
+    if (modal) {
+      modal.classList.remove('hidden');
+      document.body.classList.add('modal-open');
+      renderNotificationCenter('all');
+    }
+  });
+}
+
+function closeNotificationCenter() {
+  const modal = getEl('notifCenterModal');
+  if (modal) modal.classList.add('hidden');
+  document.body.classList.remove('modal-open');
+}
+
+function renderNotificationCenter(filter) {
+  const view = appState.notifications || { unread: 0, recent: [], history: [] };
+  const byTypeRemaining = Object.assign({}, view.byTypeUnread || {});
+  const list = getEl('notifCenterList');
+  const unreadAll = view.unread || 0;
+  const counter = getEl('notifCenterCounter');
+  if (counter) counter.textContent = unreadAll ? unreadAll + ' unread' : 'No unread notifications';
+
+  let items = (view.history || view.recent || []).slice();
+  if (filter === 'unread') items = items.filter(function (i) { return !i.readAt; });
+  if (filter !== 'all' && filter !== 'unread' && NOTIF_TYPE_LABELS[filter]) {
+    items = items.filter(function (i) { return String(i.type) === filter; });
+  }
+
+  const groups = groupNotifications_(items);
+  list.innerHTML = groups.map(function (g) {
+    const unread = byTypeRemaining[g.type] || 0;
+    return '<div class="notif-center-group">' +
+      '<div class="notif-center-group-head">' +
+      '<span class="text-subheading">' + escapeHtml(g.label) + '</span>' +
+      (unread ? '<span class="notif-center-unread">' + unread + ' unread</span>' : '') +
+      '<button class="btn btn-ghost btn-small" type="button" onclick="markTypeRead(\'' + escAttr(g.type) + '\')">Mark group read</button>' +
+      '</div>' +
+      '<ul class="notif-center-group-list">' + g.items.map(notifCenterItemHtml_).join('') + '</ul>' +
+      '</div>';
+  }).join('') || '<div class="notif-center-empty">No notifications in this view.</div>';
+  renderNotificationPrefsControls();
+}
+
+function notifCenterItemHtml_(item) {
+  const unreadClass = item.readAt ? '' : ' notif-item-unread';
+  return '<li class="notif-item' + unreadClass + notifPriorityClass_(item) + '" data-notif-id="' + escAttr(String(item.id || '')) + '">' +
+    '<div class="notif-item-title">' + (Number(item.priority) >= 1 ? '<span class="notif-urgent" title="Urgent">&#9888;</span> ' : '') + escapeHtml(item.title) + '</div>' +
+    '<div class="notif-item-body">' + escapeHtml(item.body) + '</div>' +
+    '<div class="notif-item-meta"><span class="notif-item-time">' + escapeHtml(formatTimestamp(item.createdAt)) + '</span>' +
+    '<span class="notif-item-actions">' + notifActionHtml_(item) + '</span></div>' +
+    '</li>';
+}
+
+function renderNotificationPrefsControls() {
+  const prefs = appState.notifPrefs;
+  const wrap = getEl('notifPrefs');
+  if (!wrap || !prefs) return;
+  const defs = [['record', 'Record updates'], ['submission', 'Submissions'], ['user', 'User / account'], ['system', 'System']];
+  wrap.innerHTML = '<div class="notif-prefs-grid">' + defs.map(function (d) {
+      const key = d[0];
+      return '<label class="notif-pref-item"><input type="checkbox" data-notif-pref-type="' + key + '" ' + (prefs[key] ? 'checked' : '') + ' onchange="setNotifPref(this)">' +
+        '<span>' + escapeHtml(d[1]) + '</span></label>';
+    }).join('') +
+    '<label class="notif-pref-item"><input type="checkbox" data-notif-pref-type="push" ' + (prefs.push ? 'checked' : '') + ' onchange="setNotifPref(this)" data-notif-pref-push="1">' +
+    '<span>Push notifications</span></label></div>';
+}
+
+function setNotifPref(input) {
+  const type = input.getAttribute('data-notif-pref-type');
+  if (!type) return;
+  const isPush = input.hasAttribute('data-notif-pref-push');
+  if (isPush) {
+    if (input.checked) {
+      subscribeToPushNotifications();
+    } else {
+      unsubscribeFromPushNotifications();
+    }
+  }
+  const next = Object.assign({}, appState.notifPrefs || {});
+  next[type] = !!input.checked;
+  ApiService.setNotificationPrefs(next).then(function (data) {
+    appState.notifPrefs = (data && data.prefs) || next;
+    showToast('Notification preference saved.', 'success');
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+    input.checked = !input.checked;
+    showToast('Could not save preference: ' + (err.message || err), 'error');
+  });
+}
+
+function markNotificationRead(id) {
+  if (!id) return;
+  ApiService.markNotificationsRead([id]).then(function (data) {
+    appState.notifications = data || { unread: 0, recent: [] };
+    appState.notifPrefs = (data && data.prefs) || appState.notifPrefs;
+    renderNotifications();
+    if (!getEl('notifCenterModal').classList.contains('hidden')) renderNotificationCenter(currentNotifCenterFilter_());
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+  });
+}
+
+function markTypeRead(type) {
+  if (!type) return;
+  ApiService.markNotificationsRead([type]).then(function (data) {
+    appState.notifications = data || { unread: 0, recent: [] };
+    appState.notifPrefs = (data && data.prefs) || appState.notifPrefs;
+    renderNotifications();
+    if (!getEl('notifCenterModal').classList.contains('hidden')) renderNotificationCenter(currentNotifCenterFilter_());
+    showToast('Notifications marked as read.', 'success');
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+  });
+}
+
+function currentNotifCenterFilter_() {
+  const active = document.querySelector('.notif-center-filter.active');
+  return active ? active.getAttribute('data-notif-filter') || 'all' : 'all';
+}
+
+function setNotifCenterFilter(filter) {
+  document.querySelectorAll('.notif-center-filter').forEach(function (b) { b.classList.remove('active'); });
+  const match = document.querySelector('.notif-center-filter[data-notif-filter="' + filter + '"]');
+  if (match) match.classList.add('active');
+  renderNotificationCenter(filter);
 }
 
 function formatNotifTime(ts) {
@@ -202,7 +378,9 @@ function closeNotificationsPanel() {
 function markAllNotificationsRead() {
   ApiService.markNotificationsRead('all').then(function (data) {
     appState.notifications = data || { unread: 0, recent: [] };
+    appState.notifPrefs = (data && data.prefs) || appState.notifPrefs;
     renderNotifications();
+    if (!getEl('notifCenterModal').classList.contains('hidden')) renderNotificationCenter(currentNotifCenterFilter_());
     showToast('All notifications marked as read.', 'success');
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
@@ -213,7 +391,9 @@ function markAllNotificationsRead() {
 function clearAllNotifications() {
   ApiService.clearMyNotifications().then(function (data) {
     appState.notifications = data || { unread: 0, recent: [] };
+    appState.notifPrefs = (data && data.prefs) || appState.notifPrefs;
     renderNotifications();
+    if (!getEl('notifCenterModal').classList.contains('hidden')) renderNotificationCenter(currentNotifCenterFilter_());
     showToast('All notifications cleared.', 'success');
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
@@ -221,20 +401,40 @@ function clearAllNotifications() {
   });
 }
 
-function openNotification(id, type) {
+function openNotification(id, type, recordRow) {
   if (!id) {
     closeNotificationsPanel();
     return;
   }
-  ApiService.markNotificationsRead([id]).then(function (data) {
+  const readP = ApiService.markNotificationsRead([id]).then(function (data) {
     appState.notifications = data || { unread: 0, recent: [] };
+    appState.notifPrefs = (data && data.prefs) || appState.notifPrefs;
     renderNotifications();
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
   });
   closeNotificationsPanel();
+  if (recordRow && Number(recordRow) > 0) {
+    const targetRow = Number(recordRow);
+    const found = (appState.items || []).some(function (i) { return String(i.row) === String(targetRow); });
+    if (found) {
+      readP.then(function () { openRecordDetail(targetRow); });
+    } else {
+      readP.then(function () {
+        return ApiService.getAppData().then(function (data) {
+          applyAppData(data);
+          renderDashboard(true);
+          openRecordDetail(targetRow);
+        }).catch(function (err) {
+          if (handleServerFailure(err)) return;
+          openTab('dashboard');
+        });
+      });
+    }
+    return;
+  }
   const map = { record: 'dashboard', submission: 'dashboard', user: 'settings', system: 'dashboard' };
-  openTab(map[type] || 'dashboard');
+  readP.then(function () { openTab(map[type] || 'dashboard'); });
 }
 
 /* ---------------------------------- Tabs ---------------------------------- */

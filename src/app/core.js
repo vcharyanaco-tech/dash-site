@@ -118,10 +118,12 @@ const ApiService = {
   adminPreviewSyncFromSheet: function () { return apiCall_('adminPreviewSyncFromSheet'); },
   exportFullBackup: function () { return apiCall_('exportFullBackup'); },
   getSyncStatus: function () { return apiCall_('getSyncStatus'); },
-  getMyNotifications: function () { return apiCall_('getMyNotifications'); },
-  generateReviewNotifications: function () { return apiCall_('generateReviewNotifications'); },
-  markNotificationsRead: function (ids) { return apiCall_('markNotificationsRead', ids); },
-  clearMyNotifications: function () { return apiCall_('clearMyNotifications'); },
+getMyNotifications: function () { return apiCall_('getMyNotifications'); },
+    generateReviewNotifications: function () { return apiCall_('generateReviewNotifications'); },
+    markNotificationsRead: function (ids) { return apiCall_('markNotificationsRead', ids); },
+    clearMyNotifications: function () { return apiCall_('clearMyNotifications'); },
+    getNotificationPrefs: function () { return apiCall_('getNotificationPrefs'); },
+    setNotificationPrefs: function (prefs) { return apiCall_('setNotificationPrefs', prefs); },
   createTask: function (params) { return apiCall_('createTask', params); },
   getTaskCounts: function () { return apiCall_('getTaskCounts'); },
   getTasks: function (filters) { return apiCall_('getTasks', filters || {}); },
@@ -240,7 +242,8 @@ const appState = {
   dashReviewFilter: '',
   dashShowHidden: false,
   permissions: {},
-  notifications: { unread: 0, recent: [] }
+  notifications: { unread: 0, recent: [] },
+  notifPrefs: null
 };
 
 /* ---------------------------------- Helpers ---------------------------------- */

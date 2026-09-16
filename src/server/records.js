@@ -9,7 +9,7 @@
  */
 
 const { db, getAppSettings, cacheGetTTL, cachePut } = require('./db');
-const { CONFIG, ROLES, COL, ACTIONS, NOTIFICATION_TYPES } = require('./config');
+const { CONFIG, ROLES, COL, ACTIONS, NOTIFICATION_TYPES, NOTIFICATION_PRIORITY } = require('./config');
 const {
   now_, today_, formatDate_, parseDisplayDate_, daysUntilDate_,
   escHtml_, looksLikeUrl_, linkifyText_, absUrl_,
@@ -33,7 +33,7 @@ let dataCache = null;
    'All Divisional Heads') every do_* user is notified.  When the
    responsibility is a specific do_* username (e.g. 'do_gurugram'),
    only that user is notified. */
-function notifyDivisionalHeads_(type, title, body, link, excludeEmail) {
+function notifyDivisionalHeads_(type, title, body, link, excludeEmail, opts) {
   const exclude = String(excludeEmail || '').toLowerCase().trim();
   const notifications = require('./notifications');
   const allEmails = auth.getDivisionalHeadEmails_();
@@ -42,16 +42,16 @@ function notifyDivisionalHeads_(type, title, body, link, excludeEmail) {
     // Use appendNotification_ (synchronous) instead of notify_ (async
     // via runWithLock_) so the insert completes before the outer lock
     // in addRecord_/updateRecord_ finishes.
-    try { notifications.appendNotification_(email, type, title, body, link); } catch (err) {}
+    try { notifications.appendNotification_(email, type, title, body, link, opts); } catch (err) {}
   });
 }
 
 /* Notify a specific do_* user when a record targets them individually.
    Falls back to notifyDivisionalHeads_ for group responsibilities. */
-function notifyResponsibilityUser_(type, title, body, link, responsibility, excludeEmail) {
+function notifyResponsibilityUser_(type, title, body, link, responsibility, excludeEmail, opts) {
   const r = String(responsibility || '').trim().toLowerCase();
   if (r === 'all divisional heads' || r === 'all postal divisional heads') {
-    notifyDivisionalHeads_(type, title, body, link, excludeEmail);
+    notifyDivisionalHeads_(type, title, body, link, excludeEmail, opts);
     return;
   }
   // Individual do_* username — notify that specific user only.
@@ -64,7 +64,7 @@ function notifyResponsibilityUser_(type, title, body, link, responsibility, excl
     if (target) {
       const email = String(target.primaryEmail || target.email || '').toLowerCase().trim();
       if (email && email !== exclude) {
-        try { require('./notifications').appendNotification_(email, type, title, body, link); } catch (err) {}
+        try { require('./notifications').appendNotification_(email, type, title, body, link, opts); } catch (err) {}
       }
     }
   }
@@ -542,7 +542,7 @@ function addRecord_(item, token) {
     bumpDataGeneration_();
 
     try {
-      require('./notifications').notifyStaffLocked_('record', 'New item added', 'Record #' + id + ' · ' + (normalized.sector || '') + (normalized.description ? ' — ' + normalized.description : ''), '', editor.email);
+      require('./notifications').notifyStaffLocked_('record', 'New item added', 'Record #' + id + ' · ' + (normalized.sector || '') + (normalized.description ? ' — ' + normalized.description : ''), '', editor.email, { priority: NOTIFICATION_PRIORITY.HIGH, recordRow: id + CONFIG.SHEET.START_ROW - 1 });
     } catch (err) {}
 
     // Fan out an in-app notification to do_* users whose responsibility
@@ -550,7 +550,7 @@ function addRecord_(item, token) {
     try {
       notifyResponsibilityUser_(NOTIFICATION_TYPES.RECORD, 'New item for you',
         'Record #' + id + ' · ' + (normalized.sector || '') + (normalized.description ? ' — ' + normalized.description : ''),
-        '', normalized.responsibility, editor.email);
+        '', normalized.responsibility, editor.email, { priority: NOTIFICATION_PRIORITY.HIGH, recordRow: id + CONFIG.SHEET.START_ROW - 1 });
     } catch (err) {}
 
     return getData();
@@ -606,7 +606,7 @@ function updateRecord_(item, token) {
     bumpDataGeneration_();
 
     try {
-      require('./notifications').notifyStaffLocked_('record', 'Record updated', 'Record #' + normalized.id + ' · ' + (normalized.sector || '') + (normalized.description ? ' — ' + normalized.description : ''), '', editor.email);
+      require('./notifications').notifyStaffLocked_('record', 'Record updated', 'Record #' + normalized.id + ' · ' + (normalized.sector || '') + (normalized.description ? ' — ' + normalized.description : ''), '', editor.email, { priority: NOTIFICATION_PRIORITY.NORMAL, recordRow: normalized.id + CONFIG.SHEET.START_ROW - 1 });
     } catch (err) {}
 
     // Fan out an in-app notification to do_* users whose responsibility
@@ -614,7 +614,7 @@ function updateRecord_(item, token) {
     try {
       notifyResponsibilityUser_(NOTIFICATION_TYPES.RECORD, 'Record updated for you',
         'Record #' + normalized.id + ' · ' + (normalized.sector || '') + (normalized.description ? ' — ' + normalized.description : ''),
-        '', normalized.responsibility, editor.email);
+        '', normalized.responsibility, editor.email, { priority: NOTIFICATION_PRIORITY.NORMAL, recordRow: normalized.id + CONFIG.SHEET.START_ROW - 1 });
     } catch (err) {}
 
     return getData();
@@ -676,7 +676,7 @@ function deleteRecord_(row, token) {
     bumpDataGeneration_();
 
     try {
-      require('./notifications').notifyStaffLocked_('record', 'Item deleted', 'Record #' + deletedId + ' was removed from the dashboard.', '', editor.email);
+      require('./notifications').notifyStaffLocked_('record', 'Item deleted', 'Record #' + deletedId + ' was removed from the dashboard.', '', editor.email, { priority: NOTIFICATION_PRIORITY.NORMAL, recordRow: Number(row) });
     } catch (err) {}
 
     return getData();
@@ -692,7 +692,7 @@ function markReviewDone_(row, token) {
     bumpDataGeneration_();
 
     try {
-      require('./notifications').notifyStaffLocked_('record', 'Review marked done', 'Review for record #' + (Number(row) - CONFIG.SHEET.START_ROW + 1) + ' was marked as done.', '', admin.email);
+      require('./notifications').notifyStaffLocked_('record', 'Review marked done', 'Review for record #' + (Number(row) - CONFIG.SHEET.START_ROW + 1) + ' was marked as done.', '', admin.email, { priority: NOTIFICATION_PRIORITY.NORMAL, recordRow: Number(row) });
     } catch (err) {}
 
     const data = getData();
@@ -712,7 +712,7 @@ function markReviewNotDone_(row, token) {
     bumpDataGeneration_();
 
     try {
-      require('./notifications').notifyStaffLocked_('record', 'Review reopened', 'Review for record #' + (Number(row) - CONFIG.SHEET.START_ROW + 1) + ' was marked as not done (review due again).', '', admin.email);
+      require('./notifications').notifyStaffLocked_('record', 'Review reopened', 'Review for record #' + (Number(row) - CONFIG.SHEET.START_ROW + 1) + ' was marked as not done (review due again).', '', admin.email, { priority: NOTIFICATION_PRIORITY.NORMAL, recordRow: Number(row) });
     } catch (err) {}
 
     const data = getData();
@@ -865,11 +865,14 @@ function generateReviewNotifications(token) {
       if (cacheGetTTL(dedupeKey)) { skipped++; return; }
 
       const dueLabel = days === 0 ? 'today' : 'tomorrow';
-      const title = 'Review due ' + dueLabel + ': Record #' + item.id;
-      const body = (item.sector || '') +
-        (item.action ? ' — ' + item.action : '') +
-        ' (review date ' + item.reviewDate + ').';
-      require('./notifications').appendNotification_(user.email, 'record', title, body, '');
+      const title = 'Review due ' + dueLabel + ' — ' + (String(item.sector || '').trim() || ('Record #' + item.id));
+      const body = (item.responsibility ? item.responsibility + ' — ' : '') +
+        (item.action ? item.action : '') +
+        (item.reviewDate ? ' (review ' + item.reviewDate + ').' : '.');
+      require('./notifications').appendNotification_(user.email, 'record', title, body, '', {
+        priority: NOTIFICATION_PRIORITY.HIGH,
+        recordRow: Number(item.row)
+      });
       cachePut(dedupeKey, '1', 21600);
       created++;
     });

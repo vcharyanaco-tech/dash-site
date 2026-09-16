@@ -31,6 +31,7 @@ const AUTH_ARG_INDEX = Object.freeze({
   adminUpdateUser: 2, adminExportUsers: 0, adminImportUsers: 1,
   adminGetUserActivity: 0, adminDeleteUser: 1, adminResetPassword: 2,
   adminEmailAllUsers: 2, getAssignableUsers: 0, getMyNotifications: 0,
+  getNotificationPrefs: 0, setNotificationPrefs: 1,
   markNotificationsRead: 1, clearMyNotifications: 0, getTaskCounts: 0,
   createTask: 1, getTasks: 1, getMyTasks: 0, updateTask: 2, deleteTask: 1,
   getDashboardPreferences: 0, saveDashboardPreferences: 1,
@@ -572,7 +573,7 @@ const VALIDATORS = {
   },
   markNotificationsRead: function (args) {
     if (args.length < 2) return 'markNotificationsRead requires (ids, token)';
-    if (!Array.isArray(args[0])) return 'ids must be an array';
+    if (!Array.isArray(args[0]) && args[0] !== 'all') return 'ids must be an array';
     return null;
   },
   subscribePush: function (args) {
@@ -677,11 +678,20 @@ const VALIDATORS = {
     if (args.length < 1) return 'getMyNotifications requires (token)';
     return null;
   },
-  clearMyNotifications: function (args) {
-    if (args.length < 1) return 'clearMyNotifications requires (token)';
-    return null;
-  },
-  getTaskCounts: function (args) {
+clearMyNotifications: function (args) {
+if (args.length < 1) return 'clearMyNotifications requires (token)';
+return null;
+},
+getNotificationPrefs: function (args) {
+if (args.length < 1) return 'getNotificationPrefs requires (token)';
+return null;
+},
+setNotificationPrefs: function (args) {
+if (args.length < 2) return 'setNotificationPrefs requires (prefs, token)';
+if (!args[0] || typeof args[0] !== 'object' || Array.isArray(args[0])) return 'prefs must be an object';
+return null;
+},
+getTaskCounts: function (args) {
     if (args.length < 1) return 'getTaskCounts requires (token)';
     return null;
   },

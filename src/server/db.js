@@ -94,6 +94,19 @@ if (!recordDisplayCols.some(function (c) { return String(c.name) === 'displayed'
 /* ---- Migration: username index ---- */
 db.exec("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username != ''");
 
+/* ---- Migration: notifications.priority + record_row ----
+   Part 9 (actionable notifications): notifications carry a priority band
+   (0=normal, 1=high) and the source record row so the UI can show
+   priority badges and deep-link straight to the record drawer. Older DBs
+   lack the columns; default priority 0, no record linkage. */
+const notifColumns = db.prepare('PRAGMA table_info(notifications)').all();
+if (!notifColumns.some(function (c) { return String(c.name) === 'priority'; })) {
+  db.exec('ALTER TABLE notifications ADD COLUMN priority INTEGER NOT NULL DEFAULT 0');
+}
+if (!notifColumns.some(function (c) { return String(c.name) === 'record_row'; })) {
+  db.exec('ALTER TABLE notifications ADD COLUMN record_row INTEGER NOT NULL DEFAULT 0');
+}
+
 settings.setDb(db);
 
 /* ============================================================

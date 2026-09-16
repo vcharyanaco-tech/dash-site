@@ -687,6 +687,111 @@ body.sidebar-collapsed .nav-item.active { box-shadow: inset 0 0 0 2px var(--seco
   text-align: center;
 }
 
+/* ---- grouped notification list (dropdown) ---- */
+.notif-group { padding: 2px 0 6px; }
+.notif-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.notif-group-title:not(:first-child) { border-top: 1px solid var(--border); margin-top: 4px; }
+.notif-group-count {
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+  line-height: 16px;
+}
+.notif-group-list { list-style: none; margin: 0; padding: 0; }
+
+/* priority pill + [Open record] / [Mark read] actions */
+.notif-priority-high .notif-item-title { color: var(--danger); }
+.notif-urgent { color: var(--danger); font-size: 12px; }
+.notif-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+.notif-item-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.notif-item-actions .btn { line-height: 1.4; }
+
+/* ---- notification center modal ---- */
+.notif-center-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.notif-center-filters { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.notif-center-filter.active {
+  background: var(--secondary-soft);
+  color: var(--secondary);
+  font-weight: 600;
+}
+.notif-center-counter { font-size: 12px; color: var(--muted); }
+.notif-center-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 16px 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.notif-center-group { margin-bottom: 8px; }
+.notif-center-group:last-child { margin-bottom: 0; }
+.notif-center-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px 2px;
+}
+.notif-center-group-head .text-subheading { margin: 0; flex: 1; }
+.notif-center-unread {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--secondary);
+  background: var(--secondary-soft);
+  border-radius: var(--radius-pill);
+  padding: 1px 8px;
+}
+.notif-center-group-list { list-style: none; margin: 0; padding: 0; }
+.notif-center-list .notif-item { cursor: default; }
+.notif-center-empty {
+  padding: 22px 12px;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+.notif-center-foot { border-top: 1px solid var(--border); padding: 12px 16px 16px; }
+.notif-center-foot .text-subheading { margin: 0 0 4px; }
+.notif-center-hint { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+.notif-prefs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 6px 12px;
+}
+.notif-pref-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.notif-pref-item input { accent-color: var(--secondary); }
+
 /* ---------------------------------- Profile menu ---------------------------------- */
 .profile-menu { position: relative; }
 
@@ -2341,6 +2446,7 @@ body.modal-resizing,
 body.modal-resizing * { cursor: nwse-resize !important; user-select: none; }
 
 .modal-card-sm { max-width: 420px; }
+.modal-card-wide { max-width: 640px; width: 92vw; max-height: 86vh; overflow-y: auto; }
 
 /* In-page link/document preview (embedded iframe instead of a new tab).
    Sized to ~88% of the viewport so linked documents are actually readable;

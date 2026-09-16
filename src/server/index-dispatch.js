@@ -58,6 +58,8 @@ const dispatch = {
   getMyNotifications: function (args) { return notifications.getMyNotifications(A(args, 0)); },
   markNotificationsRead: function (args) { return notifications.markNotificationsRead(A(args, 0), A(args, 1)); },
   clearMyNotifications: function (args) { return notifications.clearMyNotifications(A(args, 0)); },
+  getNotificationPrefs: function (args) { return notifications.getNotificationPrefs(A(args, 0)); },
+  setNotificationPrefs: function (args) { return notifications.setNotificationPrefs(A(args, 0), A(args, 1)); },
 
   getTaskCounts: function (args) { return tasks.getTaskCounts(A(args, 0)); },
 

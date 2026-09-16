@@ -13,7 +13,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const { db } = require('./db');
-const { NOTIFICATION_TYPES } = require('./config');
+const { NOTIFICATION_TYPES, NOTIFICATION_PRIORITY } = require('./config');
 const { uuid_, now_, runWithLock_ } = require('./helpers');
 const auth = require('./auth');
 
@@ -123,7 +123,7 @@ function uploadDocument(recordRow, recordId, fileName, base64, mimeType, token) 
     const doc = addDocument_(rowNum, String(recordId || ''), safeName, fileKey, declaredMime, bytes.length, user.email);
 
     try {
-      require('./notifications').notifyStaffLocked_(NOTIFICATION_TYPES.RECORD, 'Document added', 'Document "' + safeName + '" was added to record #' + rowNum + ' by ' + user.email + '.', '', user.email);
+      require('./notifications').notifyStaffLocked_(NOTIFICATION_TYPES.RECORD, 'Document added', 'Document "' + safeName + '" was added to record #' + rowNum + ' by ' + user.email + '.', '', user.email, { priority: NOTIFICATION_PRIORITY.NORMAL, recordRow: rowNum });
     } catch (err) {}
 
     return doc;
@@ -132,10 +132,11 @@ function uploadDocument(recordRow, recordId, fileName, base64, mimeType, token) 
 
 function deleteDocument(docId, token) {
   const user = auth.requireLogin(token);
+  const docRow = db.prepare('SELECT record_row FROM documents WHERE id = ?').get(String(docId));
   const ok = deleteDocument_(String(docId));
   if (!ok) throw new Error('Document not found.');
   try {
-    require('./notifications').notifyStaffLocked_(NOTIFICATION_TYPES.RECORD, 'Document removed', 'A document (' + String(docId) + ') was removed by ' + user.email + '.', '', user.email);
+    require('./notifications').notifyStaffLocked_(NOTIFICATION_TYPES.RECORD, 'Document removed', 'A document (' + String(docId) + ') was removed by ' + user.email + '.', '', user.email, { priority: NOTIFICATION_PRIORITY.NORMAL, recordRow: docRow ? Number(docRow.record_row) || 0 : 0 });
   } catch (err) {}
   return { success: true };
 }

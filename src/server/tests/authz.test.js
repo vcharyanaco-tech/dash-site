@@ -86,7 +86,9 @@ const requireLoginOps = [
   ['exportReviewCalendarIcs', []],
   ['getEnterpriseHealth', []],
   ['validateEnterpriseConfiguration', []],
-  ['getRecordHistory', [1]]
+  ['getRecordHistory', [1]],
+  ['getNotificationPrefs', []],
+  ['setNotificationPrefs', [{}]]
 ];
 
 for (const [fn, args] of requireLoginOps) {
