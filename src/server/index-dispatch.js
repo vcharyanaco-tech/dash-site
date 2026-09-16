@@ -90,13 +90,16 @@ const dispatch = {
   markAllSubmissionsRead: function (args) { return submissions.markAllSubmissionsRead(A(args, 0)); },
   toggleSubmissionDisplay: function (args) { return submissions.toggleSubmissionDisplay(A(args, 0), A(args, 1)); },
 
-  getAuditEntries: function (args) { return audit.getAuditEntries(A(args, 0)); },
+  getAuditEntries: function (args) { return audit.getAuditEntries(A(args, 0), A(args, 1)); },
   adminDeleteAuditRows: function (args) { return audit.adminDeleteAuditRows(A(args, 0), A(args, 1)); },
   adminClearAudit: function (args) { return audit.adminClearAudit(A(args, 0)); },
 
   exportReviewCalendarIcs: function (args) { return enterprise.exportReviewCalendarIcs(A(args, 0)); },
   sendWhatsAppReviewReminders: function (args) { return enterprise.sendWhatsAppReviewReminders(A(args, 0)); },
-  getAiInsights: function (args) { return enterprise.getAiInsights(A(args, 0)); },
+  getAiInsights: function (args) {
+    auth.requireAdmin(A(args, 0));
+    return enterprise.getAiInsights(A(args, 0));
+  },
   getCardAiInsight: function (args) { return enterprise.getCardAiInsight(A(args, 0), A(args, 1)); },
   getLinkContentAiInsight: function (args) { return enterprise.getLinkContentAiInsight(A(args, 0), A(args, 1)); },
   askLinkAi: function (args) { return enterprise.askLinkAi(A(args, 0), A(args, 1), A(args, 2)); },
@@ -117,17 +120,32 @@ const dispatch = {
   searchFathomMeetings: function (args) { return enterprise.searchFathomMeetings(A(args, 0), A(args, 1)); },
   getFathomMeetingStats: function (args) { return enterprise.getFathomMeetingStats(A(args, 0)); },
   bulkGetRecordingDownloadLinks: function (args) { return enterprise.bulkGetRecordingDownloadLinks(A(args, 0), A(args, 1)); },
-  getEnterpriseFrontendConfig: function (args) { return enterprise.getEnterpriseFrontendConfig(A(args, 0)); },
+  getEnterpriseFrontendConfig: function (args) {
+    auth.requireLogin(A(args, 0));
+    return enterprise.getEnterpriseFrontendConfig(A(args, 0));
+  },
 
   setOpenRouterApiKey: function (args) { return enterprise.setOpenRouterApiKey(A(args, 0), A(args, 1)); },
   setGeminiApiKey: function (args) { return enterprise.setGeminiApiKey(A(args, 0), A(args, 1)); },
   setGroqApiKey: function (args) { return enterprise.setGroqApiKey(A(args, 0), A(args, 1)); },
   setHuggingFaceApiKey: function (args) { return enterprise.setHuggingFaceApiKey(A(args, 0), A(args, 1)); },
   setKiloApiKey: function (args) { return enterprise.setKiloApiKey(A(args, 0), A(args, 1)); },
-  setupEnterpriseAddons: function (args) { return enterprise.setupEnterpriseAddons(); },
-  installEnterpriseTriggers: function (args) { return enterprise.installEnterpriseTriggers(); },
-  validateEnterpriseConfiguration: function (args) { return enterprise.validateEnterpriseConfiguration(); },
-  getEnterpriseHealth: function (args) { return enterprise.getEnterpriseHealth(); },
+  setupEnterpriseAddons: function (args) {
+    auth.requireAdmin(A(args, 0));
+    return enterprise.setupEnterpriseAddons();
+  },
+  installEnterpriseTriggers: function (args) {
+    auth.requireAdmin(A(args, 0));
+    return enterprise.installEnterpriseTriggers();
+  },
+  validateEnterpriseConfiguration: function (args) {
+    auth.requireLogin(A(args, 0));
+    return enterprise.validateEnterpriseConfiguration();
+  },
+  getEnterpriseHealth: function (args) {
+    auth.requireLogin(A(args, 0));
+    return enterprise.getEnterpriseHealth();
+  },
 
   // Full database backup download (VACUUM'd SQLite copy). Admin only.
   exportFullBackup: function (args) { return require('./full-backup').exportFullBackup(A(args, 0)); },
@@ -168,10 +186,16 @@ const dispatch = {
   // Push notifications (Web Push for review deadlines)
   subscribePush: function (args) { return require('./push-notifications').subscribePush(A(args, 0), A(args, 1)); },
   unsubscribePush: function (args) { return require('./push-notifications').unsubscribePush(A(args, 0), A(args, 1)); },
-  sendReviewDeadlinePushNotifications: function (args) { return require('./push-notifications').sendReviewDeadlinePushNotifications(A(args, 0)); },
+  sendReviewDeadlinePushNotifications: function (args) {
+    auth.requireLogin(A(args, 0));
+    return require('./push-notifications').sendReviewDeadlinePushNotifications(A(args, 0));
+  },
 
   // Weekly automated report delivery
-  sendWeeklyReport: function (args) { return require('./weekly-reports').sendWeeklyReport(A(args, 0)); },
+  sendWeeklyReport: function (args) {
+    auth.requireAdmin(A(args, 0));
+    return require('./weekly-reports').sendWeeklyReport(A(args, 0));
+  },
 
   // i18n translations endpoint
   getTranslations: function (args) { return require('./i18n-server').getTranslations(A(args, 0)); },

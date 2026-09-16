@@ -32,8 +32,8 @@ function auditTimestampMs_(value) {
   return isFinite(t) ? t : 0;
 }
 
-function getAuditEntries(limit) {
-  auth.requireViewer();
+function getAuditEntries(limit, token) {
+  auth.requireViewer(token);
   const rows = db.prepare('SELECT * FROM audit').all();
   return rows
     .map(function (r, i) {
@@ -61,14 +61,14 @@ function adminDeleteAuditRows(rowNumbers, token) {
   const stmt = db.prepare('DELETE FROM audit WHERE id = ?');
   rows.forEach(function (r) { stmt.run(r); });
   try { logAudit_(ACTIONS.AUDIT_DELETE, '', 'Deleted ' + rows.length + ' audit entries', admin.email); } catch (err) {}
-  return getAuditEntries(80);
+  return getAuditEntries(80, token);
 }
 
 function adminClearAudit(token) {
   const admin = auth.requireAdmin(token);
   db.prepare('DELETE FROM audit').run();
   try { logAudit_(ACTIONS.AUDIT_CLEAR, '', 'Cleared the entire audit log', admin.email); } catch (err) {}
-  return getAuditEntries(80);
+  return getAuditEntries(80, token);
 }
 
 /* Replaces the GAS daily `archiveAuditLog` trigger: moves audit rows older

@@ -266,7 +266,7 @@ test('documents: upload, list, GET /files, delete', async function () {
 });
 
 test('audit + calendar + ai graceful', async function () {
-  const entries = await post('getAuditEntries', [80]);
+  const entries = await post('getAuditEntries', [80, token]);
   assert.ok(Array.isArray(entries));
 
   const ics = await post('exportReviewCalendarIcs', [token]);

@@ -496,8 +496,8 @@ function requireAdmin(token) {
   return requireAdmin_(token);
 }
 
-function requireViewer() {
-  return true;
+function requireViewer(token) {
+  return requireLogin_(token);
 }
 
 /* ============================================================

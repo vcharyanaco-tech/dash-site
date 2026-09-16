@@ -146,7 +146,7 @@ const ApiService = {
   deleteSubmission: function (submissionId) { return apiCall_('deleteSubmission', submissionId, getAuthToken()); },
   toggleSubmissionDisplay: function (submissionId) { return apiCall_('toggleSubmissionDisplay', submissionId, getAuthToken()); },
   markAllSubmissionsRead: function () { return apiCall_('markAllSubmissionsRead', getAuthToken()); },
-  getAuditEntries: function (limit) { return apiCall_('getAuditEntries', limit || 80); },
+  getAuditEntries: function (limit) { return apiCall_('getAuditEntries', limit || 80, getAuthToken()); },
   adminDeleteAuditRows: function (rowNumbers) { return apiCall_('adminDeleteAuditRows', rowNumbers, getAuthToken()); },
   adminClearAudit: function () { return apiCall_('adminClearAudit', getAuthToken()); },
   exportToSpreadsheet: function () { return apiCall_('exportToSpreadsheet', getAuthToken()); },

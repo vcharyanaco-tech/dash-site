@@ -40,6 +40,7 @@ const AUTH_ARG_INDEX = Object.freeze({
   addSubmission: 3, updateSubmission: 2, lockSubmission: 1,
   unlockSubmission: 1, deleteSubmission: 1, markAllSubmissionsRead: 0,
   toggleSubmissionDisplay: 1, adminDeleteAuditRows: 1, adminClearAudit: 0,
+  getAuditEntries: 1, getRecordHistory: 1,
   exportReviewCalendarIcs: 0, sendWhatsAppReviewReminders: 0,
   getAiInsights: 0, getCardAiInsight: 0, getLinkContentAiInsight: 0,
   askLinkAi: 0, getAllAskLinkHistory: 0, saveAskLinkHistory: 0,
@@ -50,7 +51,10 @@ const AUTH_ARG_INDEX = Object.freeze({
   getRecordingDownloadLink: 0, listFathomUsers: 0, searchFathomMeetings: 0,
   getFathomMeetingStats: 0, bulkGetRecordingDownloadLinks: 0,
   subscribePush: 1, unsubscribePush: 1, sendReviewDeadlinePushNotifications: 0,
-  sendWeeklyReport: 0, adminImportCsv: 1
+  sendWeeklyReport: 0, adminImportCsv: 1,
+  setupEnterpriseAddons: 0, installEnterpriseTriggers: 0,
+  validateEnterpriseConfiguration: 0, getEnterpriseHealth: 0,
+  getEnterpriseFrontendConfig: 0
 });
 
 // ── Trusted origins for CORS ─────────────────────────────────────────────

@@ -129,12 +129,14 @@ test('unsubscribePush: no-op for unknown endpoint', async function () {
  * Push notifications — send
  * ============================================================ */
 
-test('sendReviewDeadlinePushNotifications: works without auth (cron mode)', async function () {
-  // Intentionally allows token-less calls for the daily cron job.
-  // When called without a token, it skips auth and processes all records.
-  const result = await post('sendReviewDeadlinePushNotifications', []);
-  assert.strictEqual(result.success, true);
-  assert.strictEqual(typeof result.sent, 'number');
+test('sendReviewDeadlinePushNotifications: rejects anonymous public dispatch calls', async function () {
+  // The daily cron job runs through the internal /api/internal/daily-jobs
+  // route (worker-token gated), NOT through the public dispatch. Anonymous
+  // public calls must be rejected.
+  await assert.rejects(
+    post('sendReviewDeadlinePushNotifications', []),
+    /login required/i
+  );
 });
 
 test('sendReviewDeadlinePushNotifications: runs without error', async function () {
