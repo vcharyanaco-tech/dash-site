@@ -81,7 +81,13 @@ Full server suite now **121/121 pass, 0 fail, ~20s**; coverage 77.75% stmt /
   guards). `new-endpoints.test.js` cron-mode test rewritten to assert anonymous
   public dispatch is now rejected. `smoke.test.js` `getAuditEntries` now passes token.
 - Full suite: **152/152 pass**; secret scan green (167 tracked files).
-- Commits: `299975a` (1C unit, pushed to origin/main).
+- Commits: `299975a` (1C unit) + `301e45d` (session-export doc), both pushed.
+
+## This continuation (1D investigation only)
+
+User resumed the session, then paused before code changes. Everything in this
+continuation is **investigation / findings only** — nothing committed beyond the
+two pushed commits above. Full 1D findings in the "1D Investigation" section below.
 
 ## Verification
 - `src/server`: `npm test` → 152/152 pass, 0 fail.
@@ -100,17 +106,43 @@ Full server suite now **121/121 pass, 0 fail, ~20s**; coverage 77.75% stmt /
 - Server change (`src/server/index.js`, run-tests.cjs) → Render auto-deploys.
 - `run-tests.cjs`/`smoke.test.js` are CI-only (no prod impact).
 
+## 1D Investigation (started, NO code changes yet — paused by user request)
+
+Dispatching analysis (exact counts, run against `index-dispatch.js` / `index.js`):
+
+- **103 dispatch ops total.** 10 have VALIDATORS today (login, addItem, updateItem,
+  deleteItem, adminAddUser, adminDeleteUser, createTask, addSubmission,
+  reconcileRecordOrder, uploadDocument) → **93 ops have no VALIDATOR**.
+- **19 ops have no `AUTH_ARG_INDEX` entry** (cookie token is never injected):
+  - Public / no-token (expected): getServerTime, getData, login, requestPasswordReset,
+    getReportTemplates, getSyncStatus, getTranslations.
+  - **Real coverage gaps (token slots never cookie-injected → browser cookie users
+    would hit "Login required" on these):** setRecordDisplay (token @2),
+    generateReviewNotifications (token @0), reconcileRecordOrder (token @1),
+    exportFullBackup (token @0), adminSyncFromSheet (token @0),
+    adminPreviewSyncFromSheet (token @0), adminPushToSheet (token @0),
+    setOpenRouterApiKey / setGeminiApiKey / setGroqApiKey / setHuggingFaceApiKey /
+    setKiloApiKey (token @0).
+  - Note: 1C already added getAuditEntries/getRecordHistory/enterprise-config ops.
+- `getAuthToken()` in clients (`session.js:4`) returns `''` always → cookie-only auth;
+  1B should formalize this (kill the vestigial browser-token plumbing).
+- 1E upload audit scope confirmed: MIME allowlist + 25MB cap + base64 key regex +
+  sanitized names + login-gated resolve already at `documents.js`; needs edge-case
+  test coverage only.
+
 ## Pending Tasks
-1. **Session export / commit review** — confirm and push.
-2. **Phase 1 — P0 Security (in progress, 1C done):**
-   - 1C ✅ authorization audit + authz.test.js (see above). Phase 1 gate items left:
-     object-level row-id checks for every doc/task/submission/record op + full
-     dispatch-op matrix in authz.test.js (matrix covers the top gaps; extend if the
-     gate reviewer wants full coverage).
-   - 1D extend VALIDATORS to all dispatch ops; 1E file-upload test coverage
-     (size/MIME/name edge cases).
-   - 1B auth-cookie migration assessment (kill vestigial browser-token path
-     `getAuthToken()` → document cookie-only design).
+1. **Session export / commit review** — confirm and push (current work saved above).
+2. **Phase 1 — P0 Security (in progress, 1C done, 1D investigated):**
+   - 1C ✅ authorization audit + authz.test.js (see above).
+   - 1D (next): add VALIDATORS to high-value dispatch ops (markReviewDone/NotDone,
+     changePassword, adminUpdateUser, emailReport, getReportData, emit
+     validation-first where args are string/number-typed) + add missing
+     `AUTH_ARG_INDEX` entries (setRecordDisplay, generateReviewNotifications,
+     reconcileRecordOrder, exportFullBackup, admin*SyncFromSheet, adminPushToSheet,
+     *ApiKey setters) so cookie-based browser calls work.
+   - 1E file-upload test coverage (size/MIME/name edge cases, bad base64, wrong key).
+   - 1B auth-cookie migration assessment (kill vestigial browser-token `getAuthToken()`
+     path → document cookie-only design).
 3. Phase 2 (measured perf): ship app.js monolith as prod load path, re-measure on
    live DB/payloads, re-run Lighthouse with 4G throttle.
 4. Phase 3+ only after Phase 1/2 gates pass.
