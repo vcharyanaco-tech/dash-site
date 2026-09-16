@@ -258,6 +258,7 @@ function openTab(tabId) {
   if (tabId === 'settings') renderSettings();
   if (tabId === 'dashboard') renderDashboard();
   if (tabId === 'tasks') renderTasks();
+  if (tabId === 'myday') renderMyDay();
 }
 
 /* ---------------------------------- Auth flows ---------------------------------- */

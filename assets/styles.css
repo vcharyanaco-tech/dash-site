@@ -993,6 +993,9 @@ body.sidebar-collapsed .nav-item.active { box-shadow: inset 0 0 0 2px var(--seco
 .badge[data-tone="warning"] { background: var(--warning-soft); color: var(--warning); }
 .badge[data-tone="danger"] { background: var(--danger-soft); color: var(--danger); }
 .badge[data-tone="muted"] { background: var(--surface-3); color: var(--muted); }
+.badge[data-tone="secondary"] { background: var(--secondary-soft); color: var(--secondary); }
+.badge[data-tone="info"] { background: var(--info-soft); color: var(--info); }
+.badge[data-tone="primary"] { background: var(--primary-soft); color: var(--primary); }
 
 /* ---------------------------------- Banners ---------------------------------- */
 .banner {
@@ -1068,6 +1071,8 @@ body.sidebar-collapsed .nav-item.active { box-shadow: inset 0 0 0 2px var(--seco
 .kpi-icon.tone-secondary { background: var(--secondary); }
 .kpi-icon.tone-success { background: var(--success); }
 .kpi-icon.tone-warning { background: var(--warning); }
+.kpi-icon.tone-danger { background: var(--danger); }
+.kpi-icon.tone-info { background: var(--info); }
 
 .kpi-trend {
   display: inline-flex;
@@ -1090,6 +1095,95 @@ body.sidebar-collapsed .nav-item.active { box-shadow: inset 0 0 0 2px var(--seco
 .kpi-sparkline svg { width: 100%; height: 100%; display: block; }
 
 .kpi-skeleton { min-height: 132px; gap: var(--sp-1); }
+
+/* ---------------------------------- My Day ---------------------------------- */
+.myday-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-4) 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.myday-loading .spinner { width: 18px; height: 18px; }
+
+.myday-priority {
+  display: grid;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+
+.myday-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+
+.myday-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.myday-group-count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.myday-group-list { display: grid; }
+
+.myday-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+.myday-item:last-child { border-bottom: none; }
+.myday-item:hover { background: var(--surface-2); }
+
+.myday-item-body { flex: 1 1 auto; min-width: 0; }
+
+.myday-item-title {
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.myday-item-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.myday-item-date {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.myday-item-actions { flex: 0 0 auto; }
+
+@media (max-width: 720px) {
+  .myday-item { flex-wrap: wrap; }
+  .myday-item-date { width: 100%; order: -1; }
+}
 
 /* ---------------------------------- Skeleton ---------------------------------- */
 .skeleton-bar {

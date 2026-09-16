@@ -17,6 +17,7 @@
     { "name": "studio",       "file": "studio.js" },
     { "name": "edit",         "file": "edit.js" },
     { "name": "submissions",  "file": "submissions.js" },
+    { "name": "myday",        "file": "myday.js" },
     { "name": "realtime",     "file": "realtime.js" },
     { "name": "init",         "file": "init.js" },
     { "name": "offline-queue", "file": "offline-queue.js", "src": "offline-queue.js" }
