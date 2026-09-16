@@ -33,14 +33,14 @@ const manifest = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
 const chunks = [];
 
 for (const mod of manifest.modules) {
-  const filePath = path.join(OUT_DIR, mod.file);
+  const filePath = mod.src ? path.join(ROOT, mod.src) : path.join(OUT_DIR, mod.file);
   if (!fs.existsSync(filePath)) {
     console.error(`  ERROR: ${mod.file} not found — aborting`);
     process.exit(1);
   }
   const content = fs.readFileSync(filePath, 'utf8');
   chunks.push(content);
-  console.log(`  ${mod.file.padEnd(16)} ${mod.lineCount} lines`);
+  console.log(`  ${mod.file.padEnd(16)} ${content.split('\n').length} lines`);
 }
 
 let output = chunks.join('');

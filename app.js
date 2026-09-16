@@ -1,3 +1,355 @@
+/**
+ * ============================================================
+ * India Post Dashboard — Client
+ * i18n.js
+ * Lightweight internationalization module. Supports English (default)
+ * and Hindi. Translations are lazy-loaded on first use. All UI-facing
+ * strings go through t() so the language can be switched at runtime.
+ *
+ * Usage:
+ *   i18n.setLanguage('hi');   // switch to Hindi
+ *   i18n.t('dashboard.title') // 'भारतीय डाक डैशबोर्ड'
+ *   i18n.t('dashboard.title', 'en') // 'India Post Dashboard'
+ * ============================================================
+ */
+
+var i18n = (function () {
+  'use strict';
+
+  var currentLang = (function () {
+    try { return localStorage.getItem('indiaPostLang') || 'en'; } catch (e) { return 'en'; }
+  })();
+
+  /* ── Translation dictionaries ────────────────────────────────────────── */
+  var translations = {
+    en: {
+      // Navigation & chrome
+      'nav.dashboard': 'Dashboard',
+      'nav.analytics': 'Analytics',
+      'nav.audit': 'Audit Log',
+      'nav.reports': 'Reports',
+      'nav.tasks': 'Tasks',
+      'nav.settings': 'Settings',
+      'nav.signout': 'Sign out',
+
+      // Dashboard
+      'dashboard.title': 'India Post Dashboard',
+      'dashboard.subtitle': 'Circle Office Haryana',
+      'dashboard.total': 'Total Records',
+      'dashboard.flagged': 'Review Due',
+      'dashboard.normal': 'Normal',
+      'dashboard.sectors': 'Sectors',
+      'dashboard.search': 'Search records…',
+      'dashboard.addRecord': 'Add record',
+      'dashboard.refresh': 'Refresh',
+      'dashboard.viewCards': 'Cards',
+      'dashboard.viewTable': 'Table',
+      'dashboard.markAllRead': 'Mark all as read',
+
+      // Record actions
+      'record.edit': 'Edit',
+      'record.delete': 'Delete',
+      'record.update': 'Update',
+      'record.review': 'Review',
+      'record.markDone': 'Mark review done',
+      'record.markNotDone': 'Mark review not done',
+      'record.documents': 'Documents',
+      'record.submissions': 'Updates',
+      'record.aiInsight': 'AI Insight',
+      'record.analyzeLink': 'Analyze link',
+
+      // Tasks
+      'tasks.title': 'Tasks',
+      'tasks.create': 'Create task',
+      'tasks.open': 'Open',
+      'tasks.inProgress': 'In Progress',
+      'tasks.done': 'Done',
+      'tasks.cancelled': 'Cancelled',
+      'tasks.priority': 'Priority',
+      'tasks.assignee': 'Assignee',
+      'tasks.dueDate': 'Due date',
+      'tasks.complete': 'Complete',
+
+      // Audit
+      'audit.title': 'Audit Log',
+      'audit.export': 'Export CSV',
+      'audit.copy': 'Copy',
+      'audit.print': 'Print',
+      'audit.clear': 'Clear log',
+      'audit.delete': 'Delete selected',
+
+      // Reports
+      'reports.title': 'Reports',
+      'reports.summary': 'Summary',
+      'reports.detailed': 'Detailed',
+      'reports.flagged': 'Flagged only',
+      'reports.exportXlsx': 'Export XLSX',
+      'reports.downloadPdf': 'Download PDF',
+      'reports.email': 'Email report',
+
+      // Settings
+      'settings.title': 'Settings',
+      'settings.users': 'User Management',
+      'settings.password': 'Change Password',
+      'settings.currentPassword': 'Current password',
+      'settings.newPassword': 'New password',
+      'settings.theme': 'Theme',
+      'settings.darkMode': 'Dark mode',
+      'settings.language': 'Language',
+      'settings.hindi': 'हिन्दी',
+      'settings.english': 'English',
+      'settings.backup': 'Full backup',
+      'settings.sync': 'Sync from sheet',
+
+      // Auth
+      'auth.login': 'Sign in',
+      'auth.email': 'Email or username',
+      'auth.password': 'Password',
+      'auth.forgotPassword': 'Forgot password?',
+      'auth.changePassword': 'Change password',
+      'auth.mustChange': 'You must change your password before continuing.',
+
+      // Submissions
+      'submissions.title': 'Updates',
+      'submissions.placeholder': 'Type your update…',
+      'submissions.submit': 'Submit',
+      'submissions.noUpdates': 'No updates yet.',
+
+      // Meetings
+      'meetings.title': 'Meeting Notes',
+      'meetings.record': 'Record',
+      'meetings.upload': 'Upload audio',
+      'meetings.transcribe': 'Transcribe & summarize',
+      'meetings.recording': 'Recording…',
+
+      // Common
+      'common.save': 'Save',
+      'common.cancel': 'Cancel',
+      'common.delete': 'Delete',
+      'common.confirm': 'Confirm',
+      'common.loading': 'Loading…',
+      'common.error': 'An error occurred',
+      'common.retry': 'Retry',
+      'common.close': 'Close',
+      'common.export': 'Export',
+      'common.import': 'Import',
+      'common.yes': 'Yes',
+      'common.no': 'No',
+      'common.today': 'Today',
+      'common.yesterday': 'Yesterday',
+      'common.earlier': 'Earlier',
+
+      // About
+      'about.title': 'About',
+      'about.version': 'Version',
+      'about.build': 'Build',
+      'about.designedBy': 'Designed, developed and maintained by Circle Office, Haryana',
+    },
+
+    hi: {
+      // Navigation & chrome
+      'nav.dashboard': 'डैशबोर्ड',
+      'nav.analytics': 'विश्लेषण',
+      'nav.audit': 'ऑडिट लॉग',
+      'nav.reports': 'रिपोर्ट',
+      'nav.tasks': 'कार्य',
+      'nav.settings': 'सेटिंग्स',
+      'nav.signout': 'साइन आउट',
+
+      // Dashboard
+      'dashboard.title': 'भारतीय डाक डैशबोर्ड',
+      'dashboard.subtitle': 'सर्कल कार्यालय हरियाणा',
+      'dashboard.total': 'कुल रिकॉर्ड',
+      'dashboard.flagged': 'समीक्षा बाकी',
+      'dashboard.normal': 'सामान्य',
+      'dashboard.sectors': 'क्षेत्र',
+      'dashboard.search': 'रिकॉर्ड खोजें…',
+      'dashboard.addRecord': 'रिकॉर्ड जोड़ें',
+      'dashboard.refresh': 'रीफ्रेश',
+      'dashboard.viewCards': 'कार्ड',
+      'dashboard.viewTable': 'तालिका',
+      'dashboard.markAllRead': 'सभी पढ़ा चिह्नित करें',
+
+      // Record actions
+      'record.edit': 'संपादित करें',
+      'record.delete': 'हटाएं',
+      'record.update': 'अपडेट करें',
+      'record.review': 'समीक्षा',
+      'record.markDone': 'समीक्षा पूर्ण चिह्नित करें',
+      'record.markNotDone': 'समीक्षा अपूर्ण चिह्नित करें',
+      'record.documents': 'दस्तावेज़',
+      'record.submissions': 'अपडेट',
+      'record.aiInsight': 'AI अंतर्दृष्टि',
+      'record.analyzeLink': 'लिंक का विश्लेषण करें',
+
+      // Tasks
+      'tasks.title': 'कार्य',
+      'tasks.create': 'कार्य बनाएं',
+      'tasks.open': 'खुला',
+      'tasks.inProgress': 'प्रगति में',
+      'tasks.done': 'पूर्ण',
+      'tasks.cancelled': 'रद्द',
+      'tasks.priority': 'प्राथमिकता',
+      'tasks.assignee': 'जिम्मेदार',
+      'tasks.dueDate': 'नियत तिथि',
+      'tasks.complete': 'पूर्ण करें',
+
+      // Audit
+      'audit.title': 'ऑडिट लॉग',
+      'audit.export': 'CSV निर्यात',
+      'audit.copy': 'कॉपी',
+      'audit.print': 'प्रिंट',
+      'audit.clear': 'लॉग साफ़ करें',
+      'audit.delete': 'चयनित हटाएं',
+
+      // Reports
+      'reports.title': 'रिपोर्ट',
+      'reports.summary': 'सारांश',
+      'reports.detailed': 'विस्तृत',
+      'reports.flagged': 'केवल समीक्षा बाकी',
+      'reports.exportXlsx': 'XLSX निर्यात',
+      'reports.downloadPdf': 'PDF डाउनलोड',
+      'reports.email': 'रिपोर्ट ईमेल करें',
+
+      // Settings
+      'settings.title': 'सेटिंग्स',
+      'settings.users': 'उपयोगकर्ता प्रबंधन',
+      'settings.password': 'पासवर्ड बदलें',
+      'settings.currentPassword': 'वर्तमान पासवर्ड',
+      'settings.newPassword': 'नया पासवर्ड',
+      'settings.theme': 'थीम',
+      'settings.darkMode': 'डार्क मोड',
+      'settings.language': 'भाषा',
+      'settings.hindi': 'हिन्दी',
+      'settings.english': 'English',
+      'settings.backup': 'पूर्ण बैकअप',
+      'settings.sync': 'शीट से सिंक',
+
+      // Auth
+      'auth.login': 'साइन इन',
+      'auth.email': 'ईमेल या उपयोगकर्ता नाम',
+      'auth.password': 'पासवर्ड',
+      'auth.forgotPassword': 'पासवर्ड भूल गए?',
+      'auth.changePassword': 'पासवर्ड बदलें',
+      'auth.mustChange': 'जारी रखने के लिए आपको अपना पासवर्ड बदलना होगा।',
+
+      // Submissions
+      'submissions.title': 'अपडेट',
+      'submissions.placeholder': 'अपना अपडेट लिखें…',
+      'submissions.submit': 'जमा करें',
+      'submissions.noUpdates': 'अभी तक कोई अपडेट नहीं।',
+
+      // Meetings
+      'meetings.title': 'बैठक नोट्स',
+      'meetings.record': 'रिकॉर्ड',
+      'meetings.upload': 'ऑडियो अपलोड',
+      'meetings.transcribe': 'ट्रांसक्राइब और सारांश',
+      'meetings.recording': 'रिकॉर्डिंग…',
+
+      // Common
+      'common.save': 'सहेजें',
+      'common.cancel': 'रद्द करें',
+      'common.delete': 'हटाएं',
+      'common.confirm': 'पुष्टि करें',
+      'common.loading': 'लोड हो रहा है…',
+      'common.error': 'एक त्रुटि हुई',
+      'common.retry': 'पुनः प्रयास करें',
+      'common.close': 'बंद करें',
+      'common.export': 'निर्यात',
+      'common.import': 'आयात',
+      'common.yes': 'हाँ',
+      'common.no': 'नहीं',
+      'common.today': 'आज',
+      'common.yesterday': 'कल',
+      'common.earlier': 'पहले',
+
+      // About
+      'about.title': 'परिचय',
+      'about.version': 'संस्करण',
+      'about.build': 'बिल्ड',
+      'about.designedBy': 'डिज़ाइन, विकसित और रखरखाव: सर्कल कार्यालय, हरियाणा',
+    }
+  };
+
+  /**
+   * Returns the translated string for the given key.
+   * Falls back to English, then to the key itself.
+   * @param {string} key - Dot-notation translation key
+   * @param {string} [lang] - Override language (default: current)
+   * @returns {string}
+   */
+  function t(key, lang) {
+    var useLang = lang || currentLang;
+    var dict = translations[useLang] || translations.en || {};
+    if (dict[key]) return dict[key];
+    // Fallback to English
+    if (useLang !== 'en' && translations.en && translations.en[key]) return translations.en[key];
+    // Fallback to key itself (so missing translations are visible)
+    return key;
+  }
+
+  /**
+   * Switches the active language and persists the choice.
+   * @param {string} lang - 'en' or 'hi'
+   */
+  function setLanguage(lang) {
+    currentLang = (lang === 'hi') ? 'hi' : 'en';
+    try { localStorage.setItem('indiaPostLang', currentLang); } catch (e) {}
+    // Update the html lang attribute
+    document.documentElement.lang = currentLang === 'hi' ? 'hi' : 'en';
+    // Emit event so UI can re-render
+    if (typeof EventBus !== 'undefined' && EventBus.emit) {
+      EventBus.emit('LanguageChanged', { language: currentLang });
+    }
+  }
+
+  /**
+   * Returns the current language code.
+   * @returns {string} 'en' or 'hi'
+   */
+  function getLanguage() {
+    return currentLang;
+  }
+
+  /**
+   * Applies translations to all elements with [data-i18n] attribute.
+   * Text content is set from the translation dictionary.
+   * Call after DOM update or language switch to re-render labels.
+   */
+  function applyTranslations() {
+    var els = document.querySelectorAll('[data-i18n]');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      var key = el.getAttribute('data-i18n');
+      if (key) el.textContent = t(key);
+    }
+    // Also update placeholder attributes
+    var placeholders = document.querySelectorAll('[data-i18n-placeholder]');
+    for (var j = 0; j < placeholders.length; j++) {
+      var p = placeholders[j];
+      var pk = p.getAttribute('data-i18n-placeholder');
+      if (pk) p.setAttribute('placeholder', t(pk));
+    }
+  }
+
+  /**
+   * Returns a map of all keys for a given language (useful for admin UI).
+   */
+  function getTranslations(lang) {
+    return translations[lang || currentLang] || {};
+  }
+
+  // Initialize html lang attribute
+  document.documentElement.lang = currentLang === 'hi' ? 'hi' : 'en';
+
+  return {
+    t: t,
+    setLanguage: setLanguage,
+    getLanguage: getLanguage,
+    applyTranslations: applyTranslations,
+    getTranslations: getTranslations
+  };
+})();
 'use strict';
 
 /* ==========================================================================
@@ -6699,6 +7051,233 @@ function toggleDisplaySubmission(id) {
     showToast('Could not update display: ' + (err.message || err), 'error');
   });
 }
+/* ---------------------------------- SSE real-time connection ---------------------------------- */
+/* Connects to the server's GET /api/events SSE endpoint and listens for
+   data-mutating events (recordChanged, submissionAdded, etc.). When an
+   event arrives, the dashboard re-fetches data silently instead of waiting
+   for the next auto-refresh tick. Reconnects automatically on close. */
+
+var sseSource = null;
+var sseRetryMs = 2000;
+var sseMaxRetryMs = 60000;
+var sseConnected = false;
+
+function connectSse() {
+  if (sseSource) return; // already connected
+  if (!appState.user || !appState.user.loggedIn) return; // not logged in
+  if (typeof EventSource === 'undefined') return; // browser doesn't support SSE
+
+  sseSource = new EventSource(API_URL.replace('/api', '/api/events'));
+
+  sseSource.addEventListener('connected', function () {
+    sseConnected = true;
+    sseRetryMs = 2000; // reset backoff on successful connect
+  });
+
+  sseSource.addEventListener('dataChanged', function (e) {
+    if (autoRefreshInFlight) return; // already refreshing
+    autoRefreshTick();
+  });
+
+  sseSource.addEventListener('userLoggedIn', function () {
+    // Another user logged in — not critical, just refresh if idle
+    if (!autoRefreshInFlight) autoRefreshTick();
+  });
+
+  sseSource.onerror = function () {
+    sseConnected = false;
+    sseSource.close();
+    sseSource = null;
+    // Exponential backoff reconnect
+    setTimeout(function () {
+      if (appState.user && appState.user.loggedIn) connectSse();
+    }, sseRetryMs);
+    sseRetryMs = Math.min(sseMaxRetryMs, sseRetryMs * 2);
+  };
+}
+
+function disconnectSse() {
+  if (sseSource) {
+    sseSource.close();
+    sseSource = null;
+    sseConnected = false;
+  }
+}
+
+/* ---------------------------------- Session auto-refresh ---------------------------------- */
+/* The session token expires after 6 hours (SESSION_TTL_SECONDS). Instead of
+   waiting for the user to get a 401 and be logged out, we silently refresh
+   the token every 30 minutes by calling the refreshSession endpoint. This
+   extends the server-side expiry by another 6 hours. */
+
+var sessionRefreshTimerId = null;
+var SESSION_REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+
+function startSessionRefresh() {
+  stopSessionRefresh();
+  sessionRefreshTimerId = setInterval(function () {
+    sessionRefreshTick();
+  }, SESSION_REFRESH_INTERVAL_MS);
+}
+
+function stopSessionRefresh() {
+  if (sessionRefreshTimerId) {
+    clearInterval(sessionRefreshTimerId);
+    sessionRefreshTimerId = null;
+  }
+}
+
+function sessionRefreshTick() {
+  if (!appState.user || !appState.user.loggedIn) return;
+  ApiService.refreshSession().then(function (result) {
+    if (!result || !result.success) {
+      // Session expired or invalid — log out
+      stopSessionRefresh();
+      disconnectSse();
+      showScreen('login');
+      showToast('Session expired. Please log in again.', 'warning');
+    }
+    // success — session extended, nothing else to do
+  }).catch(function () {
+    // Network error — non-fatal, will retry next tick
+  });
+}
+
+/* ---------------------------------- Keyboard shortcuts ---------------------------------- */
+/* Global keyboard shortcuts for power users. All shortcuts use Ctrl/Cmd as
+   the modifier to avoid conflicts with browser defaults and text input.
+
+   Shortcuts:
+     Ctrl+K     — Open command palette / focus search
+     Ctrl+N     — New record (editor+)
+     Ctrl+R     — Refresh dashboard data
+     Ctrl+E     — Toggle edit mode (table/cards)
+     Ctrl+1-6   — Switch tabs (1=Dashboard, 2=Analytics, 3=Audit, 4=Reports, 5=Tasks, 6=Settings)
+     Ctrl+/     — Show keyboard shortcut help
+     ?          — Show keyboard shortcut help (when not in input) */
+
+function wireKeyboardShortcuts() {
+  document.addEventListener('keydown', function (e) {
+    var isInInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.isContentEditable;
+
+    // Ctrl+K — Command palette (already in init.js, enhanced here)
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      var input = getEl('searchInput');
+      if (input) { input.focus(); input.select(); }
+      return;
+    }
+
+    // Ctrl+N — New record (editor+ only)
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'n' || e.key === 'N')) {
+      if (appState.isEditor) {
+        e.preventDefault();
+        openEditModal(null);
+      }
+      return;
+    }
+
+    // Ctrl+R — Refresh (override browser refresh)
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R')) {
+      e.preventDefault();
+      refreshData();
+      return;
+    }
+
+    // Ctrl+E — Toggle view (cards/table)
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'e' || e.key === 'E')) {
+      e.preventDefault();
+      var nextView = appState.dashboardView === 'cards' ? 'table' : 'cards';
+      toggleDashboardView(nextView);
+      return;
+    }
+
+    // Ctrl+1-6 — Switch tabs
+    if ((e.ctrlKey || e.metaKey) && e.key >= '1' && e.key <= '6') {
+      var tabMap = { '1': 'dashboard', '2': 'analytics', '3': 'audit', '4': 'reports', '5': 'tasks', '6': 'settings' };
+      var tabName = tabMap[e.key];
+      if (tabName) {
+        e.preventDefault();
+        openTab(tabName);
+      }
+      return;
+    }
+
+    // Ctrl+/ — Show help
+    if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+      e.preventDefault();
+      showShortcutHelp();
+      return;
+    }
+
+    // ? — Show help (only when not typing in an input)
+    if (!isInInput && e.key === '?' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      showShortcutHelp();
+      return;
+    }
+
+    // Escape — close shortcuts help
+    if (e.key === 'Escape') {
+      var helpModal = getEl('shortcutsModal');
+      if (helpModal && !helpModal.classList.contains('hidden')) {
+        closeDialog('shortcutsModal');
+      }
+    }
+  });
+}
+
+function showShortcutHelp() {
+  var modal = getEl('shortcutsModal');
+  if (!modal) {
+    // Create the modal on first use
+    var div = document.createElement('div');
+    div.id = 'shortcutsModal';
+    div.className = 'modal-backdrop hidden';
+    div.innerHTML =
+      '<div class="modal-card modal-card-sm" onclick="event.stopPropagation()">' +
+      '<div class="modal-head"><h3>Keyboard Shortcuts</h3><button class="btn btn-ghost modal-close" onclick="closeDialog(\'shortcutsModal\')">&times;</button></div>' +
+      '<div class="modal-body">' +
+      '<table class="data-table" style="font-size:13px;">' +
+      '<tbody>' +
+      shortcutRow_('Ctrl+K', 'Open search / command palette') +
+      shortcutRow_('Ctrl+N', 'New record (editor+)') +
+      shortcutRow_('Ctrl+R', 'Refresh dashboard data') +
+      shortcutRow_('Ctrl+E', 'Toggle card / table view') +
+      shortcutRow_('Ctrl+1–6', 'Switch tabs (1=Dash, 2=Analytics, 3=Audit, 4=Reports, 5=Tasks, 6=Settings)') +
+      shortcutRow_('Ctrl+/', 'Show this help') +
+      shortcutRow_('?', 'Show this help') +
+      shortcutRow_('Escape', 'Close dialogs and panels') +
+      '</tbody></table>' +
+      '</div>' +
+      '</div>';
+    div.addEventListener('click', function (e) {
+      if (e.target === div) closeDialog('shortcutsModal');
+    });
+    document.body.appendChild(div);
+    modal = div;
+  }
+  openDialog('shortcutsModal');
+}
+
+function shortcutRow_(keys, description) {
+  return '<tr><td style="white-space:nowrap;font-weight:600;color:var(--accent,#2563eb);">' + escapeHtml(keys) + '</td><td>' + escapeHtml(description) + '</td></tr>';
+}
+
+/* ---------------------------------- Module init ---------------------------------- */
+/* Called from init.js after login to wire up SSE, session refresh, and
+   keyboard shortcuts. */
+
+function initRealtime() {
+  connectSse();
+  startSessionRefresh();
+  wireKeyboardShortcuts();
+}
+
+function teardownRealtime() {
+  disconnectSse();
+  stopSessionRefresh();
+}
 
 /* ---------------------------------- About ---------------------------------- */
 
@@ -7050,3 +7629,168 @@ function toggleLanguage() {
   }
   showToast(next === 'hi' ? 'भाषा हिन्दी में बदली' : 'Language set to English', 'success');
 }
+/*
+ * OfflineQueue - PWA offline action queue for the India Post Dashboard.
+ * Loaded AFTER app.js so the original global apiCall_ can be captured and
+ * wrapped. Mutating calls made while offline are queued in localStorage and
+ * replayed FIFO when the connection returns. Read-only calls pass through
+ * unchanged. Also registers the service worker (sw.js).
+ */
+(function () {
+  'use strict';
+
+  var QUEUE_KEY = 'ipd_offline_queue_v1';
+  var MAX_QUEUE = 200;
+
+  var MUTATIONS = {
+    addItem: true, updateItem: true, deleteItem: true, markReviewDone: true,
+    changePassword: true,
+    adminAddUser: true, adminUpdateUser: true, adminDeleteUser: true,
+    adminResetPassword: true, adminImportUsers: true, adminEmailAllUsers: true,
+    markNotificationsRead: true, clearMyNotifications: true,
+    createTask: true, updateTask: true, deleteTask: true,
+    saveDashboardPreferences: true,
+    addSubmission: true, updateSubmission: true, deleteSubmission: true,
+    lockSubmission: true, unlockSubmission: true, toggleSubmissionDisplay: true,
+    uploadDocument: true, deleteDocument: true,
+    adminDeleteAuditRows: true, adminClearAudit: true,
+    exportToSpreadsheet: true
+  };
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); }
+    catch (e) { return []; }
+  }
+
+  function save(q) {
+    try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch (e) {}
+  }
+
+  function pending() { return load().length; }
+
+  function emit(name, detail) {
+    try {
+      if (window.EventBus) window.EventBus.emit(name, detail);
+    } catch (e) {}
+  }
+
+  function renderQueueStatus() {
+    var label = document.getElementById('offlineLabel');
+    if (!label) return;
+    var n = pending();
+    var failed = load().filter(function (item) { return item.status === 'failed'; }).length;
+    label.textContent = n
+      ? (failed ? failed + ' action(s) failed and need retry. ' : '') +
+        n + ' queued action(s) will sync when you reconnect.'
+      : 'You appear to be offline. Some actions may not work until your connection returns.';
+  }
+
+  function enqueue(fn, args) {
+    var q = load();
+    q.push({ fn: fn, args: args, ts: Date.now(), status: 'queued', attempts: 0 });
+    if (q.length > MAX_QUEUE) q.splice(0, q.length - MAX_QUEUE);
+    save(q);
+    renderQueueStatus();
+    emit('OfflineQueueChange', { pending: q.length });
+    return Promise.resolve({ queued: true, pending: q.length });
+  }
+
+  function remove(item) {
+    var q = load();
+    var i = q.indexOf(item);
+    if (i !== -1) { q.splice(i, 1); save(q); }
+    return q.length;
+  }
+
+  function flush() {
+    var q = load();
+    if (!q.length) return Promise.resolve({ flushed: 0, failed: 0, pending: 0 });
+    var flushed = 0;
+    var failed = 0;
+    var chain = Promise.resolve();
+    q.forEach(function (item) {
+      chain = chain.then(function () {
+        item.status = 'syncing';
+        item.attempts = (item.attempts || 0) + 1;
+        save(q);
+        return realApiCall(item.fn).apply(null, item.args).then(function () {
+          flushed++;
+          renderQueueStatus();
+          emit('OfflineQueueChange', { pending: remove(item) });
+        }, function () {
+          failed++;
+          item.status = 'failed';
+          item.lastError = 'The server rejected this action or was unavailable.';
+          save(q);
+          renderQueueStatus();
+          emit('OfflineQueueChange', { pending: pending(), failed: failed });
+        });
+      });
+    });
+    return chain.then(function () {
+      renderQueueStatus();
+      emit('OfflineQueueFlushed', { flushed: flushed, failed: failed, pending: pending() });
+      return { flushed: flushed, failed: failed, pending: pending() };
+    });
+  }
+
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').then(function (registration) {
+        registration.addEventListener('updatefound', function () {
+          var installing = registration.installing;
+          if (!installing) return;
+          installing.addEventListener('statechange', function () {
+            if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+              emit('ServiceWorkerUpdateAvailable', { registration: registration });
+              if (typeof window.showToast === 'function') {
+                window.showToast('A new dashboard version is available. Reload to update.', 'info');
+              }
+            }
+          });
+        });
+      }).catch(function () {});
+    });
+  }
+
+  var realApiCall = window.apiCall_ || function () {
+    throw new Error('apiCall_ not available');
+  };
+
+  window.apiCall_ = function (fn) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    if (MUTATIONS[fn] && navigator.onLine === false) {
+      return enqueue(fn, args);
+    }
+    return realApiCall.apply(null, arguments);
+  };
+
+  window.OfflineQueue = {
+    enqueue: enqueue,
+    flush: flush,
+    pending: pending,
+    isMutation: function (fn) { return !!MUTATIONS[fn]; },
+    status: function () {
+      var q = load();
+      return {
+        queued: q.length,
+        syncing: q.filter(function (item) { return item.status === 'syncing'; }).length,
+        failed: q.filter(function (item) { return item.status === 'failed'; }).length
+      };
+    }
+  };
+
+  registerServiceWorker();
+
+  window.addEventListener('online', function () {
+    if (pending()) {
+      flush().then(function (res) {
+        if (res.flushed && window.refreshData) window.refreshData();
+        if (window.loadNotifications) window.loadNotifications(true);
+      });
+    }
+  });
+
+  renderQueueStatus();
+})();

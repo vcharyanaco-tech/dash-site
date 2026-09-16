@@ -351,3 +351,66 @@ commit, fast-forwarded to `origin/main` at `c489095`), then greenlit 1F.
 
 ### Stray files (not committed)
 - (none)
+
+## Phase 2 — Monolith as prod load path (this continuation)
+
+### What was done
+Shipped the single-file `app.js` monolith as the production frontend load
+path, folding in the three modules that were previously loaded separately
+(`i18n.js`, `realtime.js`, `offline-queue.js`):
+
+1. **Fold `realtime.js` + `i18n.js` + `offline-queue.js` into the monolith.**
+   - `src/app/manifest.json` → **v2**: module list extended 16 → **19**, in
+     `entry.js` load order (`i18n` first, `realtime` before `init`,
+     `offline-queue` last).
+   - Per-module `src` override added so the build reads canonical files that
+     live outside `src/app/` instead of drift-prone copies:
+     `i18n → ../../src/i18n.js` (kept as repo-root-relative `src/i18n.js`),
+     `offline-queue → ../../offline-queue.js`.
+   - `build/build-app.js`: honor `mod.src` when resolving each module file.
+   - `app.js` rebuilt at runtime-identical order (i18n → core … submissions →
+     realtime → init → offline-queue IIFE). `offline-queue`'s IIFE now runs as
+     the last statement of the monolith, so it still captures `apiCall_` and
+     registers `sw.js` after all globals exist — identical to the old
+     post-app.js `<script>` ordering.
+2. **Switch prod load path.** `app.html:1185`
+   `<script type="module" src="src/app/entry.js">` → `<script src="app.js">`.
+   `entry.js` remains the dev-only modular loader (unused in prod).
+3. **Rewrote `build/split-app.js`** (was a hardcoded 16-module, keyword-based
+   parser that would have clobbered the 19-module manifest): now a byte-exact
+   inverse of `build-app.js` — it verifies `app.js == manifest concat` and
+   reproduces each module from character offsets; refuses to guess if `app.js`
+   has drifted (edit modules + rebuild instead).
+4. **Round-trip verified**: split → build produces a 327,322-byte app.js
+   identical to the committed one.
+
+### Measurements (bundle, new monolith)
+- `app.js` monolith (now includes i18n + realtime + offline-queue):
+  **327,322 B raw / 319.7 KB, 75,442 B gz / 73.7 KB** (single request).
+- Old modular path was **173,198 B gz / 20+ requests**; styles.css
+  unchanged 15,918 B gz.
+
+### Verification
+- `node build/build-app.js` + `node build/split-app.js` → byte-exact
+  round-trip (both 327,322 B).
+- `node --check` clean on `app.js`, `offline-queue.js`, `src/i18n.js`,
+  `src/app/realtime.js`, `build/build-app.js`, `build/split-app.js`.
+- Server suite: **285 / 285 pass** (unchanged, unaffected by frontend path).
+
+### Files changed
+- `app.html` — script tag → `app.js` monolith
+- `app.js` — rebuilt (19 modules, 7,795 lines, now carries i18n/realtime/offline-queue)
+- `src/app/manifest.json` — v2, 19 modules with `src` overrides
+- `build/build-app.js` — `mod.src` support
+- `build/split-app.js` — byte-exact manifest-driven rewrite
+
+### Pending Tasks
+1. **Phase 2 (remaining):** re-measure backend p95 on live DB/payloads and
+   re-run Lighthouse 13.4.1 mobile with 4G throttle against the new monolith
+   path (needs live server / network-inspector access).
+2. **Phase 1F (remaining, optional):** validators for the low-risk read /
+   informational ops still lacking them (~53 ops).
+3. Phase 3+ only after Phase 1/2 gates pass.
+
+### Stray files (not committed)
+- (none)
