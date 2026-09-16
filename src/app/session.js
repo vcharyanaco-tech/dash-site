@@ -386,20 +386,9 @@ function initApp() {
     });
   })();
 
-  const token = getAuthToken();
-
-  if (!token) {
-    showScreen('login');
-    hideSplash();
-    let msg = '';
-    try {
-      msg = window.sessionStorage.getItem(STORAGE_REAUTH_MSG) || '';
-      window.sessionStorage.removeItem(STORAGE_REAUTH_MSG);
-    } catch (err) {}
-    if (msg) showAuthMessage('loginMessage', msg);
-    return;
-  }
-
+  // The server validates the HttpOnly session cookie. This keeps the session
+  // out of JavaScript while still allowing the app to restore a signed-in
+  // session after a page reload.
   loadApp();
 }
 

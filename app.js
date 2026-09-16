@@ -97,6 +97,7 @@ const ApiService = {
   addItem: function (item) { return apiCall_('addItem', item, getAuthToken()); },
   updateItem: function (item) { return apiCall_('updateItem', item, getAuthToken()); },
   deleteItem: function (row) { return apiCall_('deleteItem', row, getAuthToken()); },
+  setRecordDisplay: function (row, displayed) { return apiCall_('setRecordDisplay', row, displayed, getAuthToken()); },
   markReviewDone: function (row) { return apiCall_('markReviewDone', row, getAuthToken()); },
   markReviewNotDone: function (row) { return apiCall_('markReviewNotDone', row, getAuthToken()); },
   login: function (email, password) { return apiCall_('login', email, password); },
@@ -219,6 +220,10 @@ const appState = {
   submissionCounts: {},
   submissionFlash: {},
   displayedSubmissions: [],
+  // Per-row "hide the update blocks on the dashboard card / detail modal"
+  // state, persisted per-browser in localStorage so a user's show/hide
+  // choices survive reloads, pagination and background re-renders.
+  updatesHiddenByRow: {},
   responsibilities: [],
   reminders: [],
   counts: {},
@@ -233,6 +238,7 @@ const appState = {
   dashSortKey: 'id',
   dashSortDir: 'asc',
   dashReviewFilter: '',
+  dashShowHidden: false,
   permissions: {},
   notifications: { unread: 0, recent: [] }
 };
@@ -2183,7 +2189,7 @@ function openLinkPreview(url, title) {
   const titleEl = getEl('previewModalTitle');
   if (titleEl) titleEl.textContent = title || 'Preview';
   if (openNew) openNew.href = url;
-  previewZoom = 100;
+  previewZoom = 80;
   applyPreviewZoom();
   frame.src = toEmbeddableUrl(url) || '';
   openDialog('previewModal');
@@ -2200,7 +2206,7 @@ function closeLinkPreview() {
    preview) can be zoomed in/out. Zoom buttons call these directly; trackpad
    pinch (browsers send Ctrl+wheel) is wired by wirePreviewPinch(). */
 
-let previewZoom = 100;
+let previewZoom = 80;
 
 function applyPreviewZoom() {
   const frame = getEl('previewFrame');
@@ -2216,7 +2222,7 @@ function adjustPreviewZoom(delta) {
 
 function previewZoomIn() { adjustPreviewZoom(10); }
 function previewZoomOut() { adjustPreviewZoom(-10); }
-function previewZoomReset() { previewZoom = 100; applyPreviewZoom(); }
+function previewZoomReset() { previewZoom = 80; applyPreviewZoom(); }
 
 /* Trackpad pinch-to-zoom (and Ctrl+scroll on a mouse) scales the preview. */
 function wirePreviewPinch() {
@@ -2284,9 +2290,6 @@ function cancelConfirmDialog() {
 /* ---------------------------------- Auth token ---------------------------------- */
 
 function getAuthToken() {
-  // Authentication is carried by the HttpOnly dash_session cookie. Keep
-  // accepting the legacy token during the staged migration, but do not read
-  // or write it for new sessions.
   return '';
 }
 
@@ -2405,6 +2408,8 @@ function renderProfile() {
 
   const addButton = getEl('addButton');
   if (addButton) addButton.style.display = appState.isEditor ? 'inline-flex' : 'none';
+  const showHiddenWrap = getEl('showHiddenWrap');
+  if (showHiddenWrap) showHiddenWrap.classList.toggle('hidden', !appState.isEditor);
   const meetingBtn = getEl('meetingNotesBtn');
   if (meetingBtn) meetingBtn.style.display = appState.isAdmin ? 'inline-flex' : 'none';
   updateMarkAllSubmissionsReadBtn();
@@ -2854,6 +2859,7 @@ function applyFilters(preservePage) {
   const query = appState.searchQuery.toLowerCase();
   const sector = appState.sector;
   const review = appState.dashReviewFilter;
+  const showHidden = appState.dashShowHidden && appState.isEditor;
   appState.filtered = appState.items.filter(function (item) {
     const haystack = [item.sector, item.id, item.description, item.action, item.responsibility, item.reviewDate]
       .join(' ').toLowerCase();
@@ -2862,7 +2868,8 @@ function applyFilters(preservePage) {
       : review === 'notdue'
         ? item.reviewStatus !== 'due'
         : true;
-    return (!query || haystack.indexOf(query) !== -1) && (!sector || item.sector === sector) && reviewOk;
+    const displayOk = showHidden || item.displayed !== false;
+    return (!query || haystack.indexOf(query) !== -1) && (!sector || item.sector === sector) && reviewOk && displayOk;
   });
   // Reset to page 1 only when the filter inputs changed (search/sector); a
   // plain re-render after an edit/update/delete keeps the current page.
@@ -2890,6 +2897,11 @@ function handleDashReviewFilterChange() {
   updateFilterChips();
   renderDashboard();
   scheduleDashboardPrefsSave();
+}
+
+function handleDashShowHiddenChange() {
+  appState.dashShowHidden = getEl('dashShowHidden').checked;
+  renderDashboard();
 }
 
 function resetFilters() {
@@ -2943,6 +2955,29 @@ function removeChip(kind) {
   updateFilterChips();
   renderDashboard();
   if (kind === 'review') scheduleDashboardPrefsSave();
+}
+
+/* ---------------------------------- Dashboard: display toggle ---------------------------------- */
+
+/* Editors/admins tick which records show on the dashboard for everyone;
+   unticked (hidden) records only appear when "Show hidden" is on. */
+function toggleRecordDisplay(row, displayed) {
+  if (!appState.isEditor) { showToast('Editor access required', 'warning'); return; }
+  showOverlay(displayed ? 'Showing record…' : 'Hiding record…');
+  ApiService.setRecordDisplay(row, displayed).then(function (data) {
+    hideOverlay();
+    if (data && data.items) {
+      appState.items = data.items;
+      appState.summary = data.summary || {};
+    }
+    renderDashboard(true);
+    showToast(displayed ? 'Record is now displayed' : 'Record hidden from dashboard', 'success');
+  }).catch(function (err) {
+    hideOverlay();
+    if (handleServerFailure(err)) return;
+    renderDashboard(true);
+    showToast('Failed: ' + (err.message || err), 'error');
+  });
 }
 
 /* ---------------------------------- Dashboard: KPI cards ---------------------------------- */
@@ -3121,13 +3156,71 @@ function groupCardFields_(fields) {
   return { top: topFields, action: actionFields, bottom: bottomFields };
 }
 
+/* ---------------------------------- Show/Hide updates toggle ---------------------------------- */
+/* "Show/Hide updates" sits beside the Submit update button on every card (and
+   in the record detail dialog). Clicking it collapses or expands the update
+   blocks rendered on that card. State is persisted per-browser in
+   localStorage so a user's choices survive reloads and re-renders. */
+var updatesHiddenStorageKey_ = 'dashUpdatesHiddenByRow';
+
+function loadUpdatesHiddenByRow_() {
+  if (appState.updatesHiddenByRow && Object.keys(appState.updatesHiddenByRow).length) return;
+  try {
+    const raw = window.localStorage.getItem(updatesHiddenStorageKey_);
+    appState.updatesHiddenByRow = raw ? (JSON.parse(raw) || {}) : {};
+  } catch (err) {
+    appState.updatesHiddenByRow = {};
+  }
+}
+
+function saveUpdatesHiddenByRow_() {
+  try {
+    window.localStorage.setItem(updatesHiddenStorageKey_, JSON.stringify(appState.updatesHiddenByRow || {}));
+  } catch (err) { /* storage full or blocked — non-fatal, toggle stays in-memory */ }
+}
+
+function isRowUpdatesHidden_(row) {
+  loadUpdatesHiddenByRow_();
+  return !!(appState.updatesHiddenByRow || {})[String(row)];
+}
+
+/* Rebuild the update blocks for one row (shared by the card + detail dialog). */
+function rowUpdatesHtml_(row) {
+  return (appState.displayedSubmissions || [])
+    .filter(function (s) { return Number(s.cardRow) === Number(row); })
+    .map(function (s) {
+      return `
+        <div class="card-field submission-display">
+          <span class="field-label submission-display-label">Update by ${escapeHtml((s.office || '').trim() ? s.office : s.email)} <span class="submission-display-time">${escapeHtml(formatTimestamp(s.createdAt))}</span></span>
+          <div class="field-value preserve-whitespace">${escapeHtml(s.text || '')}</div>
+        </div>`;
+    }).join('');
+}
+
+/* Flip the show/hide state for a row, persist it, then sync every matching
+   card / dialog element in the DOM to the new state without a re-render. */
+function toggleCardUpdates(row, btn) {
+  loadUpdatesHiddenByRow_();
+  const key = String(row);
+  appState.updatesHiddenByRow[key] = !appState.updatesHiddenByRow[key];
+  saveUpdatesHiddenByRow_();
+
+  const hidden = appState.updatesHiddenByRow[key];
+  document.querySelectorAll('[data-updates-row="' + key + '"]').forEach(function (el) {
+    el.classList.toggle('updates-hidden', hidden);
+  });
+  document.querySelectorAll('[data-updates-toggle="' + key + '"]').forEach(function (el) {
+    el.textContent = hidden ? 'Show updates' : 'Hide updates';
+  });
+  if (btn) btn.textContent = hidden ? 'Show updates' : 'Hide updates';
+}
+
 function buildCardHtml(item) {
   const visibleFields = (item.displayFields || []).filter(function (field) {
     const key = dashboardColumnKey_(field && field.label);
     if (key === 'id') return false;
     return dashboardColumnVisible_(field && field.label);
   });
-
   const groups = groupCardFields_(visibleFields);
   const topRowHtml = groups.top.length
     ? `<div class="card-fields-row card-fields-row-top">${groups.top.map(function (f) { return cardFieldHtml_(item, f); }).join('')}</div>`
@@ -3143,15 +3236,12 @@ function buildCardHtml(item) {
   const subCount = (appState.submissionCounts || {})[item.row] || 0;
   const subFlash = !!(appState.submissionFlash || {})[item.row];
 
-  const updateFieldsHtml = (appState.displayedSubmissions || [])
+  const updateFieldsHtml = rowUpdatesHtml_(item.row);
+
+  const updatesCount = (appState.displayedSubmissions || [])
     .filter(function (s) { return Number(s.cardRow) === Number(item.row); })
-    .map(function (s) {
-      return `
-        <div class="card-field submission-display">
-          <span class="field-label submission-display-label">Update by ${escapeHtml((s.office || '').trim() ? s.office : s.email)} <span class="submission-display-time">${escapeHtml(formatTimestamp(s.createdAt))}</span></span>
-          <div class="field-value preserve-whitespace">${escapeHtml(s.text || '')}</div>
-        </div>`;
-    }).join('');
+    .length;
+  const updatesHidden = isRowUpdatesHidden_(item.row);
 
   const reviewBadgeHtml = item.reviewStatus === 'due'
     ? `<span class="review-badge review-due">Review due${appState.isAdmin ? `
@@ -3176,6 +3266,7 @@ function buildCardHtml(item) {
       <button class="btn btn-secondary btn-small" onclick="openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}')">Submit update</button>
       ${subCount > 0 ? `<span class="submission-badge${subFlash ? ' flash' : ''}">${subCount}</span>` : ''}
     </div>
+    ${updatesCount > 0 ? `<button class="btn btn-secondary btn-small toggle-updates-btn" data-updates-toggle="${escAttr(item.row)}" onclick="toggleCardUpdates('${escAttr(item.row)}', this)">${updatesHidden ? 'Show updates' : 'Hide updates'}</button>` : ''}
     <div class="menu-dropdown">
       <button class="btn btn-secondary btn-small" type="button" onclick="event.stopPropagation(); toggleDropdown(this);">Print</button>
       <span class="menu-dropdown-menu">
@@ -3190,11 +3281,16 @@ function buildCardHtml(item) {
 
   const showId = dashboardColumnVisible_('id');
   const showActions = dashboardColumnVisible_('actions');
+  const displayToggleHtml = appState.isEditor ? `
+    <label class="display-toggle" title="${item.displayed !== false ? 'Hide this record from viewers' : 'Show this record to viewers'}">
+      <input type="checkbox" ${item.displayed !== false ? 'checked' : ''} onchange="toggleRecordDisplay('${escAttr(item.row)}', this.checked)">
+      <span>Display</span>
+    </label>` : '';
   return `
-    <article class="card ${item.reviewStatus === 'due' ? 'review-due' : ''}" data-row="${escAttr(item.row)}">
+    <article class="card ${item.reviewStatus === 'due' ? 'review-due' : ''} ${item.displayed === false ? 'card-hidden' : ''}" data-row="${escAttr(item.row)}">
       ${reviewBadgeHtml}
-      ${showId ? '<div class="card-title preserve-whitespace"><span class="id-badge">#' + escapeHtml(item.id) + '</span></div>' : ''}
-      <div class="card-fields">${fieldsHtml || '<div class="card-field"><span class="field-label">Details</span><div class="field-value preserve-whitespace">No details available</div></div>'}${updateFieldsHtml}</div>
+      ${showId ? '<div class="card-title preserve-whitespace"><span class="id-badge">#' + escapeHtml(item.id) + '</span>' + displayToggleHtml + '</div>' : ''}
+      <div class="card-fields">${fieldsHtml || '<div class="card-field"><span class="field-label">Details</span><div class="field-value preserve-whitespace">No details available</div></div>'}${updateFieldsHtml ? `<div class="card-updates${updatesHidden ? ' updates-hidden' : ''}" data-updates-row="${escAttr(item.row)}">${updateFieldsHtml}</div>` : ''}</div>
       ${showActions ? '<div class="card-footer"><div class="actions">' + actionsHtml + '</div></div>' : ''}
       ${aiPanelHtmlFromCache_(item.row)}
       ${linkPanelHtmlFromCache_(item.row)}
@@ -3326,8 +3422,8 @@ function buildTableRowHtml(item) {
   const linkPanel = linkPanelHtmlFromCache_(item.row);
   if (linkPanel) persistedPanels += '<tr class="ai-link-tr"><td colspan="8">' + linkPanel + '</td></tr>';
   return `
-    <tr class="row-clickable ${item.reviewStatus === 'due' ? 'row-flagged' : ''}" data-row="${escAttr(item.row)}" tabindex="0">
-      <td><span class="id-badge">#${escapeHtml(item.id)}</span></td>
+    <tr class="row-clickable ${item.reviewStatus === 'due' ? 'row-flagged' : ''} ${item.displayed === false ? 'row-hidden' : ''}" data-row="${escAttr(item.row)}" tabindex="0">
+      <td><span class="id-badge">#${escapeHtml(item.id)}</span>${appState.isEditor ? `<label class="display-toggle" title="${item.displayed !== false ? 'Hide this record from viewers' : 'Show this record to viewers'}"><input type="checkbox" ${item.displayed !== false ? 'checked' : ''} onchange="event.stopPropagation(); toggleRecordDisplay('${escAttr(item.row)}', this.checked)"><span></span></label>` : ''}</td>
       <td class="preserve-whitespace">${escapeHtml(item.sector || '')}</td>
       <td class="details-cell preserve-whitespace">${escapeHtml(item.description || '')}</td>
       <td class="action-cell ${item.reviewStatus === 'due' ? 'action-cell-due' : 'action-cell-ok'} preserve-whitespace">${item.actionHtml || renderLinkableText(item.action || '')}</td>
@@ -3473,6 +3569,10 @@ function refreshData() {
   showOverlay('Refreshing data…');
   ApiService.getAppData().then(function (data) {
     hideOverlay();
+    // A modal may have opened while the request was in flight — defer the
+    // repaint (and the toast) so the open modal is not disturbed; the
+    // closeDialog/visibility flush re-runs this refresh once it is safe.
+    if (hasOpenModal_()) { autoRefreshPending = true; return; }
     applyAppData(data);
     populateFilters();
     populateResponsibilitySelect();
@@ -4954,14 +5054,27 @@ function openRecordDetail(row) {
       ? '<span class="review-badge review-done">Review done</span>'
       : '<span class="badge" data-tone="muted">Not reviewed</span>';
 
+  const detailUpdatesHtml = rowUpdatesHtml_(item.row);
+  const detailUpdatesCount = (appState.displayedSubmissions || [])
+    .filter(function (s) { return Number(s.cardRow) === Number(item.row); })
+    .length;
+  const detailUpdatesHidden = isRowUpdatesHidden_(item.row);
+  const detailUpdatesSection = detailUpdatesHtml
+    ? `<div class="detail-updates"><span class="text-subheading">Updates</span><div class="card-updates${detailUpdatesHidden ? ' updates-hidden' : ''}" data-updates-row="${escAttr(item.row)}">${detailUpdatesHtml}</div></div>`
+    : '';
+
   getEl('recordDetailTitle').textContent = 'Record #' + (item.id || item.row);
   getEl('recordDetailBody').innerHTML = `
     <div class="detail-status">${statusBadge}<span class="form-status">${subCount} submission${subCount === 1 ? '' : 's'}</span></div>
-    <div class="about-rows">${fieldsHtml}</div>`;
+    <div class="about-rows">${fieldsHtml}</div>
+    ${detailUpdatesSection}`;
 
   let actionsHtml = '';
   if (appState.isEditor) {
     actionsHtml += `<button class="btn btn-primary" type="button" onclick="closeRecordDetail(); editItem('${escAttr(item.row)}');">Edit</button>`;
+  }
+  if (detailUpdatesCount > 0) {
+    actionsHtml += `<button class="btn btn-secondary" data-updates-toggle="${escAttr(item.row)}" type="button" onclick="toggleCardUpdates('${escAttr(item.row)}', this)">${detailUpdatesHidden ? 'Show updates' : 'Hide updates'}</button>`;
   }
   actionsHtml += `
     <button class="btn btn-secondary" type="button" onclick="closeRecordDetail(); openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}');">Submit update</button>
@@ -5584,16 +5697,22 @@ function flushPendingAutoRefresh() {
   autoRefreshTick();
 }
 
+// True while any modal is on screen. Checks the body.modal-open scroll lock
+// first, then falls back to any visible .modal-backdrop so modals opened
+// without openDialog() (legacy path: openSubmissionsModal) are respected too.
+function hasOpenModal_() {
+  if (typeof document === 'undefined') return false;
+  if (document.body.classList.contains('modal-open')) return true;
+  return Array.prototype.some.call(document.querySelectorAll('.modal-backdrop'), function (b) {
+    return !b.classList.contains('hidden');
+  });
+}
+
 function autoRefreshTick() {
   if (autoRefreshInFlight) return;
-<<<<<<< HEAD
-  if (!getAuthToken()) return;
+  if (!appState.user || !appState.user.loggedIn) return;
   if (typeof document !== 'undefined' && document.hidden) { autoRefreshPending = true; return; }
-  if (document.body.classList.contains('modal-open')) { autoRefreshPending = true; return; }
-=======
-  if (typeof document !== 'undefined' && document.hidden) return;
-  if (document.body.classList.contains('modal-open')) return;
->>>>>>> c7e650e (feat: harden dashboard auth and operations)
+  if (hasOpenModal_()) { autoRefreshPending = true; return; }
   autoRefreshInFlight = true;
   const seqAtStart = appState.submissionSeq || 0;
   ApiService.getAppData().then(function (data) {
@@ -5602,6 +5721,10 @@ function autoRefreshTick() {
       setAuthToken('');
       return;
     }
+    // A modal may have opened while this request was in flight. Repainting
+    // the dashboard then would clobber it, so defer the render here too;
+    // closeDialog()/visibilitychange flush the pending refresh later.
+    if (hasOpenModal_()) { autoRefreshPending = true; return; }
     if ((appState.submissionSeq || 0) !== seqAtStart) {
       // A submission changed while this request was in flight — the payload is
       // stale for submission fields and would revert the card's badge/updates.
@@ -6256,6 +6379,12 @@ function deleteItem(row) {
       appState.items = data.items || [];
       appState.summary = data.summary || {};
       appState.analytics = data.analytics || {};
+      // Deleting a record renumbers the rows below it, so the submission
+      // overview must follow the shift immediately (not on the next
+      // background refresh) or counts/badges point at the wrong records.
+      appState.submissionCounts = data.submissionCounts || {};
+      appState.submissionFlash = data.submissionFlash || {};
+      appState.displayedSubmissions = data.displayedSubmissions || [];
       renderDashboard(true);
       showToast('Record deleted', 'success');
     }).catch(function (err) {
@@ -6355,8 +6484,12 @@ function openSubmissionsModal(row, cardId, onlyMine) {
   getEl('submissionText').placeholder = 'Write your update for record #' + cardId + '…';
   const subsModal = getEl('submissionsModal');
   subsModal.classList.remove('hidden');
-  restoreModalSize_(subsModal);
   loadSubmissions();
+  // Route through the shared dialog system so body.modal-open (scroll lock +
+  // the auto-refresh deferral guard) and the aria state stay consistent.
+  openDialog('submissionsModal');
+  const textarea = getEl('submissionText');
+  if (textarea) textarea.focus();
 }
 
 function closeSubmissionsModal() {

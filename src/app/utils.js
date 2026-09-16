@@ -252,15 +252,9 @@ function hasOpenModal_() {
 
 function autoRefreshTick() {
   if (autoRefreshInFlight) return;
-<<<<<<< HEAD
-  if (!getAuthToken()) return;
+  if (!appState.user || !appState.user.loggedIn) return;
   if (typeof document !== 'undefined' && document.hidden) { autoRefreshPending = true; return; }
   if (hasOpenModal_()) { autoRefreshPending = true; return; }
-=======
-  if (!appState.user || !appState.user.loggedIn) return;
-  if (typeof document !== 'undefined' && document.hidden) return;
-  if (document.body.classList.contains('modal-open')) return;
->>>>>>> c7e650e (feat: harden dashboard auth and operations)
   autoRefreshInFlight = true;
   const seqAtStart = appState.submissionSeq || 0;
   ApiService.getAppData().then(function (data) {

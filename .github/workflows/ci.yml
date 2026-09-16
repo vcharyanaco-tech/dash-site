@@ -38,6 +38,20 @@ jobs:
       - name: Syntax check app.js
         run: node --check app.js
 
+      - name: Syntax check frontend modules
+        run: |
+          for f in src/app/*.js; do
+            [ -f "$f" ] && node --check "$f"
+          done
+        shell: bash
+
+      - name: Verify app.js round-trip from modules
+        run: |
+          cp app.js /tmp/app-carried.js
+          node build/build-app.js
+          diff -q app.js /tmp/app-carried.js && echo "ROUND-TRIP OK" || { echo "app.js drifted from src/app modules — run node build/build-app.js and commit the result"; exit 1; }
+        shell: bash
+
       - name: Syntax check worker
         run: node --check src/worker/worker.js
 
