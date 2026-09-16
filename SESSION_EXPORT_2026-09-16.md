@@ -109,8 +109,9 @@ it was based on is preserved at the end as historical reference.
 5. `7f350a5` `test:` phase-1E file-upload edge cases — MIME allowlist matrix,
    size cap rejection, filename sanitization/truncation, base64 validation,
    anonymous/garbage-token auth gates, resolveDocumentFile key integrity (26 tests).
-6. (pending push) `feat:` phase-1B cookie-only auth — kill vestigial browser
+6. `28a0faf` `feat:` phase-1B cookie-only auth — remove vestigial browser
    token plumbing, generalize cookie injection, +7 injection tests.
+7. `533ed7d` `docs:` session export + Architecture.md — Phase 1B cookie-only design.
 
 ## Deployment
 - Server change (`src/server/index.js`, run-tests.cjs, +tests) → Render auto-deploys.
@@ -178,15 +179,35 @@ it was based on is preserved at the end as historical reference.
 - Commit pending push.
 
 ## Pending Tasks
-1. **Push the 1B commit** (or confirm before pushing).
-2. **Phase 1 — P0 Security (in progress):**
-   - 1C ✅ authorization audit + authz.test.js.
-   - 1D ✅ validators + AUTH_ARG_INDEX gaps closed.
-   - 1E ✅ file-upload edge-case test coverage (26 tests).
-   - 1B ✅ cookie-only auth migration (browser token plumbing removed).
-   - **1F + follow-ups queued:** validator coverage audit (only 22 of 103 ops
-     validated); AUTH_ARG_INDEX completeness re-scan; Authorization header /
-     Bearer-gated cron-path regression check after the arg-injection change.
+1. **1F — Validator hardening (optional, incremental):** Add validators for
+   high-risk mutating ops lacking them (e.g. `deleteDocument`, `deleteMeetingFile`,
+   `deleteSubmission`, `deleteTask`, `adminImportUsers`, `adminResetPassword`,
+   `adminEmailAllUsers`, `adminSyncFromSheet`, `adminPushToSheet`,
+   `adminPreviewSyncFromSheet`, `adminDeleteAuditRows`, `adminClearAudit`,
+   `setRecordDisplay`, `setDocumentKeep`, `createPdfReport`, `exportToSpreadsheet`,
+   `exportReviewCalendarIcs`, `getRecordDocuments`, `getRecordHistory`,
+   `getSubmissions`, `addSubmission` beyond length check, `updateSubmission`,
+   `lockSubmission`, `unlockSubmission`, `toggleSubmissionDisplay`,
+   `markAllSubmissionsRead`, `getMyNotifications`, `markNotificationsRead`,
+   `clearMyNotifications`, `createTask`, `updateTask`, `deleteTask`,
+   `getDashboardPreferences`, `saveDashboardPreferences`, `getAiInsights`,
+   `getCardAiInsight`, `getLinkContentAiInsight`, `askLinkAi`,
+   `getAllAskLinkHistory`, `saveAskLinkHistory`, `processMeetingRecording`,
+   `transcribeMeetingSegment`, `generateMeetingMinutes`, `listMeetingFiles`,
+   `getMeetingFile`, `deleteMeetingFile`, `setFathomApiKey`,
+   `listFathomMeetings`, `getFathomMeetingContent`, `getRecordingDownloadLink`,
+   `listFathomUsers`, `searchFathomMeetings`, `getFathomMeetingStats`,
+   `bulkGetRecordingDownloadLinks`, `subscribePush`, `unsubscribePush`,
+   `sendReviewDeadlinePushNotifications`, `sendWeeklyReport`,
+   `sendWhatsAppReviewReminders`, `adminImportCsv`, `validateSession`,
+   `refreshSession`, `logout`, `getAssignableUsers`, `getMyTasks`,
+   `getTaskCounts`, `getTasks`, `getEnterpriseFrontendConfig`,
+   `getEnterpriseHealth`, `installEnterpriseTriggers`,
+   `setupEnterpriseAddons`, `validateEnterpriseConfiguration`).
+   Prioritize admin-mutating + file-deletion ops first.
+2. **1F — Bearer/cron regression test:** Add HTTP test that POSTs a real
+   session token as an arg (no cookie) and asserts auth succeeds — documents
+   the service-to-service / cron path preserved after the generalized middleware.
 3. Phase 2 (measured perf): ship app.js monolith as prod load path, re-measure on
    live DB/payloads, re-run Lighthouse with 4G throttle.
 4. Phase 3+ only after Phase 1/2 gates pass.
@@ -218,3 +239,56 @@ Dispatching analysis (exact counts, run against `index-dispatch.js` / `index.js`
 - 1E upload audit scope confirmed: MIME allowlist + 25MB cap + base64 key regex +
   sanitized names + login-gated resolve already at `documents.js`; needs edge-case
   test coverage only.
+
+## Phase 1F — Validator + AUTH_ARG_INDEX audit (this session)
+
+### Audit results (live from `dispatch`, `AUTH_ARG_INDEX`, `VALIDATORS`)
+
+- **103 dispatch ops total.**
+- **AUTH_ARG_INDEX: 96/103 covered.** The 7 without are all intentionally public /
+  no-token: `getData`, `getReportTemplates`, `getServerTime`, `getSyncStatus`,
+  `getTranslations`, `login`, `requestPasswordReset`. ✅ No gaps.
+- **VALIDATORS: 22/103 covered.** 81 ops lack validators.
+  - Current validators: `login`, `addItem`, `updateItem`, `deleteItem`,
+    `adminAddUser`, `adminDeleteUser`, `createTask`, `addSubmission`,
+    `reconcileRecordOrder`, `uploadDocument`, `changePassword`,
+    `markReviewDone`, `markReviewNotDone`, `adminUpdateUser`, `emailReport`,
+    `getReportData`, `exportFullBackup`, `setOpenRouterApiKey`,
+    `setGeminiApiKey`, `setGroqApiKey`, `setHuggingFaceApiKey`, `setKiloApiKey`.
+
+### Pending Tasks
+1. **1F — Validator hardening (optional, incremental):** Add validators for
+   high-risk mutating ops lacking them (e.g. `deleteDocument`, `deleteMeetingFile`,
+   `deleteSubmission`, `deleteTask`, `adminImportUsers`, `adminResetPassword`,
+   `adminEmailAllUsers`, `adminSyncFromSheet`, `adminPushToSheet`,
+   `adminPreviewSyncFromSheet`, `adminDeleteAuditRows`, `adminClearAudit`,
+   `setRecordDisplay`, `setDocumentKeep`, `createPdfReport`, `exportToSpreadsheet`,
+   `exportReviewCalendarIcs`, `getRecordDocuments`, `getRecordHistory`,
+   `getSubmissions`, `addSubmission` beyond length check, `updateSubmission`,
+   `lockSubmission`, `unlockSubmission`, `toggleSubmissionDisplay`,
+   `markAllSubmissionsRead`, `getMyNotifications`, `markNotificationsRead`,
+   `clearMyNotifications`, `createTask`, `updateTask`, `deleteTask`,
+   `getDashboardPreferences`, `saveDashboardPreferences`, `getAiInsights`,
+   `getCardAiInsight`, `getLinkContentAiInsight`, `askLinkAi`,
+   `getAllAskLinkHistory`, `saveAskLinkHistory`, `processMeetingRecording`,
+   `transcribeMeetingSegment`, `generateMeetingMinutes`, `listMeetingFiles`,
+   `getMeetingFile`, `deleteMeetingFile`, `setFathomApiKey`,
+   `listFathomMeetings`, `getFathomMeetingContent`, `getRecordingDownloadLink`,
+   `listFathomUsers`, `searchFathomMeetings`, `getFathomMeetingStats`,
+   `bulkGetRecordingDownloadLinks`, `subscribePush`, `unsubscribePush`,
+   `sendReviewDeadlinePushNotifications`, `sendWeeklyReport`,
+   `sendWhatsAppReviewReminders`, `adminImportCsv`, `validateSession`,
+   `refreshSession`, `logout`, `getAssignableUsers`, `getMyTasks`,
+   `getTaskCounts`, `getTasks`, `getEnterpriseFrontendConfig`,
+   `getEnterpriseHealth`, `installEnterpriseTriggers`,
+   `setupEnterpriseAddons`, `validateEnterpriseConfiguration`).
+   Prioritize admin-mutating + file-deletion ops first.
+2. **1F — Bearer/cron regression test:** Add HTTP test that POSTs a real
+   session token as an arg (no cookie) and asserts auth succeeds — documents
+   the service-to-service / cron path preserved after the generalized middleware.
+3. Phase 2 (measured perf): ship app.js monolith as prod load path, re-measure on
+   live DB/payloads, re-run Lighthouse with 4G throttle.
+4. Phase 3+ only after Phase 1/2 gates pass.
+
+### Stray files (not committed)
+- (none — `src/server/D:/tmp` deleted after push)
