@@ -759,6 +759,104 @@ Second Phase-3 item in the user-ordered sequence **5 → 7 → 9 → 3**.
    indicator, offline activity center (queued/syncing/synced/failed/conflict).
 3. Phase 4+ remains gated (must not start).
 
+## Phase 3 part-9 — Actionable notifications (commit `584484a`)
+
+Completed the notification rework (user order 5 → 7 → **9** → 3; Part 3 PWA
+cue now the only remaining Phase-3 item).
+
+### Backend
+- **Schema/migration**: `notifications` gains `priority` (INTEGER 0/1) +
+  `record_row` columns via `schema.sql` + auto-ALTER in `db.js` (verified on
+  live DB from the 2026-09-14 session).
+- **`notifications.js`**: per-user prefs store (`getPrefs_`/`setPrefs_`,
+  settings rows `notif_prefs:<email>`; keys record/submission/user/system/push,
+  default all true). `getMyNotifications` now returns
+  `{unread, recent(30), count, history, byTypeUnread, byTypeCount, prefs}`;
+  `markNotificationsRead` accepts `'all'`, type-name(s), or id(s);
+  `appendNotification_` suppresses by per-type pref (`allowTypeFor_`) and
+  dedupes via `dedupeKey`+`dedupeTtlSeconds` (cache `ntf_<key>`, default TTL;
+  `generateReviewNotifications` passes its own `rvnotif_<today>_<row>_<email>`
+  key, TTL 21600). New endpoints `getNotificationPrefs` /
+  `setNotificationPrefs` (+`AUTH_ARG_INDEX` 0/1, +VALIDATORS, +authz entries);
+  stale/unread sizing: `read_at` null = unread.
+- **Call-sites** now pass `{priority, recordRow}` opts: records add/update/
+  delete/review-done/review-reopened (`recordRow = id + START_ROW − 1`, NEW vs
+  HIGH), `generateReviewNotifications` (actionable "Review due today/tomorrow —
+  <sector>" title, priority HIGH, recordRow), submissions add (HIGH,
+  cardRow), documents add/remove (NORMAL, `recordRow` looked up from docRow
+  before delete). `setDocumentKeep` left on legacy 5-arg signature (low risk).
+- **`push-notifications.js`** review-deadline push gated via
+  `allowTypeFor_(email, 'push')`.
+
+### Frontend
+- **core.js**: ApiService `getNotificationPrefs`/`setNotificationPrefs` +
+  `appState.notifPrefs` default `null`.
+- **session.js**: grouped notifications by type (`NOTIF_TYPE_ORDER`/
+  `NOTIF_TYPE_LABELS`), priority "urgent" badge (`notif-priority-high`),
+  per-item **Mark read** + **Open record** buttons, notification center modal
+  (`openNotificationCenter`, filters all/unread/record/submission, counter,
+  mark-group-read `markTypeRead`), prefs UI (`setNotifPref` pushes toggles incl.
+  push, wires `subscribePush`/`unsubscribePush`), `openNotification(id, type,
+  recordRow)` deep-links to `openRecordDetail` with `getAppData`+`renderDash
+  board(true)` refresh fallback (guard: `refreshData()` returns undefined, so
+  refresh goes through `ApiService.getAppData` directly). `markAllNotificationsRead`
+  (sends `'all'` string) + `clearAllNotifications` now refresh `notifPrefs`.
+- **myday.js**: notification rows pass `recordRow` through.
+- **app.html**: "View all" button in the panel head + `#notifCenterModal`
+  markup (filters, list, prefs footer); styles cache-buster `2026.09.16d`.
+- **styles.css**: `.modal-card-wide` (640px/92vw/max-86vh), notification
+  center group header/items, urgent badge, mark-read/action buttons, prefs
+  toggle list (~106 new lines). Braces 739/739, undefined `var()` 0.
+
+### Two pre-existing bugs fixed along the way
+1. **Anonymous login regression**: deployed validator rejects cookie-less
+   `getAppData` with `"getAppData requires (token)"`, which the client's
+   `isAuthError` previously did NOT match → anonymous visits got the
+   "Error loading app" panel instead of the login screen. `isAuthError` now
+   also matches `/requires \(.*token\)/i`; live-verified the server emits
+   exactly that message for anonymous `getAppData`.
+2. **`markNotificationsRead('all')` blocked by validator**: the client sends
+   the bare string `'all'` for "Mark all read" but `index.js` VALIDATORS
+   required an array → the action errored server-side (silently, since
+   `markAllNotificationsRead` cats errors). Validator relaxed to
+   `if (!Array.isArray(args[0]) && args[0] !== 'all')`.
+
+### Tests
+- **New `tests/notifications-prefs.test.js`**: 11 cases — prefs default/update/
+  non-object rejection, suppression when type disabled, priority/record_row
+  persistence, history/byType/prefs payload, mark-by-type, mark-`'all'`, dedupe
+  via dedupeKey+TTL.
+- `dispatch-client-args.test.js` re-verified the two new ApiService methods
+  (needed AUTH_ARG_INDEX entries); `authz.test.js` + `validators.test.js` gained
+  getNotificationPrefs/setNotificationPrefs cases (+markNotificationsRead 'all').
+- **Suite: 368/368 pass, 0 fail**; `node --check` clean on all touched JS.
+
+### Verification (live)
+- `app.js` 200 with `openNotificationCenter` + `setNotifPref` + `markTypeRead`.
+- `app.html` 200 carrying cache-buster `2026.09.16d`.
+- Worker `/` 200; `POST /api/internal/daily-jobs` → 401-style unauthorized
+  without token.
+- Build: 21 modules, 8,764 lines; `build-app.js`/`split-app.js` byte-exact
+  round-trip; mojibake 0 (node-based UTF-8 check) on app.html/app.js/
+  styles.css/sw.js.
+
+### Files changed (commit `584484a`, 20 files, +1016/−86)
+- `src/server/notifications.js`, `config.js`, `db.js`, `schema.sql`,
+  `index.js` (validators + AUTH_ARG_INDEX), `index-dispatch.js`, `records.js`,
+  `submissions.js`, `documents.js`, `push-notifications.js`.
+- `src/app/core.js`, `session.js`, `myday.js` + rebuilt `app.js`; `app.html`;
+  `assets/styles.css`; `sw.js`.
+- Tests: `notifications-prefs.test.js` (new), `authz.test.js`,
+  `validators.test.js`, `dispatch-client-args.test.js` (already passing).
+
+### Pending (Phase 3, user order 5 → 7 → 9 → 3)
+1. **Part 3 — PWA update cue**: cached shell, background update, version
+   detection, "New version available — Update" UI, safe activation, offline
+   indicator, offline activity center (queued/syncing/synced/failed/conflict).
+   Watch for the "Mark all as read" (`'all'`) and `getData`/`getAppData`
+   token-only validator interplay — already both fixed upstream.
+2. Phase 4+ remains gated (must not start).
+
 ### Stray files (not committed)
 - `dash-site-presentation-mode-big-pickle.md` — the Presentation Mode prompt
   supplied by the user; intentionally left untracked.
