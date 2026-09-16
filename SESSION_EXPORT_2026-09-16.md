@@ -589,3 +589,88 @@ path, folding in the three modules that were previously loaded separately
 
 ### Stray files (not committed)
 - (none)
+
+## Phase 3 part-5 — "My Day" operational dashboard (commit `ef5beb7`)
+
+Second Phase-3 item in the user-ordered sequence **5 → 7 → 9 → 3**.
+
+### What was done
+- **New module `src/app/myday.js`** (269 lines, injected after `submissions` in
+  the manifest): `renderMyDay()` fetches the user's own tasks
+  (`ApiService.getMyTasks`) + notifications (`loadNotifications(true)`)
+  concurrently, then renders:
+  - A **TODAY summary strip** (KPI cards): Reviews due, Tasks overdue,
+    Tasks due today, New submissions, Notifications.
+  - A **priority action list** in operational order: Overdue reviews →
+    Overdue tasks → Due-today reviews → Due-today tasks → Unread submissions
+    (editors only) → Unread notifications. Every row has a direct action
+    (`openRecordDetail` / `completeMyDayTask` / `openSubmissionsModal` /
+    `openNotification`); group headers use the `data-tone` badge system;
+    overdue rows get `tone-danger`, due-today `tone-warning`, etc.
+- **Data model**: reviews grouped from `appState.items` via
+  `reviewStatus === 'due'` + `parseDateFieldValue(reviewDate)` vs today;
+  tasks from `getMyTasks` (open = not DONE/CANCELLED; overdue = dueDate <
+  todayStart; today = dueDate in [todayStart, todayEnd)); unread submissions
+  from `appState.submissionFlash`/`submissionCounts` keyed by row
+  (orphans dropped); unread notifications from `appState.notifications.recent`.
+- **Wiring**: `manifest.json` (+`myday` after `submissions`), `entry.js`
+  MODULES (+`'myday.js'`), `session.js` `openTab` (line 261:
+  `if (tabId === 'myday') renderMyDay();`), `app.html` — "My Day" sidebar
+  nav-item (clock/sun icon, after Dashboard) + `<section id="myday">` panel.
+- **CSS** (assets/styles.css, −16 kb region): `.myday-*` component styles
+  (loading, priority grid, groups, items with elided title/meta/date/actions,
+  mobile wrap) + badge `data-tone="secondary|info|primary"` variants (matched
+  the landing.css set) + `kpi-icon.tone-danger`/`tone-info`.
+- **Cache bump**: `SW_VERSION` → `2026.09.16b` (`sw.js`), styles.css
+  cache-buster → `?v=2026.09.16b` (`app.html`).
+
+### Verification
+- `node build/build-app.js` → 20 modules, 8,064 lines; `node build/split-app.js`
+  byte-exact round-trip.
+- `node --check` clean on `app.js`, `src/app/myday.js`, `sw.js`.
+- CSS: braces **657/657** balanced; `var()` undefined audit **0**; non-ASCII
+  intact (7 em-dashes).
+- Server suite **352/352 pass, 0 fail**.
+- Live (git push = deploy, Worker serves raw-GitHub main): `app.html` returns
+  200 with the `data-tab="myday"` nav button; served `app.js` contains
+  `renderMyDay` + `completeMyDayTask`; served `styles.css?v=2026.09.16b` 200
+  with `.myday-*` + `.kpi-icon.tone-danger/info` rules.
+
+### ⚠️ Tooling hazard found this session
+- **`build/split-app.js` is NOT actually non-destructive** — despite its header
+  docstring claiming so, line 84 does `fs.writeFileSync(m.path, slice)` for
+  **every** module on every run, overwriting the source files from `app.js`. A
+  stale/truncated `app.js` therefore silently clobbers modules (this session it
+  truncated `src/app/reports.js` to empty — restored via `git checkout --`).
+  Treat split-app's module write-back as running from a known-good `app.js`
+  only; verify `git diff src/app` after running it.
+
+### Files changed
+- `src/app/myday.js` — new; My Day module.
+- `src/app/manifest.json` — `myday` module entry.
+- `src/app/entry.js` — MODULES +`'myday.js'`.
+- `src/app/session.js` — `openTab` myday dispatch.
+- `app.html` — My Day nav button + panel; styles cache-buster `2026.09.16b`.
+- `assets/styles.css` — `.myday-*` block + badge `data-tone` variants +
+  `tone-danger/info` KPI icon (94 insertions).
+- `app.js` — rebuilt (20 modules, 8,064 lines, +269).
+- `sw.js` — SW_VERSION `2026.09.16b`.
+
+### Commits
+- `ef5beb7` — `feat:` phase-3 part-5 — My Day operational dashboard (pushed to
+  origin/main).
+
+### Pending (Phase 3, user order 5 → 7 → 9 → 3)
+1. **Part 7 — Record detail drawer**: expand `openRecordDetail` into a full
+   drawer — title/description, status, dates, responsibility, linked documents
+   + submissions + tasks, change history, AI insights, and actions (Edit,
+   Create task, Add submission, Attach document, Mark review done, Ask AI).
+2. **Part 9 — Actionable notifications**: unread/read split, grouping,
+   priority, per-item action buttons, push, history, preferences.
+3. **Part 3 — PWA update cue**: cached shell, background update, version
+   detection, "New version available — Update" UI, safe activation, offline
+   indicator, offline activity center (queued/syncing/synced/failed/conflict).
+4. Phase 4+ remains gated (must not start).
+
+### Stray files (not committed)
+- (none)
