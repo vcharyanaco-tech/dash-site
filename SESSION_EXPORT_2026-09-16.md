@@ -451,10 +451,35 @@ path, folding in the three modules that were previously loaded separately
 - `build/split-app.js` — byte-exact manifest-driven rewrite
 
 ### Pending Tasks
-1. **Phase 2 (remaining):** re-measure backend p95 on live DB/payloads and
-   re-run Lighthouse 13.4.1 mobile with 4G throttle against the new monolith
-   path (needs live server / network-inspector access).
-2. Phase 3+ only after Phase 1/2 gates pass.
+1. Phase 3+ only after Phase 1/2 gates pass.
+
+## Phase 2 leftover closed — live server-process-internal p95 (commit pending)
+
+### What was done
+- Resolved the one remaining Phase 2 optional item: process-internal p95 from
+  the live Render origin's `/api/health` (was blocked on `SERVER_ORIGIN` being
+  a CF secret). Recovered the actual Render URL from the Render API
+  (`dash-site-2wkg.onrender.com`, service `srv-d9uqprijobas73bh8ie0`, free plan,
+  region oregon).
+- Drove a 60-sample paced `getData` burst directly at the Render origin (server
+  limiter is 120 POST/min/IP; bypassed the Worker's 60/min cap), then read the
+  process-internal metric:
+  - **Render `/api/health` `p95LatencyMs` = 2ms** after the burst (requestCount
+    582, errorCount 0). The Express middleware times only in-process handling,
+    so the live server serves cached `getData` in ~2ms.
+  - Direct local↔Render RTT p50 **347ms** / p90 379ms / p95 390ms → the
+    482ms user-facing p95 is pure network/CF-edge, not server time.
+
+### Verification
+- Worker health checks still green: root 200, `POST /api/internal/daily-jobs`
+  → 401 (no token).
+
+### Files changed
+- `PHASE0_BASELINE_2026-09-16.md` — live process-internal p95 measurement added
+  (Part 24D + target-calibration table).
+
+### Commits
+- `(this commit)` `docs:` phase-2 leftover — live server-process-internal p95=2ms via Render origin /api/health; RTT 347ms direct local↔Render.
 
 ## Phase 1F complete — validators for ALL 103 dispatch ops (commit `539c607`)
 

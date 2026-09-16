@@ -139,6 +139,16 @@ npm audit, server tests, JS syntax, app.js round-trip), `live-check.yml`.
   p50 **377ms**, p90 **388ms**, p95 **482ms**, max 888ms. RTT-dominated; the local
   19ms p95 remains the process-internal number.
 
+**Backend — LIVE server-process-internal p95 (2026-09-16, direct Render origin):**
+- `getData` burst (60 samples, paced, direct to `dash-site-2wkg.onrender.com`,
+  no Worker/CF edge): p50 **347ms** / p90 **379ms** / p95 **390ms** max 836ms
+  (this machine ↔ Render RTT is ~350ms — network-dominated).
+- Render `/api/health` process-internal metric after the burst:
+  `p95LatencyMs **2ms**` (requestCount 582, errorCount 0). The Express middleware
+  times only in-process handling → **the live server handles cached `getData` in
+  ~2ms**; the 347-482ms user-facing figures are pure network/RTT, not server time.
+- Verdict: **Phase 2 p95 target (process-internal) PASS on live data** — 2ms ≪ 300ms.
+
 **Frontend — Lighthouse 13.4.1, mobile emulation, live site, 2026-09-16:**
 
 Landing (`/`):
@@ -260,6 +270,7 @@ Order follows the reworked prompt's phases. Only items with measureable gates.
 | First dashboard API payload <= 100KB gz | **6.4KB gz** / 67KB decompressed (32 records, live DB, 2026-09-16 re-measure) | **Pass** |
 | No single API response > 1MB | 67KB decompressed / 6.4KB gz (max measured) | **Pass** |
 | p95 API latency < 300ms | 19ms local; **377ms p50 / 482ms p95 live** (end-to-end via Worker incl RTT; 2026-09-16 re-measure) | Local **Pass**; live is RTT-dominated, not server-bound |
+| p95 API latency < 300ms (process-internal, live) | **2ms** (Render `/api/health` `p95LatencyMs`, 2026-09-16 direct-origin re-measure) | **Pass** |
 | Lighthouse perf >= 85 / a11y >= 90 | **92 / 91** (app.html, 4G sim, 2026-09-16 re-measure) | **Pass** |
 | Secret scan + CI | green, wired | Pass |
 | P0/P1 authz tests green | Phase 1 deliverable | Done (1C–1F, 229/229 pass at ship) |
