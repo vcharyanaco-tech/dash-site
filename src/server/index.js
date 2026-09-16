@@ -54,7 +54,12 @@ const AUTH_ARG_INDEX = Object.freeze({
   sendWeeklyReport: 0, adminImportCsv: 1,
   setupEnterpriseAddons: 0, installEnterpriseTriggers: 0,
   validateEnterpriseConfiguration: 0, getEnterpriseHealth: 0,
-  getEnterpriseFrontendConfig: 0
+  getEnterpriseFrontendConfig: 0,
+  setRecordDisplay: 2, generateReviewNotifications: 0,
+  reconcileRecordOrder: 1, exportFullBackup: 0,
+  adminSyncFromSheet: 0, adminPreviewSyncFromSheet: 0, adminPushToSheet: 0,
+  setOpenRouterApiKey: 0, setGeminiApiKey: 0, setGroqApiKey: 0,
+  setHuggingFaceApiKey: 0, setKiloApiKey: 0
 });
 
 // ── Trusted origins for CORS ─────────────────────────────────────────────
@@ -217,8 +222,16 @@ app.post(API_PREFIX, async function (req, res) {
     }
     const cookieToken = parseCookie_(req.headers.cookie || '')[SESSION_COOKIE] || '';
     const authIndex = AUTH_ARG_INDEX[fn];
-    if (cookieToken && authIndex !== undefined && !args[authIndex]) {
-      args[authIndex] = cookieToken;
+    if (cookieToken && authIndex !== undefined) {
+      if (!args[authIndex]) {
+        args[authIndex] = cookieToken;
+      }
+      // For ops where browser sends only the data arg (e.g. ['apiKey']),
+      // the data occupies the token slot. Move it aside and inject the
+      // cookie token at the correct position.
+      else if (authIndex === 0 && args.length === 1 && typeof args[0] === 'string') {
+        args.unshift(cookieToken);
+      }
     }
     // Item 8: Input validation for known functions
     const validator = VALIDATORS[fn];
@@ -390,6 +403,63 @@ const VALIDATORS = {
   },
   uploadDocument: function (args) {
     if (args.length < 6) return 'uploadDocument requires (row, recordId, fileName, fileBytes, mimeType, token)';
+    return null;
+  },
+  changePassword: function (args) {
+    if (args.length < 3) return 'changePassword requires (currentPassword, newPassword, token)';
+    if (typeof args[0] !== 'string' || typeof args[1] !== 'string') return 'passwords must be strings';
+    return null;
+  },
+  markReviewDone: function (args) {
+    if (args.length < 2) return 'markReviewDone requires (row, token)';
+    return null;
+  },
+  markReviewNotDone: function (args) {
+    if (args.length < 2) return 'markReviewNotDone requires (row, token)';
+    return null;
+  },
+  adminUpdateUser: function (args) {
+    if (args.length < 3) return 'adminUpdateUser requires (email, fields, token)';
+    if (typeof args[0] !== 'string' || !args[0].trim()) return 'email is required';
+    if (!args[1] || typeof args[1] !== 'object') return 'fields must be an object';
+    return null;
+  },
+  emailReport: function (args) {
+    if (args.length < 3) return 'emailReport requires (token, recipient, templateKey)';
+    if (typeof args[1] !== 'string' || !args[1].trim()) return 'recipient is required';
+    return null;
+  },
+  getReportData: function (args) {
+    if (args.length < 2) return 'getReportData requires (token, templateKey)';
+    return null;
+  },
+  exportFullBackup: function (args) {
+    if (args.length < 1) return 'exportFullBackup requires (token)';
+    return null;
+  },
+  setOpenRouterApiKey: function (args) {
+    if (args.length < 2) return 'setOpenRouterApiKey requires (token, apiKey)';
+    if (typeof args[1] !== 'string' || !args[1].trim()) return 'apiKey is required';
+    return null;
+  },
+  setGeminiApiKey: function (args) {
+    if (args.length < 2) return 'setGeminiApiKey requires (token, apiKey)';
+    if (typeof args[1] !== 'string' || !args[1].trim()) return 'apiKey is required';
+    return null;
+  },
+  setGroqApiKey: function (args) {
+    if (args.length < 2) return 'setGroqApiKey requires (token, apiKey)';
+    if (typeof args[1] !== 'string' || !args[1].trim()) return 'apiKey is required';
+    return null;
+  },
+  setHuggingFaceApiKey: function (args) {
+    if (args.length < 2) return 'setHuggingFaceApiKey requires (token, apiKey)';
+    if (typeof args[1] !== 'string' || !args[1].trim()) return 'apiKey is required';
+    return null;
+  },
+  setKiloApiKey: function (args) {
+    if (args.length < 2) return 'setKiloApiKey requires (token, apiKey)';
+    if (typeof args[1] !== 'string' || !args[1].trim()) return 'apiKey is required';
     return null;
   }
 };
