@@ -153,8 +153,7 @@ Modules, roughly in order of appearance:
 1. **Constants & helpers** — `APP_VERSION = '1.0.0'`, `APP_BUILD`, DOM helpers
    (`getEl`, `escapeHtml`, `escAttr`), `renderLinkableText`, `parseQueryParams`,
    `debounce`, `svgIcon`, toast/overlay, splash handling.
-2. **Session & auth** — `getAuthToken`/`setAuthToken` (reads/writes the
-   `indiaPostAuthToken` localStorage key), `isAuthError`, `handleServerFailure`,
+2. **Session & auth** — `isAuthError`, `handleServerFailure`,
    login/forgot/reset forms, `logout`.
 3. **App chrome** — `initApp` (bootstraps `loadApp`), `loadApp` (calls
    `getAppData`), theme/dark mode, sidebar, profile menu, tab switching,
@@ -176,8 +175,11 @@ Modules, roughly in order of appearance:
     `renderSubmissionList`, add/edit (`submitSubmission`), `lockSubmission`,
     `unlockSubmission`, `deleteSubmission`, display toggle.
 
-The client calls server functions via `google.script.run` and always passes the
-session token (`getAuthToken()`) as a trailing argument to protected endpoints.
+The client calls server functions via `/api` XHR. **Auth is cookie-only**: the
+server sets an HttpOnly `dash_session` cookie on login and the browser sends no
+token argument at all. On each call the server injects the cookie token at the
+op's `AUTH_ARG_INDEX` slot (shift/appending data as needed) — see
+`src/server/index.js` and `src/server/index-dispatch.js`.
 
 ## 4. Data model
 
@@ -199,21 +201,24 @@ See Submissions section above.
 
 ## 5. Auth flow
 
-1. `doGet` serves the page; the client checks for a stored token.
-2. If present, `validateSession(token)` is called; on success `loadApp()` loads
-   `getAppData(token)`.
+1. `doGet` serves the page; the client calls `getAppData()` with no token.
+2. A valid `dash_session` cookie authenticates the request; on success
+   `loadApp()` renders the dashboard. No token is stored client-side
+   (localStorage/XHR carry none).
 3. Login (`login(email, password)`) validates, verifies the hash, issues a
-   session token, and returns `{ success, token, mustChange, user }`.
+   session token, and sets the HttpOnly `dash_session` cookie
+   (`{ success, mustChange, user }`).
 4. If `mustChange` is true the user is forced to change their password.
 5. "Forgot password" emails a one-time link (`?resetToken=…&email=…`) valid for
    30 minutes.
 6. Every protected server function calls `requireLogin_(token)` /
-   `requireEditor_(token)` / `requireAdmin_(token)`.
+   `requireEditor_(token)` / `requireAdmin_(token)`, where `token` is the
+   cookie-injected session token.
 
 ## 6. Key security notes
 
 - Passwords are never stored in plain text (salted, 500× SHA-256).
-- Sessions expire after 6 hours; logout destroys the token.
+- Sessions expire after 6 hours; logout clears the session and its cookie.
 - Failed logins are rate-limited per email address.
 - The bootstrap admin is a fixed address in `ADMIN_USERS` and cannot be deleted
   from the admin UI; change its password on first login.

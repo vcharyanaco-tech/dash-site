@@ -83,15 +83,16 @@ Full server suite now **121/121 pass, 0 fail, ~20s**; coverage 77.75% stmt /
 - Full suite: **152/152 pass**; secret scan green (167 tracked files).
 - Commits: `299975a` (1C unit) + `301e45d` (session-export doc), both pushed.
 
-## This continuation (1D)
+## This continuation (1D → 1E → 1B)
 
-User resumed the session and greenlit Phase 1D. Implementation landed in the
-"Phase 1D — Implementation" section below (commit `c4e210a`); the investigation
-findings it was based on are preserved at the end as historical reference.
+User resumed the session and greenlit Phase 1D, then 1E, then 1B. Implementation
+landed in the sections below (commits `c4e210a`, `7f350a5`); the 1D investigation
+it was based on is preserved at the end as historical reference.
 
 ## Verification
-- `src/server`: `npm test` → 196/196 pass, 0 fail (Phase 1D final); earlier 152/152.
-- `node --check` on touched server/front files → clean.
+- `src/server`: `npm test` → 229/229 pass, 0 fail (final after 1B); earlier
+  196/196 (1D), 222/222 (1E), 152/152 (baseline).
+- `node --check` on all touched server/front files → clean.
 - Secret scan → green (167 tracked files).
 - Lighthouse + p95 + bundle measurements in baseline doc.
 
@@ -101,12 +102,22 @@ findings it was based on are preserved at the end as historical reference.
 2. `299975a` `fix:` phase-1C authorization audit — requireViewer login-gated,
    cookie-token aware audit/history reads, dispatch-level auth for enterprise
    config & cron ops; authz role-matrix test suite.
-3. `c4e210a` (this session, pending push) `feat:` phase-1D dispatch hardening —
-   cookie-token injection for 12 ops + 8 new validators + 44 tests.
+3. `124437a` `docs:` session export 2026-09-16 — Phase 1D implementation + updated
+   pending tasks (pushed alongside `c4e210a`).
+4. `c4e210a` `feat:` phase-1D dispatch hardening — cookie-token injection for
+   12 ops + 8 new validators + 44 tests.
+5. `7f350a5` `test:` phase-1E file-upload edge cases — MIME allowlist matrix,
+   size cap rejection, filename sanitization/truncation, base64 validation,
+   anonymous/garbage-token auth gates, resolveDocumentFile key integrity (26 tests).
+6. (pending push) `feat:` phase-1B cookie-only auth — kill vestigial browser
+   token plumbing, generalize cookie injection, +7 injection tests.
 
 ## Deployment
-- Server change (`src/server/index.js`, run-tests.cjs) → Render auto-deploys.
-- `run-tests.cjs`/`smoke.test.js` are CI-only (no prod impact).
+- Server change (`src/server/index.js`, run-tests.cjs, +tests) → Render auto-deploys.
+- Client `src/app/*` + rebuilt `app.js` → static host; push triggers deploy of
+  the cookie-only frontend. Be aware old cached browsers still send `getAuthToken()`
+  (`''`) for a few minutes — the generalized middleware treats an empty slot as
+  data to shift, so those stale calls keep working during rollout.
 
 ## Phase 1D — Implementation (third session unit)
 
@@ -136,15 +147,46 @@ findings it was based on are preserved at the end as historical reference.
   `node --check` clean on both touched files.
 - Commit `c4e210a` (NOT yet pushed).
 
+## Phase 1B — Cookie-only auth migration (final unit, this session)
+
+### What was done
+- **Browser token plumbing deleted** — `getAuthToken`, `setAuthToken` and the
+  `STORAGE_TOKEN`/`indiaPostAuthToken` localStorage constant removed from
+  `src/app/session.js`, `src/app/core.js` and the rebuilt root `app.js` (~90
+  `getAuthToken()` call sites + 12 `setAuthToken()` call sites). `app.js`
+  regenerated via `node build/build-app.js` (16 modules, 7052 lines).
+- **init.js push bug fixed** — `subscribePush(getAuthToken(), sub.toJSON())` put
+  `''` in the subscription slot and DROPPED the real subscription; now
+  `subscribePush(sub.toJSON())` (same for `unsubscribePush(endpoint)`).
+- **Generalized cookie-injection middleware** (`index.js`) replaces the 1D
+  fill/unshift logic: with a cookie present it splices the cookie token at the
+  op's `AUTH_ARG_INDEX` slot — a token-shaped string (64 hex chars,
+  `uuid_()+uuid_()`) in the slot is replaced by the cookie (cookie authoritative);
+  otherwise data is shifted rightward. Token-first ops (`getSubmissions(cardRow)`,
+  `emailReport(recipient,key)`, `getMeetingFile(name)`, `setFathomApiKey(apiKey)`,
+  …) now work with purely data args. Stale cached browsers that still send `''`
+  keep working (empty slot → data path).
+- **`AUTH_ARG_INDEX` + `VALIDATORS` now exported** from `index.js`.
+- **`dispatch-client-args.test.js` rewritten** to mirror the middleware: evalArgs
+  parses the real ApiService block from app.js, splices `TOKEN` at
+  `AUTH_ARG_INDEX[api]`, replays through the dispatch (arg-order lock retained).
+- **New `tests/cookie-injection.test.js`** — 7 HTTP-level tests: append-token
+  (addItem), token-first (getSubmissions, getMeetingFile past-auth),
+  stale-64-hex-token replaced by cookie, no-cookie → login required, single-arg
+  apiKey through the generalized splice.
+- Full suite **229/229 pass**; `node --check` clean on all touched files.
+- Commit pending push.
+
 ## Pending Tasks
-1. **Push `c4e210a`** (or confirm before pushing).
+1. **Push the 1B commit** (or confirm before pushing).
 2. **Phase 1 — P0 Security (in progress):**
    - 1C ✅ authorization audit + authz.test.js.
-   - 1D ✅ validators + AUTH_ARG_INDEX gaps closed (this session).
-   - 1E file-upload test coverage (size/MIME/name edge cases, bad base64, wrong
-     key) — next.
-   - 1B auth-cookie migration assessment (kill vestigial browser-token
-     `getAuthToken()` path → document cookie-only design).
+   - 1D ✅ validators + AUTH_ARG_INDEX gaps closed.
+   - 1E ✅ file-upload edge-case test coverage (26 tests).
+   - 1B ✅ cookie-only auth migration (browser token plumbing removed).
+   - **1F + follow-ups queued:** validator coverage audit (only 22 of 103 ops
+     validated); AUTH_ARG_INDEX completeness re-scan; Authorization header /
+     Bearer-gated cron-path regression check after the arg-injection change.
 3. Phase 2 (measured perf): ship app.js monolith as prod load path, re-measure on
    live DB/payloads, re-run Lighthouse with 4G throttle.
 4. Phase 3+ only after Phase 1/2 gates pass.
