@@ -454,9 +454,55 @@ path, folding in the three modules that were previously loaded separately
 1. **Phase 2 (remaining):** re-measure backend p95 on live DB/payloads and
    re-run Lighthouse 13.4.1 mobile with 4G throttle against the new monolith
    path (needs live server / network-inspector access).
-2. **Phase 1F (remaining, optional):** validators for the low-risk read /
-   informational ops still lacking them (~53 ops).
-3. Phase 3+ only after Phase 1/2 gates pass.
+2. Phase 3+ only after Phase 1/2 gates pass.
+
+## Phase 1F complete — validators for ALL 103 dispatch ops (commit `539c607`)
+
+### What was done
+- Added **53 new VALIDATORS** (151 total validator entries; **VALIDATORS now
+  covers 103/103 dispatch ops**), grouped in `index.js`:
+  - public/no-token (reject any arg): `getServerTime`, `getData`,
+    `getSyncStatus`, `getReportTemplates`; `getTranslations` (0 or 1 string),
+    `requestPasswordReset` (non-empty identifier).
+  - token-only token@0 (require ≥1 arg): `getAppData`,
+    `generateReviewNotifications`, `logout`, `validateSession`,
+    `refreshSession`, `adminGetUsers`, `adminExportUsers`,
+    `adminGetUserActivity`, `getAssignableUsers`, `getMyNotifications`,
+    `clearMyNotifications`, `getTaskCounts`, `getMyTasks`,
+    `getDashboardPreferences`, `sendWhatsAppReviewReminders`,
+    `getAiInsights`, `getAllAskLinkHistory`, `listMeetingFiles`,
+    `getFathomStatus`, `listFathomUsers`, `getFathomMeetingStats`,
+    `getEnterpriseFrontendConfig`, `setupEnterpriseAddons`,
+    `installEnterpriseTriggers`, `validateEnterpriseConfiguration`,
+    `getEnterpriseHealth`, `adminSyncFromSheet`,
+    `adminPreviewSyncFromSheet`, `adminPushToSheet`.
+  - token-first with data (token@0): `getSubmissions` (≥1 arg),
+    `getCardAiInsight`/`getLinkContentAiInsight` (token,row),
+    `askLinkAi` (token,row,question), `saveAskLinkHistory`
+    (token,row,history-array), `getMeetingFile` (token,name),
+    `listFathomMeetings`/`searchFathomMeetings` (≥1 arg),
+    `getFathomMeetingContent`/`getRecordingDownloadLink`
+    (token,recordingId), `bulkGetRecordingDownloadLinks`
+    (token,recordingIds-array).
+  - append-token token@1: `getRecordHistory`/`getRecordDocuments`
+    (row,token), `getAuditEntries` (limit,token), `getTasks`
+    (filters-object,token), `processMeetingRecording`/
+    `transcribeMeetingSegment`/`generateMeetingMinutes`
+    (payload-object,token).
+- Tests: `authz.test.js` requireLoginOps regex relaxed to
+  `/requires \(.*token\)/i`; `cookie-injection.test.js` AUTH_ERROR_RE gained
+  `requires \(.*token\)`; `validators.test.js` **+66 new validator cases**.
+- **Suite: 352 / 352 pass** (was 285). `node --check` clean on all changed JS.
+
+### Files changed
+- `src/server/index.js` — +53 VALIDATORS (read/informational ops)
+- `src/server/tests/validators.test.js` — +66 validator cases
+- `src/server/tests/authz.test.js` — relaxed requireLoginOps regex
+- `src/server/tests/cookie-injection.test.js` — AUTH_ERROR_RE regex
+
+### Commits
+- `539c607` — `feat:` phase-1F validators — 53 read/informational ops
+  (pushed to origin/main).
 
 ### Stray files (not committed)
 - (none)
