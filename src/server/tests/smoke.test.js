@@ -14,6 +14,7 @@ const { server } = require('../index');
 
 let port;
 let token;
+let cookie = '';
 
 before(async function () {
   await new Promise(function (resolve) {
@@ -28,10 +29,12 @@ after(function () {
   server.close();
 });
 
-async function post(fn, args) {
+async function post(fn, args, useCookie) {
+  const headers = { 'Content-Type': 'text/plain' };
+  if (useCookie && cookie) headers.Cookie = cookie;
   const resp = await fetch('http://127.0.0.1:' + port + '/api', {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
+    headers: headers,
     body: JSON.stringify({ function: fn, args: args || [] })
   });
   const body = await resp.json();
@@ -58,11 +61,19 @@ test('unknown function returns error', async function () {
 });
 
 test('admin login + validateSession', async function () {
-  const res = await post('login', ['vcharyanaco@gmail.com', password]);
-  assert.strictEqual(res.success, true);
-  assert.ok(res.token);
-  token = res.token;
-  assert.strictEqual(res.user.role, 'ADMIN');
+  const resp = await fetch('http://127.0.0.1:' + port + '/api', {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ function: 'login', args: ['vcharyanaco@gmail.com', password] })
+  });
+  const res = await resp.json();
+  assert.strictEqual(res.result.success, true);
+  assert.ok(res.result.token);
+  token = res.result.token;
+  cookie = (resp.headers.get('set-cookie') || '').split(';')[0];
+  assert.ok(cookie.startsWith('dash_session='));
+  assert.match(resp.headers.get('set-cookie') || '', /HttpOnly/i);
+  assert.strictEqual(res.result.user.role, 'ADMIN');
 
   const vs = await post('validateSession', [token]);
   assert.strictEqual(vs.success, true);
@@ -242,7 +253,9 @@ test('documents: upload, list, GET /files, delete', async function () {
   const list = await post('getRecordDocuments', [4, token]);
   assert.ok(list.some(function (d) { return d.id === uploaded.id; }));
 
-  const resp = await fetch('http://127.0.0.1:' + port + '/api/files/' + uploaded.driveFileId);
+  const resp = await fetch('http://127.0.0.1:' + port + '/api/files/' + uploaded.driveFileId, {
+    headers: cookie ? { Cookie: cookie } : {}
+  });
   assert.strictEqual(resp.status, 200);
   const text = await resp.text();
   assert.strictEqual(text, 'Hello world');

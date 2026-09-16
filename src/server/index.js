@@ -201,9 +201,10 @@ function readBodyJson(req) {
 }
 
 app.post(API_PREFIX, async function (req, res) {
+  let fn = 'unknown';
   try {
     const body = await readBodyJson(req);
-    const fn = body && body.function;
+    fn = body && body.function;
     const args = body && Array.isArray(body.args) ? body.args : [];
     const fnRef = typeof fn === 'string' ? dispatch[fn] : null;
     if (typeof fnRef !== 'function') {

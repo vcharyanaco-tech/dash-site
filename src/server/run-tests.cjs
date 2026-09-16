@@ -27,9 +27,15 @@ if (seed.status !== 0) {
   process.exit(1);
 }
 
+// NOTE: test files run with --test-concurrency=1. `node --test` otherwise
+// spawns each test file as a parallel child process; every file shares the
+// single seeded scratch DB (DASH_DATA_DIR above) and each file's
+// test-bootstrap.js re-seeds the admin password with its own random value.
+// Parallel execution therefore races on one SQLite DB (flaky login failures
+// and 5-minute SQLITE_BUSY hangs). Serial execution is deterministic.
 const child = spawn(
   process.execPath,
-  ['--test', '--experimental-test-coverage'],
+  ['--test', '--experimental-test-coverage', '--test-concurrency=1'],
   { stdio: 'inherit', cwd: __dirname }
 );
 
