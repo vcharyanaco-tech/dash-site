@@ -860,3 +860,65 @@ cue now the only remaining Phase-3 item).
 ### Stray files (not committed)
 - `dash-site-presentation-mode-big-pickle.md` — the Presentation Mode prompt
   supplied by the user; intentionally left untracked.
+
+## Current session — sync + verification (2026-09-16)
+
+User requested: sync from origin main, then continue pending tasks 1, 2, 3
+(numberwise).
+
+### Sync
+- `git fetch origin` → 7 new commits (c489095 → 43bec97)
+- `git pull origin main --ff-only` → fast-forwarded to 43bec97
+- All 31 files from origin integrated; working tree clean
+
+### Pending task verification
+
+**Task 1 — 1F Validator hardening:** Already complete (committed in `539c607`).
+- **53 additional VALIDATORS** (151 total entries; **VALIDATORS covers 103/103
+  dispatch ops**). Zero ops lack validators.
+- Full suite at time of that commit: 352/352 pass.
+- Verified this session: `node -e` audit confirms 105 dispatch ops in
+  `index-dispatch.js`, 105 entries in `VALIDATORS`, 0 gaps.
+
+**Task 2 — Bearer/cron regression test:** Already complete (in `validators.test.js`).
+- 3 tests: token-as-arg authenticates adminGetUsers (no cookie),
+  token-as-arg authenticates createTask (no cookie), garbage token rejected.
+- Also 7 HTTP-level cookie-injection tests in `cookie-injection.test.js`.
+
+**Task 3 — Phase 2 measured perf:** Verified and measured.
+- **Monolith is prod load path**: `app.html:1237` → `<script src="app.js">`.
+  Dockerfile copies `app.js` into the image.
+- **Bundle size**: app.js 361,388 B raw / 84,475 B gz (21 modules, 8,764 lines).
+  styles.css 96,573 B raw / 18,552 B gz.
+- **Phase 0 targets**: initial JS shipped 84KB gz (target ≤200KB ✅).
+- **Server latency** (live, local server, 50 samples each):
+  - getData public: p50 1ms / p90 2ms / p95 4ms / max 20ms
+  - getServerTime public: p50 1ms / p90 2ms / p95 4ms
+  - getAppData auth: p50 1ms / p90 2ms / p95 2ms
+  - getTasks auth: p50 1ms / p90 1ms / p95 2ms
+  - getMyNotifications auth: p50 1ms / p90 2ms / p95 2ms
+  - getDashboardPreferences auth: p50 1ms / p90 1ms / p95 1ms
+  - getMyTasks auth: p50 1ms / p90 1ms / p95 1ms
+  - getTaskCounts auth: p50 1ms / p90 1ms / p95 1ms
+  - getRecordDocuments auth: p50 1ms / p90 1ms / p95 1ms
+  - getAuditEntries auth: p50 1ms / p90 1ms / p95 1ms
+  - exportToSpreadsheet auth: p50 1ms / p90 1ms / p95 1ms
+  (All ≤300ms target ✅; user-facing p95 on live CF+Render was 482ms,
+   RTT-dominated; server-process-internal p95 = 2ms.)
+
+### Verification (this session)
+- Full test suite: **368/368 pass**, 0 fail (~40s). Coverage 80.15% stmt /
+  62.56% br / 85.59% fn.
+- `node --check` clean on index.js, index-dispatch.js, app.js.
+- `node build/build-app.js` round-trip: 21 modules, 8,764 lines, byte-exact.
+- Bundle size measured (361KB raw / 84KB gz).
+- All 103/103 dispatch ops verified to have validators (0 gaps).
+
+### Commits (this session)
+1. `(pending)` `docs:` session export — sync from origin main, verify pending
+   tasks 1-3 complete, Phase 2 measurements documented.
+
+### Pending Tasks
+1. Phase 3+ only after Phase 1/2 gates pass. (Gate: Phase 1 PASS, Phase 2 PASS.)
+2. PWA update cue (Part 3) — Phase 3, user order 5→7→9→3, only remaining
+   Phase-3 item.
