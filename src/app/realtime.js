@@ -11,7 +11,7 @@ var sseConnected = false;
 
 function connectSse() {
   if (sseSource) return; // already connected
-  if (!getAuthToken()) return; // not logged in
+  if (!appState.user || !appState.user.loggedIn) return; // not logged in
   if (typeof EventSource === 'undefined') return; // browser doesn't support SSE
 
   sseSource = new EventSource(API_URL.replace('/api', '/api/events'));
@@ -37,7 +37,7 @@ function connectSse() {
     sseSource = null;
     // Exponential backoff reconnect
     setTimeout(function () {
-      if (getAuthToken()) connectSse();
+      if (appState.user && appState.user.loggedIn) connectSse();
     }, sseRetryMs);
     sseRetryMs = Math.min(sseMaxRetryMs, sseRetryMs * 2);
   };
@@ -75,7 +75,7 @@ function stopSessionRefresh() {
 }
 
 function sessionRefreshTick() {
-  if (!getAuthToken()) return;
+  if (!appState.user || !appState.user.loggedIn) return;
   ApiService.refreshSession().then(function (result) {
     if (!result || !result.success) {
       // Session expired or invalid — log out

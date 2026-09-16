@@ -21,7 +21,8 @@ Roles and capabilities:
 
 1. Open the dashboard URL (see the [Deployment Guide](Deployment%20Guide.md)).
 2. Sign in with `vcharyanaco@gmail.com` and the initial password supplied during
-   setup (`Admin@123` by default).
+   setup. Set `DASH_BOOTSTRAP_ADMIN_PASSWORD` in the deployment secret manager
+   before the first start; the value is never stored in source control.
 3. You will be forced to choose a new password before the dashboard loads.
    Change it again any time under **Settings → Change password**.
 

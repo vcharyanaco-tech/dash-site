@@ -120,7 +120,10 @@ function checkRateLimit_(request) {
 function applySecurityHeaders(response, request) {
   const headers = new Headers(response.headers);
   const origin = corsOriginFor(request);
-  if (origin) headers.set('Access-Control-Allow-Origin', origin);
+  if (origin) {
+    headers.set('Access-Control-Allow-Origin', origin);
+    headers.set('Access-Control-Allow-Credentials', 'true');
+  }
   else headers.delete('Access-Control-Allow-Origin');
   headers.set('X-Frame-Options', 'SAMEORIGIN');
   headers.set('Content-Security-Policy', "frame-ancestors 'self'");
@@ -142,6 +145,7 @@ export default {
           ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}),
           'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Credentials': 'true',
           'Access-Control-Max-Age': '86400',
         },
       });
@@ -575,6 +579,8 @@ async function forwardToServer(request, url, serverOrigin) {
   if (ct) fwd.set('Content-Type', ct);
   const auth = request.headers.get('Authorization');
   if (auth) fwd.set('Authorization', auth);
+  const cookie = request.headers.get('Cookie');
+  if (cookie) fwd.set('Cookie', cookie);
   fwd.set('User-Agent', 'Mozilla/5.0');
 
   const isGetHead = request.method === 'GET' || request.method === 'HEAD';

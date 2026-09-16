@@ -14,6 +14,7 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 
+const { password } = require('./test-bootstrap');
 const { server } = require('../index');
 const { db } = require('../db');
 
@@ -49,7 +50,7 @@ async function post(fn, args) {
  * ============================================================ */
 
 test('admin login', async function () {
-  const res = await post('login', ['vcharyanaco@gmail.com', 'Admin@123']);
+  const res = await post('login', ['vcharyanaco@gmail.com', password]);
   assert.strictEqual(res.success, true);
   assert.ok(res.token);
   token = res.token;

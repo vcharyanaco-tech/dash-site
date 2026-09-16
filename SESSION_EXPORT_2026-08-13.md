@@ -74,10 +74,10 @@ configuration.
   the Worker.
 
 ## Admin password rotated (live staging)
-- Default `Admin@123` changed on Railway staging for `vcharyanaco@gmail.com`.
-- Final password chosen by owner: **`Vish@9194`** (verified: login success,
-  old + generated passwords rejected). App-format hash, so the boot re-seed
-  won't override it; `mustChange` cleared.
+- The bootstrap admin password was rotated on Railway staging for
+  `vcharyanaco@gmail.com` (secret value intentionally omitted).
+- Login was verified and `mustChange` cleared. App-format hashes are preserved
+  so bootstrap configuration cannot override a changed password.
 - Temp file holding the interim generated password deleted on request.
 
 ## Browser verification (headless Chrome via CDP, no packages)
@@ -108,7 +108,7 @@ configuration.
   - bare `POST /api` dispatcher + `POST /macros/s/.../exec` (the live
     frontend's actual API_URL) → `{"result":<epoch ms>}` from the Node server
     (x-railway headers present)
-  - **login via the live `/macros` path with `Vish@9194`** →
+  - **login via the live `/macros` path with the configured admin secret** →
     `success:true, role:ADMIN`, token issued (full path: frontend → Worker →
     Node → SQLite)
   - static pages `/`, `/app.html`, `/app.js`, `/assets/styles.css`,

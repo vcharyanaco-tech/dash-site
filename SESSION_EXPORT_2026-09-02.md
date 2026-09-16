@@ -103,7 +103,7 @@ Implemented all features from the Fathom API Dev Notes (September 2026) plus add
 
 ## Server Status
 - Server running at `http://localhost:8787/app.html`
-- Login: `vcharyanaco@gmail.com` / `Admin@123`
+- Login: `vcharyanaco@gmail.com` (password intentionally omitted)
 
 ## Deployment
 - Changes pushed to `origin/main`

@@ -18,6 +18,17 @@ const { uuid_, now_, runWithLock_ } = require('./helpers');
 const auth = require('./auth');
 
 const UPLOADS_DIR = path.join(__dirname, '..', '..', 'data', 'uploads');
+const MAX_UPLOAD_BYTES = Number(process.env.DASH_MAX_UPLOAD_BYTES || 25 * 1024 * 1024);
+const ALLOWED_MIME_TYPES = new Set([
+  'application/pdf',
+  'text/plain',
+  'text/csv',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'image/jpeg',
+  'image/png'
+]);
 
 function ensureUploadsDir_() {
   if (!fs.existsSync(UPLOADS_DIR)) {
@@ -89,8 +100,18 @@ function getRecordDocuments(recordRow, token) {
 function uploadDocument(recordRow, recordId, fileName, base64, mimeType, token) {
   const user = auth.requireLogin(token);
   const safeName = sanitizeFileName_(fileName);
-  const bytes = Buffer.from(String(base64 || ''), 'base64');
+  const declaredMime = String(mimeType || '').toLowerCase().trim();
+  if (!ALLOWED_MIME_TYPES.has(declaredMime)) throw new Error('Unsupported document type.');
+  const encoded = String(base64 || '').trim();
+  if (!encoded || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || encoded.length % 4 === 1) {
+    throw new Error('Invalid file content.');
+  }
+  const bytes = Buffer.from(encoded, 'base64');
   if (!bytes.length) throw new Error('Empty file content.');
+  if (bytes.length > MAX_UPLOAD_BYTES) throw new Error('File exceeds the ' + Math.round(MAX_UPLOAD_BYTES / 1024 / 1024) + ' MB limit.');
+
+  const record = db.prepare('SELECT id FROM records WHERE row = ?').get(Number(recordRow) || 0);
+  if (!record) throw new Error('Record not found.');
 
   return runWithLock_(function () {
     ensureUploadsDir_();
@@ -99,7 +120,7 @@ function uploadDocument(recordRow, recordId, fileName, base64, mimeType, token) 
     fs.writeFileSync(target, bytes);
 
     const rowNum = Number(recordRow) || 0;
-    const doc = addDocument_(rowNum, String(recordId || ''), safeName, fileKey, String(mimeType || 'application/octet-stream'), bytes.length, user.email);
+    const doc = addDocument_(rowNum, String(recordId || ''), safeName, fileKey, declaredMime, bytes.length, user.email);
 
     try {
       require('./notifications').notifyStaffLocked_(NOTIFICATION_TYPES.RECORD, 'Document added', 'Document "' + safeName + '" was added to record #' + rowNum + ' by ' + user.email + '.', '', user.email);
@@ -144,6 +165,8 @@ function setDocumentKeep(docId, keep, token) {
 function resolveDocumentFile(fileKey) {
   const row = db.prepare('SELECT * FROM documents WHERE file_key = ?').get(String(fileKey || ''));
   if (!row) return null;
+  auth.requireLogin(arguments.length > 1 ? arguments[1] : '');
+  if (!/^[a-f0-9]{32}$/i.test(String(row.file_key || ''))) return null;
   ensureUploadsDir_();
   const p = path.join(UPLOADS_DIR, String(row.file_key));
   if (!fs.existsSync(p)) return null;

@@ -38,7 +38,7 @@ Replaced single-select dropdowns with multi-select chip/tag UI for:
 ### Server status
 - Server running at `http://localhost:8787/app.html`
 - PID: 13560
-- Login: `vcharyanaco@gmail.com` / `Admin@123`
+- Login: `vcharyanaco@gmail.com` (password intentionally omitted)
 
 ### Tests
 - 108/109 tests pass (1 pre-existing failure)

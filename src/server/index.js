@@ -23,6 +23,35 @@ const { cspMiddleware } = require('./csp');
 const PORT = Number(process.env.PORT || process.env.DASH_PORT || 8787);
 const STATIC_ROOT = process.env.DASH_STATIC_ROOT || path.join(__dirname, '..', '..');
 const API_PREFIX = '/api';
+const SESSION_COOKIE = 'dash_session';
+const AUTH_ARG_INDEX = Object.freeze({
+  getAppData: 0, addItem: 1, updateItem: 1, deleteItem: 1,
+  markReviewDone: 1, markReviewNotDone: 1, logout: 0, validateSession: 0,
+  refreshSession: 0, changePassword: 2, adminGetUsers: 0, adminAddUser: 7,
+  adminUpdateUser: 2, adminExportUsers: 0, adminImportUsers: 1,
+  adminGetUserActivity: 0, adminDeleteUser: 1, adminResetPassword: 2,
+  adminEmailAllUsers: 2, getAssignableUsers: 0, getMyNotifications: 0,
+  markNotificationsRead: 1, clearMyNotifications: 0, getTaskCounts: 0,
+  createTask: 1, getTasks: 1, getMyTasks: 0, updateTask: 2, deleteTask: 1,
+  getDashboardPreferences: 0, saveDashboardPreferences: 1,
+  getReportData: 1, exportToSpreadsheet: 0, createPdfReport: 0,
+  emailReport: 0, getRecordDocuments: 1, uploadDocument: 5,
+  deleteDocument: 1, setDocumentKeep: 2, getSubmissions: 0,
+  addSubmission: 3, updateSubmission: 2, lockSubmission: 1,
+  unlockSubmission: 1, deleteSubmission: 1, markAllSubmissionsRead: 0,
+  toggleSubmissionDisplay: 1, adminDeleteAuditRows: 1, adminClearAudit: 0,
+  exportReviewCalendarIcs: 0, sendWhatsAppReviewReminders: 0,
+  getAiInsights: 0, getCardAiInsight: 0, getLinkContentAiInsight: 0,
+  askLinkAi: 0, getAllAskLinkHistory: 0, saveAskLinkHistory: 0,
+  processMeetingRecording: 1, transcribeMeetingSegment: 1,
+  generateMeetingMinutes: 1, listMeetingFiles: 0, getMeetingFile: 0,
+  deleteMeetingFile: 0, getFathomStatus: 0, setFathomApiKey: 0,
+  listFathomMeetings: 0, getFathomMeetingContent: 0,
+  getRecordingDownloadLink: 0, listFathomUsers: 0, searchFathomMeetings: 0,
+  getFathomMeetingStats: 0, bulkGetRecordingDownloadLinks: 0,
+  subscribePush: 1, unsubscribePush: 1, sendReviewDeadlinePushNotifications: 0,
+  sendWeeklyReport: 0, adminImportCsv: 1
+});
 
 // ── Trusted origins for CORS ─────────────────────────────────────────────
 const TRUSTED_ORIGINS = new Set([
@@ -40,6 +69,11 @@ if (process.env.NODE_ENV !== 'production') {
 // the Cloudflare Worker. Local dev has no Cloudflare, so the
 // server-side limiter is the only protection.
 const RATE_LIMIT_ENABLED = process.env.RATE_LIMIT_DISABLED !== '1';
+const metrics = {
+  requests: 0,
+  errors: 0,
+  latencies: []
+};
 
 // NOTE: the baked-in src/server/migration-export/*.csv snapshot is no longer
 // auto-imported on boot. The live SQLite DB (restored from the KV backup
@@ -58,6 +92,18 @@ try {
 const app = express();
 app.disable('x-powered-by');
 
+app.use(function (req, res, next) {
+  const started = Date.now();
+  metrics.requests++;
+  res.on('finish', function () {
+    const latency = Date.now() - started;
+    metrics.latencies.push(latency);
+    if (metrics.latencies.length > 2000) metrics.latencies.shift();
+    if (res.statusCode >= 500) metrics.errors++;
+  });
+  next();
+});
+
 app.use(cspMiddleware);
 if (RATE_LIMIT_ENABLED) app.use(rateLimiter);
 
@@ -66,6 +112,7 @@ app.use(function (req, res, next) {
   const origin = req.headers.origin || '';
   if (origin && TRUSTED_ORIGINS.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -98,6 +145,10 @@ app.get(API_PREFIX + '/health', function (req, res) {
   let sqliteOk = false;
   try { const row = db.prepare('SELECT 1 AS ping').get(); sqliteOk = !!(row && row.ping === 1); } catch (e) { sqliteOk = false; }
   const mem = process.memoryUsage();
+  const latencySamples = metrics.latencies.slice().sort(function (a, b) { return a - b; });
+  const p95Index = latencySamples.length ? Math.min(latencySamples.length - 1, Math.ceil(latencySamples.length * 0.95) - 1) : 0;
+  let dbSize = 0;
+  try { dbSize = fs.statSync(require('./db').DB_PATH).size; } catch (err) {}
   res.json({
     ok: true,
     name: 'India Post Dashboard server',
@@ -110,6 +161,12 @@ app.get(API_PREFIX + '/health', function (req, res) {
       heapTotal: Math.round(mem.heapTotal / 1024 / 1024)
     },
     sqlite: { ok: sqliteOk },
+    database: { sizeBytes: dbSize },
+    metrics: {
+      requestCount: metrics.requests,
+      errorCount: metrics.errors,
+      p95LatencyMs: latencySamples.length ? latencySamples[p95Index] : 0
+    },
     dataSync: dataSync
   });
 });
@@ -153,6 +210,11 @@ app.post(API_PREFIX, async function (req, res) {
       res.json({ error: 'Unknown function: ' + fn });
       return;
     }
+    const cookieToken = parseCookie_(req.headers.cookie || '')[SESSION_COOKIE] || '';
+    const authIndex = AUTH_ARG_INDEX[fn];
+    if (cookieToken && authIndex !== undefined && !args[authIndex]) {
+      args[authIndex] = cookieToken;
+    }
     // Item 8: Input validation for known functions
     const validator = VALIDATORS[fn];
     if (validator) {
@@ -163,6 +225,11 @@ app.post(API_PREFIX, async function (req, res) {
       }
     }
     const result = await fnRef(args);
+    if (fn === 'login' && result && result.success && result.token) {
+      setSessionCookie_(res, result.token);
+    } else if (fn === 'logout' && result && result.success) {
+      clearSessionCookie_(res);
+    }
     // Broadcast real-time SSE events for data-mutating functions
     const dataFns = ['addItem', 'updateItem', 'deleteItem', 'markReviewDone', 'markReviewNotDone',
       'addSubmission', 'updateSubmission', 'deleteSubmission', 'toggleSubmissionDisplay',
@@ -172,6 +239,8 @@ app.post(API_PREFIX, async function (req, res) {
     }
     res.json({ result: result === undefined ? null : result });
   } catch (err) {
+    metrics.errors++;
+    console.error('API request failed (' + String(fn || 'unknown') + '): ' + ((err && err.message) || String(err)));
     res.json({ error: (err && err.message) || String(err) });
   }
 });
@@ -216,7 +285,8 @@ app.post(API_PREFIX + '/internal/daily-jobs', async function (req, res) {
 
 app.get(API_PREFIX + '/files/:key', function (req, res) {
   const documents = require('./documents');
-  const found = documents.resolveDocumentFile(req.params.key);
+  const token = parseCookie_(req.headers.cookie || '')[SESSION_COOKIE] || '';
+  const found = documents.resolveDocumentFile(req.params.key, token);
   if (!found) {
     res.status(404).json({ error: 'File not found.' });
     return;
@@ -230,6 +300,30 @@ app.get(API_PREFIX + '/files/:key', function (req, res) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.sendFile(found.path);
 });
+
+function parseCookie_(header) {
+  const cookies = {};
+  String(header || '').split(';').forEach(function (part) {
+    const separator = part.indexOf('=');
+    if (separator === -1) return;
+    const key = part.slice(0, separator).trim();
+    const value = part.slice(separator + 1).trim();
+    if (key) {
+      try { cookies[key] = decodeURIComponent(value); } catch (err) { cookies[key] = value; }
+    }
+  });
+  return cookies;
+}
+
+function setSessionCookie_(res, token) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', SESSION_COOKIE + '=' + encodeURIComponent(token) +
+    '; HttpOnly; SameSite=Lax; Path=/; Max-Age=21600' + secure);
+}
+
+function clearSessionCookie_(res) {
+  res.setHeader('Set-Cookie', SESSION_COOKIE + '=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
+}
 
 app.get('/', function (req, res) {
   const indexPath = path.join(STATIC_ROOT, 'index.html');

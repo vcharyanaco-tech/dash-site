@@ -67,6 +67,7 @@ function apiCall_(fn) {
 function fetchApiWithRetry_(fn, args, attempt) {
   return fetch(API_URL, {
     method: 'POST',
+    credentials: 'include',
     // text/plain avoids a CORS preflight (application/json would require OPTIONS)
     headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify({ function: fn, args: args })

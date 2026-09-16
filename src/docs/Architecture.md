@@ -52,7 +52,7 @@ the app itself with email/password login and token-based sessions.
   `Email | Role | Salt | PasswordHash | MustChange | CreatedBy | CreatedAt |
   ResetToken | ResetExpires`.
 - The bootstrap admin (`ADMIN_USERS[0]`) is created on first login with
-  `DEFAULT_ADMIN_PASSWORD` and `mustChange = true`. Static `EDITOR_USERS` /
+  `DASH_BOOTSTRAP_ADMIN_PASSWORD` and `mustChange = true`. Static `EDITOR_USERS` /
   `VIEWER_USERS` arrays are empty — all other users are created through the
   admin UI.
 - `hashPassword_(password, salt)` — `sha256(salt | password)` iterated 500 times.

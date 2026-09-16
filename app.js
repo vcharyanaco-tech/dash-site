@@ -67,6 +67,7 @@ function apiCall_(fn) {
 function fetchApiWithRetry_(fn, args, attempt) {
   return fetch(API_URL, {
     method: 'POST',
+    credentials: 'include',
     // text/plain avoids a CORS preflight (application/json would require OPTIONS)
     headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify({ function: fn, args: args })
@@ -2283,12 +2284,16 @@ function cancelConfirmDialog() {
 /* ---------------------------------- Auth token ---------------------------------- */
 
 function getAuthToken() {
-  return window.localStorage.getItem(STORAGE_TOKEN) || '';
+  // Authentication is carried by the HttpOnly dash_session cookie. Keep
+  // accepting the legacy token during the staged migration, but do not read
+  // or write it for new sessions.
+  return '';
 }
 
 function setAuthToken(token) {
-  if (token) window.localStorage.setItem(STORAGE_TOKEN, token);
-  else window.localStorage.removeItem(STORAGE_TOKEN);
+  if (!token) {
+    try { window.localStorage.removeItem(STORAGE_TOKEN); } catch (err) {}
+  }
 }
 
 function isAuthError(message) {
@@ -2664,20 +2669,9 @@ function initApp() {
     });
   })();
 
-  const token = getAuthToken();
-
-  if (!token) {
-    showScreen('login');
-    hideSplash();
-    let msg = '';
-    try {
-      msg = window.sessionStorage.getItem(STORAGE_REAUTH_MSG) || '';
-      window.sessionStorage.removeItem(STORAGE_REAUTH_MSG);
-    } catch (err) {}
-    if (msg) showAuthMessage('loginMessage', msg);
-    return;
-  }
-
+  // The server validates the HttpOnly session cookie. This keeps the session
+  // out of JavaScript while still allowing the app to restore a signed-in
+  // session after a page reload.
   loadApp();
 }
 
@@ -5592,9 +5586,14 @@ function flushPendingAutoRefresh() {
 
 function autoRefreshTick() {
   if (autoRefreshInFlight) return;
+<<<<<<< HEAD
   if (!getAuthToken()) return;
   if (typeof document !== 'undefined' && document.hidden) { autoRefreshPending = true; return; }
   if (document.body.classList.contains('modal-open')) { autoRefreshPending = true; return; }
+=======
+  if (typeof document !== 'undefined' && document.hidden) return;
+  if (document.body.classList.contains('modal-open')) return;
+>>>>>>> c7e650e (feat: harden dashboard auth and operations)
   autoRefreshInFlight = true;
   const seqAtStart = appState.submissionSeq || 0;
   ApiService.getAppData().then(function (data) {

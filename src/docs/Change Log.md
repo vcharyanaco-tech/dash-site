@@ -200,7 +200,8 @@ Major refresh and stabilization of the India Post Dashboard for Circle Office, H
 ### Auth, roles & users
 - Optimized login and app-load performance.
 - Editors get full edit/delete access (previously admin-only).
-- Bootstrap admin (`vcharyanaco@gmail.com`, initial password `Admin@123`) with forced
+- Bootstrap admin (`vcharyanaco@gmail.com`) with a deployment-provided initial
+  password and forced
   change on first login.
 - Admin user management: add/delete users, reset passwords, assign `VIEWER` /
   `EDITOR` / `ADMIN` roles.

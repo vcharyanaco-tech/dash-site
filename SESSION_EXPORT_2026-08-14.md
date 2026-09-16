@@ -149,7 +149,8 @@ recurring "links created in the DB are lost" bug.
    all day — stale 401s and a stale 290KB corrupt response got cached).
 
 ## Verified end-to-end on the live site
-- Login works (`vcharyanaco@gmail.com` / `Admin@123`, salted pbkdf2 hashes).
+- Login works for the configured admin (password intentionally omitted; salted
+  password hashes).
 - API shape: `POST /api` `{function, args}`; `login(identifier, password)`
   with **email** as identifier; `addItem(item, token)` / `deleteItem(row,
   token)` take the **raw DB row** (row = id + 3, START_ROW=4); KV endpoints use

@@ -15,7 +15,7 @@ const {
   ADMIN_USERS,
   EDITOR_USERS,
   VIEWER_USERS,
-  DEFAULT_ADMIN_PASSWORD
+  BOOTSTRAP_ADMIN_PASSWORD
 } = require('./config');
 const {
   isValidEmail_,
@@ -272,19 +272,21 @@ function ensureUserRecord_(email) {
   let rec = findUserRecord_(email);
 
   if (!rec) {
+    if (!BOOTSTRAP_ADMIN_PASSWORD) return null;
     // No account at all — create the bootstrap admin.
     const salt = generateSalt_();
-    addUserRecord_(email, ROLES.ADMIN, salt, hashPassword_(DEFAULT_ADMIN_PASSWORD, salt), 'system');
+    addUserRecord_(email, ROLES.ADMIN, salt, hashPassword_(BOOTSTRAP_ADMIN_PASSWORD, salt), 'system');
     setUserField_(email, 'mustChange', true);
     rec = findUserRecord_(email);
   } else if (!isAppFormatHash_(rec.passwordHash)) {
+    if (!BOOTSTRAP_ADMIN_PASSWORD) return rec;
     // Row exists but carries a hash this app can't verify (e.g. the pbkdf2
     // hash baked into users.csv on a fresh DB). Re-seed the bootstrap
     // password so admin login works. Never touch an app-format hash — that
     // would silently revert a password the admin has changed.
     const salt = generateSalt_();
     setUserField_(email, 'salt', salt);
-    setUserField_(email, 'passwordHash', hashPassword_(DEFAULT_ADMIN_PASSWORD, salt));
+    setUserField_(email, 'passwordHash', hashPassword_(BOOTSTRAP_ADMIN_PASSWORD, salt));
     setUserField_(email, 'mustChange', true);
   }
 
@@ -460,6 +462,10 @@ function authenticate_(token) {
   const email = sessionEmail_(token);
   if (!email) throw new Error('Login required. Please log in again.');
   return { email: email, role: getUserRole(email) };
+}
+
+function hasSession_(token) {
+  return !!sessionEmail_(token);
 }
 
 function requireLogin_(token) {
@@ -1110,6 +1116,7 @@ module.exports = {
   getUserPermissions,
   getUserContext,
   authenticate_,
+  hasSession_,
   requireLogin_,
   requireLogin,
   requireEditor_,

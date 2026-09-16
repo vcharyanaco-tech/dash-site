@@ -47,14 +47,16 @@
     var label = document.getElementById('offlineLabel');
     if (!label) return;
     var n = pending();
+    var failed = load().filter(function (item) { return item.status === 'failed'; }).length;
     label.textContent = n
-      ? 'You are offline. ' + n + ' queued action(s) will sync when you reconnect.'
+      ? (failed ? failed + ' action(s) failed and need retry. ' : '') +
+        n + ' queued action(s) will sync when you reconnect.'
       : 'You appear to be offline. Some actions may not work until your connection returns.';
   }
 
   function enqueue(fn, args) {
     var q = load();
-    q.push({ fn: fn, args: args, ts: Date.now() });
+    q.push({ fn: fn, args: args, ts: Date.now(), status: 'queued', attempts: 0 });
     if (q.length > MAX_QUEUE) q.splice(0, q.length - MAX_QUEUE);
     save(q);
     renderQueueStatus();
@@ -77,14 +79,20 @@
     var chain = Promise.resolve();
     q.forEach(function (item) {
       chain = chain.then(function () {
+        item.status = 'syncing';
+        item.attempts = (item.attempts || 0) + 1;
+        save(q);
         return realApiCall(item.fn).apply(null, item.args).then(function () {
           flushed++;
           renderQueueStatus();
           emit('OfflineQueueChange', { pending: remove(item) });
         }, function () {
           failed++;
+          item.status = 'failed';
+          item.lastError = 'The server rejected this action or was unavailable.';
+          save(q);
           renderQueueStatus();
-          emit('OfflineQueueChange', { pending: remove(item) });
+          emit('OfflineQueueChange', { pending: pending(), failed: failed });
         });
       });
     });
@@ -98,7 +106,20 @@
   function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('sw.js').catch(function () {});
+      navigator.serviceWorker.register('sw.js').then(function (registration) {
+        registration.addEventListener('updatefound', function () {
+          var installing = registration.installing;
+          if (!installing) return;
+          installing.addEventListener('statechange', function () {
+            if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+              emit('ServiceWorkerUpdateAvailable', { registration: registration });
+              if (typeof window.showToast === 'function') {
+                window.showToast('A new dashboard version is available. Reload to update.', 'info');
+              }
+            }
+          });
+        });
+      }).catch(function () {});
     });
   }
 
@@ -118,7 +139,15 @@
     enqueue: enqueue,
     flush: flush,
     pending: pending,
-    isMutation: function (fn) { return !!MUTATIONS[fn]; }
+    isMutation: function (fn) { return !!MUTATIONS[fn]; },
+    status: function () {
+      var q = load();
+      return {
+        queued: q.length,
+        syncing: q.filter(function (item) { return item.status === 'syncing'; }).length,
+        failed: q.filter(function (item) { return item.status === 'failed'; }).length
+      };
+    }
   };
 
   registerServiceWorker();

@@ -186,7 +186,9 @@ const PROP = Object.freeze({
 
 /* ---------- Auth.gs constants ---------- */
 
-const DEFAULT_ADMIN_PASSWORD = 'Admin@123';
+// Bootstrap credentials must be supplied by the deployment environment. Never
+// keep a usable password in source control or silently recreate one.
+const BOOTSTRAP_ADMIN_PASSWORD = String(process.env.DASH_BOOTSTRAP_ADMIN_PASSWORD || '');
 
 const ADMIN_USERS = ['vcharyanaco@gmail.com'];
 
@@ -429,7 +431,7 @@ module.exports = {
   USER_GROUPS,
   USER_GROUP_KEYS,
   PROP,
-  DEFAULT_ADMIN_PASSWORD,
+  BOOTSTRAP_ADMIN_PASSWORD,
   ADMIN_USERS,
   EDITOR_USERS,
   VIEWER_USERS,

@@ -2,12 +2,13 @@
 /* ---------------------------------- Auth token ---------------------------------- */
 
 function getAuthToken() {
-  return window.localStorage.getItem(STORAGE_TOKEN) || '';
+  return '';
 }
 
 function setAuthToken(token) {
-  if (token) window.localStorage.setItem(STORAGE_TOKEN, token);
-  else window.localStorage.removeItem(STORAGE_TOKEN);
+  if (!token) {
+    try { window.localStorage.removeItem(STORAGE_TOKEN); } catch (err) {}
+  }
 }
 
 function isAuthError(message) {

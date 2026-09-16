@@ -9,6 +9,7 @@
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
+const { password } = require('./test-bootstrap');
 const { server } = require('../index');
 
 let port;
@@ -57,7 +58,7 @@ test('unknown function returns error', async function () {
 });
 
 test('admin login + validateSession', async function () {
-  const res = await post('login', ['vcharyanaco@gmail.com', 'Admin@123']);
+  const res = await post('login', ['vcharyanaco@gmail.com', password]);
   assert.strictEqual(res.success, true);
   assert.ok(res.token);
   token = res.token;

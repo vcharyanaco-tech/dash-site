@@ -10,6 +10,7 @@
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
+const { password } = require('./test-bootstrap');
 const { server } = require('../index');
 
 let port;
@@ -41,7 +42,7 @@ async function post(fn, args) {
 
 // Login once for all tests in this file.
 test('admin login', async function () {
-  const res = await post('login', ['vcharyanaco@gmail.com', 'Admin@123']);
+  const res = await post('login', ['vcharyanaco@gmail.com', password]);
   assert.strictEqual(res.success, true);
   assert.ok(res.token);
   token = res.token;
