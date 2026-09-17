@@ -2559,11 +2559,56 @@ function openLinkPreview(url, title) {
   if (openNew) openNew.href = url;
   previewZoom = 80;
   applyPreviewZoom();
-  frame.src = toEmbeddableUrl(url) || '';
+
+  /* Reuse a warmed frame when one is ready: presentation mode warms the
+     embeddable target URL in hidden iframes (presentationWarm.frames, keyed
+     by the embeddable form). Reparent that already-loaded frame into the
+     modal instead of re-navigating — the load already happened in the
+     background, so the click opens instantly (no 5–6s refresh). */
+  let target = '';
+  try { target = (typeof toEmbeddableUrl === 'function' && toEmbeddableUrl(url)) || url; } catch (err) { target = url; }
+  const warmed = window.presentationWarm && presentationWarm.frames && presentationWarm.frames[target];
+  if (warmed && warmed.ready && warmed.node && warmed.frame) {
+    const stage = getEl('previewStage');
+    if (stage) {
+      previewWarmReuse = { node: warmed.node, frame: warmed.frame, target: target };
+      delete presentationWarm.frames[target];
+      try { stage.replaceChild(warmed.frame, frame); } catch (err) {
+        if (frame) frame.src = target || '';
+      }
+      openDialog('previewModal');
+      return;
+    }
+  }
+  if (frame) frame.src = target || '';
   openDialog('previewModal');
 }
 
+/* If the opened preview came from a warmed frame, return it to the hidden
+   pool instead of dropping it to about:blank, so the next open of the same
+   URL reuses the already-loaded document again. */
 function closeLinkPreview() {
+  if (previewWarmReuse) {
+    const holder = previewWarmReuse.node;
+    const fr = previewWarmReuse.frame;
+    const t = previewWarmReuse.target;
+    previewWarmReuse = null;
+    const stage = getEl('previewStage');
+    if (stage && holder && fr && fr.parentNode) {
+      const settled = stage.querySelector('#previewFrame');
+      const fresh = document.createElement('iframe');
+      fresh.id = 'previewFrame';
+      fresh.className = 'preview-frame';
+      fresh.title = 'Link preview';
+      fresh.setAttribute('aria-hidden', 'true');
+      if (settled && settled.parentNode) settled.parentNode.replaceChild(fresh, settled);
+      try { holder.appendChild(fr); } catch (err) {}
+      if (window.presentationWarm && presentationWarm.frames && !presentationWarm.frames[t]) {
+        presentationWarm.frames[t] = { node: holder, frame: fr, ready: true };
+      }
+    }
+    return;
+  }
   const frame = getEl('previewFrame');
   if (frame) frame.src = 'about:blank';
   closeDialog('previewModal');
@@ -7993,7 +8038,11 @@ var presentationState = {
   touchTarget: null
 };
 
-/* ---- Link warming state: deduped, concurrency-limited, abortable ---- */
+/* ---- Link warming state: deduped, concurrency-limited, abortable ----
+   Warms with hidden <iframe>s (not fetch no-cors) so the warmed document is
+   the *same* browsing-context type the preview modal uses — the warmed frame
+   can be reparented straight into the modal instead of re-navigating, which
+   is what actually makes a click load instantly. */
 var presentationWarm = {
   aborted: false,
   MAX_CONCURRENCY: 4,
@@ -8001,7 +8050,8 @@ var presentationWarm = {
   seenUrls: {},    // dedupe across all slides for the whole session
   seenOrigins: {},
   inflight: 0,
-  controllers: []
+  controllers: [],
+  frames: {}       // embeddable target URL -> { node, ready } warm pool
 };
 
 function warmNearbySlides_() {
@@ -8359,15 +8409,28 @@ function warmPresentationUrl_(url) {
   presentationWarm.inflight++;
   const ctrl = new AbortController();
   presentationWarm.controllers.push(ctrl);
-  const timer = setTimeout(function () { try { ctrl.abort(); } catch (err) {} }, 8000);
   const target = (typeof toEmbeddableUrl === 'function' && toEmbeddableUrl(url)) || url;
-  fetch(target, { mode: 'no-cors', cache: 'default', signal: ctrl.signal })
-    .catch(function () { /* opaque/no-cors may still fail on redirects — fine */ })
-    .then(function () {
-      clearTimeout(timer);
-      presentationWarm.inflight--;
-      pumpPresentationWarm_();
-    });
+  const timer = setTimeout(function () { try { ctrl.abort(); } catch (err) {} }, 8000);
+  const holder = document.createElement('div');
+  holder.setAttribute('data-pres-warm-frame', '1');
+  holder.className = 'pres-warm-frame';
+  const frame = document.createElement('iframe');
+  frame.setAttribute('data-pres-warm-url', escAttr(top_embedUrl) || escAttr(target));
+  holder.appendChild(frame);
+  document.body.appendChild(holder);
+  frame.src = target;
+  frame.addEventListener('load', function () {
+    clearTimeout(timer);
+    presentationWarm.frames[target] = { node: holder, frame: frame, ready: true };
+    presentationWarm.inflight--;
+    pumpPresentationWarm_();
+  });
+  frame.addEventListener('error', function () {
+    clearTimeout(timer);
+    try { holder.parentNode && holder.parentNode.removeChild(holder); } catch (err) {}
+    presentationWarm.inflight--;
+    pumpPresentationWarm_();
+  });
 }
 
 function warmPresentationOrigin_(url) {
