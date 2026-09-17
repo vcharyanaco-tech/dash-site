@@ -976,8 +976,8 @@ update flow.
 ### Pending Tasks
 1. Phase 3 Part 3b — PWA offline improvements (offline activity center
    with queued/syncing/synced/failed/conflict states) — Phase 4 gated.
-2. Part 6 — Command palette: async cross-data search (tasks, users)
-   implemented; search submissions across all records pending.
+2. Part 6 — Command palette: all async cross-data search done
+   (tasks, users, submissions). Remaining: visual polish, fuzzy matching.
 3. Phase 4+ remains gated.
 
 ## Part 6 — Command palette: cross-data search + keyboard navigation
@@ -998,23 +998,30 @@ previously navigation commands + record substring search only.
 5. **Debounced input.** 120ms debounce on `filterCommands` when
    commandInput is active; direct calls remain synchronous.
 
-### v2 — async cross-data search (pending — implement next)
+### v2 — async cross-data search (done — pushed: 81b2b8a)
 
-- `paletteSearch(q)` fires Promise.all(getMyTasks, getAssignableUsers)
+- `paletteSearch(q)` fires `Promise.all(getMyTasks, getAssignableUsers)`
   after 150ms debounce; displays Tasks + Users category sections.
 - Generation counter guards race conditions on rapid typing.
 - Spinner indicator during load; results appended inline.
 - `appendSection` refactored inline into paletteSearch for full re-render.
 
-### Verification (v1)
-- `node build/build-app.js` → 21 modules, 9,007 lines; split round-trip
+### v3 — submissions search (done)
+
+- `ApiService.getSubmissions()` added as third API call in `paletteSearch`.
+- Submissions filtered by text, cardRow, email — shown in Submissions section.
+- Clicking a submission opens the related record detail.
+- All 3 API calls fire in parallel; results merged with same gen guard.
+
+### Verification (v3)
+- `node build/build-app.js` → 21 modules, 9,030 lines; split round-trip
   byte-exact.
-- `node --check` clean on studio.js (404 lines), app.js.
-- Full server suite: **368/368 pass**, 0 fail (~29s). Coverage unchanged.
+- `node --check` clean on studio.js (427 lines), app.js.
+- Full server suite: **368/368 pass**, 0 fail (~34s). Coverage unchanged.
 
 ### Files changed
 - `src/app/studio.js` — expanded COMMAND_ACTIONS, recent items tracking,
   keyboard nav, debounced filter, category sections, highlight,
-  paletteSearch with race-safe async API search
+  paletteSearch with race-safe async API search (tasks, users, submissions)
 - `app.js` — rebuilt (studio.js folded into monolith)
 - SESSION_EXPORT_2026-09-16.md — this section

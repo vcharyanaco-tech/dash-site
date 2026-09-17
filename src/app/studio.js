@@ -277,11 +277,13 @@ function paletteSearch(query) {
     showSearching();
     var taskPromise = ApiService.getMyTasks().catch(function () { return []; });
     var userPromise = ApiService.getAssignableUsers().catch(function () { return []; });
-    Promise.all([taskPromise, userPromise]).then(function (results) {
+    var submissionPromise = ApiService.getSubmissions().catch(function () { return []; });
+    Promise.all([taskPromise, userPromise, submissionPromise]).then(function (results) {
       if (gen !== CMD_SEARCH_GEN) return;
       CMD_SEARCHING = false;
       var tasks = results[0];
       var users = results[1];
+      var submissions = results[2];
       var taskResults = tasks.filter(function (t) {
         return String(t.title || '').toLowerCase().indexOf(q) !== -1 ||
           String(t.description || '').toLowerCase().indexOf(q) !== -1;
@@ -307,6 +309,19 @@ function paletteSearch(query) {
           action: function () { closeCommandPalette(); showToast('User profile: ' + (u.email || u.username), 'info'); }
         };
       });
+      var submissionResults = submissions.filter(function (s) {
+        return String(s.text || '').toLowerCase().indexOf(q) !== -1 ||
+          String(s.cardRow || '').indexOf(q) !== -1 ||
+          String(s.email || '').toLowerCase().indexOf(q) !== -1;
+      }).slice(0, 6).map(function (s) {
+        return {
+          key: 'submission-' + (s.id || ''),
+          label: 'Record #' + (s.cardRow || '') + ': ' + String(s.text || '').slice(0, 60),
+          subtitle: 'Submission',
+          category: 'Submissions',
+          action: function () { openRecordDetail(Number(s.cardRow)); closeCommandPalette(); }
+        };
+      });
       CMD_RESULTS = [];
       var html = '';
       if (taskResults.length) html += '<div style="padding:8px 16px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Tasks</div>';
@@ -319,6 +334,14 @@ function paletteSearch(query) {
       });
       if (userResults.length) html += '<div style="padding:8px 16px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Users</div>';
       userResults.forEach(function (item) {
+        var idx = CMD_RESULTS.length;
+        html += '<div class="command-item" data-cmd="' + escAttr(item.key) + '" data-idx="' + idx + '" onclick="executeCommand(\'' + escAttr(item.key) + '\')">' +
+          '<span>' + escapeHtml(item.label) + '</span>' +
+          '<span style="margin-left:auto;color:var(--muted);font-size:12px;">' + escapeHtml(item.subtitle || '') + '</span></div>';
+        CMD_RESULTS.push({ key: item.key, action: item.action });
+      });
+      if (submissionResults.length) html += '<div style="padding:8px 16px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Submissions</div>';
+      submissionResults.forEach(function (item) {
         var idx = CMD_RESULTS.length;
         html += '<div class="command-item" data-cmd="' + escAttr(item.key) + '" data-idx="' + idx + '" onclick="executeCommand(\'' + escAttr(item.key) + '\')">' +
           '<span>' + escapeHtml(item.label) + '</span>' +
