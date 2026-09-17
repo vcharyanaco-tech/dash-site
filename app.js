@@ -7934,12 +7934,24 @@ var presentationState = {
 /* ---- Link warming state: deduped, concurrency-limited, abortable ---- */
 var presentationWarm = {
   aborted: false,
-  inflight: 0,
-  MAX_CONCURRENCY: 2,
-  seenUrls: {},
+  MAX_CONCURRENCY: 4,
+  queue: [],       // pending URLs to warm (FIFO; survives calls)
+  seenUrls: {},    // dedupe across all slides for the whole session
   seenOrigins: {},
+  inflight: 0,
   controllers: []
 };
+
+function warmNearbySlides_() {
+  const items = presentationState.items;
+  const idx = presentationState.index;
+  const targets = [];
+  if (items[idx - 1]) targets.push(items[idx - 1]);
+  if (items[idx]) targets.push(items[idx]);
+  if (items[idx + 1]) targets.push(items[idx + 1]);
+  if (items[idx + 2]) targets.push(items[idx + 2]);
+  warmPresentationLinks_(targets);
+}
 
 function enterPresentationMode() {
   const items = sortedItems(); // respects current search/sector/review/hidden filters + sort
@@ -7950,6 +7962,12 @@ function enterPresentationMode() {
   presentationState.items = items.slice();
   presentationState.index = 0;
   presentationState.active = true;
+  presentationWarm.aborted = false;
+  presentationWarm.queue = [];
+  presentationWarm.seenUrls = {};
+  presentationWarm.seenOrigins = {};
+  presentationWarm.inflight = 0;
+  presentationWarm.controllers = [];
   const overlay = getEl('presentationOverlay');
   if (overlay) {
     overlay.classList.add('presentation-open');
@@ -7958,7 +7976,18 @@ function enterPresentationMode() {
     const nextBtn = getEl('presentationNextBtn');
     if (nextBtn) nextBtn.focus();
   }
-  warmPresentationLinks_();
+  warmNearbySlides_();
+  warmRestOfDeck_();
+}
+
+/* Buffer every remaining slide's links in the background so later slides
+   load instantly too. Deduping (seenUrls) makes the whole deck's links a
+   bounded warm set; the FIFO queue + concurrency pump keeps it polite. */
+function warmRestOfDeck_() {
+  const items = presentationState.items;
+  const idx = presentationState.index;
+  const targets = items.filter(function (_, i) { return i > idx + 2; });
+  warmPresentationLinks_(targets);
 }
 
 function exitPresentationMode() {
@@ -7966,6 +7995,7 @@ function exitPresentationMode() {
   presentationWarm.aborted = true;
   presentationWarm.controllers.forEach(function (c) { try { c.abort(); } catch (err) {} });
   presentationWarm.controllers = [];
+  presentationWarm.queue = [];
   presentationWarm.inflight = 0;
   removePresentationPreconnects_();
   const overlay = getEl('presentationOverlay');
@@ -8052,8 +8082,10 @@ function presentationSlideHtml_(item) {
         ${statusBadge}
         <span class="presentation-subcount">${subCount} submission${subCount === 1 ? '' : 's'}</span>
       </div>
-      <div class="card-fields">${fieldsHtml || '<div class="card-field"><span class="field-label">Details</span><div class="field-value preserve-whitespace">No details available</div></div>'}${updatesBlock}</div>
-      ${presentationLinksHtml_(item)}
+      <div class="presentation-slide-body">
+        <div class="card-fields">${fieldsHtml || '<div class="card-field"><span class="field-label">Details</span><div class="field-value preserve-whitespace">No details available</div></div>'}${updatesBlock}</div>
+        ${presentationLinksHtml_(item)}
+      </div>
       <div class="presentation-slide-actions">${actions || '<span class="presentation-actions-empty">No actions available</span>'}</div>
     </article>`;
 }
@@ -8106,14 +8138,14 @@ function presentationNext_() {
   if (!presentationState.active) return;
   presentationState.index++;
   renderPresentationSlide_();
-  warmPresentationLinks_();
+  warmNearbySlides_();
 }
 
 function presentationPrev_() {
   if (!presentationState.active) return;
   presentationState.index--;
   renderPresentationSlide_();
-  warmPresentationLinks_();
+  warmNearbySlides_();
 }
 
 /* ---- Keyboard ---- */
@@ -8226,20 +8258,14 @@ function presentationLinksHtml_(item) {
 }
 
 /* ---- Link preloading / buffering ---- */
-/* Warm the current, next, next-next (and previous) slides' links. Safe,
-   best-effort: preconnect hints to origins plus no-cors fetches for cache
-   warming — capped, deduped, aborted on exit. Cross-origin restrictions are
-   left to the browser; the in-page preview handles anything blocked. */
-function warmPresentationLinks_() {
+/* Warm links in the background while presentation mode is open so a click
+   loads instantly. Warms the URL the popup actually loads (toEmbeddableUrl,
+   which rewrites Drive links to their /preview form) rather than the raw
+   href. Targets queue up FIFO and are processed with a bounded concurrency —
+   URLs are never silently dropped at the cap. Current slide is appended
+   first so it always gets priority over later slides. */
+function warmPresentationLinks_(targets) {
   if (!presentationState.active) return;
-  const items = presentationState.items;
-  const idx = presentationState.index;
-  const targets = [];
-  if (items[idx - 1]) targets.push(items[idx - 1]);
-  if (items[idx]) targets.push(items[idx]);
-  if (items[idx + 1]) targets.push(items[idx + 1]);
-  if (items[idx + 2]) targets.push(items[idx + 2]);
-
   const urls = [];
   targets.forEach(function (item) {
     const links = (item && item.linkUrls) || {};
@@ -8251,14 +8277,40 @@ function warmPresentationLinks_() {
       }
     });
   });
-
   urls.forEach(warmPresentationOrigin_);
-  urls.forEach(warmPresentationUrl_);
+  urls.forEach(function (url) {
+    presentationWarm.queue.push(url);
+  });
+  pumpPresentationWarm_();
+}
+
+function pumpPresentationWarm_() {
+  if (presentationWarm.aborted) return;
+  while (presentationWarm.inflight < presentationWarm.MAX_CONCURRENCY && presentationWarm.queue.length) {
+    const url = presentationWarm.queue.shift();
+    warmPresentationUrl_(url);
+  }
+}
+
+function warmPresentationUrl_(url) {
+  presentationWarm.inflight++;
+  const ctrl = new AbortController();
+  presentationWarm.controllers.push(ctrl);
+  const timer = setTimeout(function () { try { ctrl.abort(); } catch (err) {} }, 8000);
+  const target = (typeof toEmbeddableUrl === 'function' && toEmbeddableUrl(url)) || url;
+  fetch(target, { mode: 'no-cors', cache: 'default', signal: ctrl.signal })
+    .catch(function () { /* opaque/no-cors may still fail on redirects — fine */ })
+    .then(function () {
+      clearTimeout(timer);
+      presentationWarm.inflight--;
+      pumpPresentationWarm_();
+    });
 }
 
 function warmPresentationOrigin_(url) {
   try {
-    const origin = new URL(url, window.location.href).origin;
+    const target = (typeof toEmbeddableUrl === 'function' && toEmbeddableUrl(url)) || url;
+    const origin = new URL(target, window.location.href).origin;
     if (presentationWarm.seenOrigins[origin]) return;
     presentationWarm.seenOrigins[origin] = true;
     const link = document.createElement('link');
