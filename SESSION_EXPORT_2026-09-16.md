@@ -1068,3 +1068,38 @@ previously navigation commands + record substring search only.
   selected, meta, empty classes
 - `app.js` — rebuilt (studio.js folded into monolith)
 - SESSION_EXPORT_2026-09-16.md — this section
+
+### Presentation mode — user-requested fixes (done — pushed: 4f2fc40)
+
+- User requested: (1) slide cards near full-screen with minimal margins,
+  (2) clicking links in slides should open the link popup, (3) popup size
+  matches existing card popups.
+- Verified the reference doc (`dash-site-presentation-mode-big-pickle.md`)
+  is NOT in the Linux workspace (it lives on a Windows path) and the mode
+  itself was already implemented (commit 161c1ef); only the 3 fixes remained.
+- Card near full-screen: `.presentation-stage` padding `40px 96px` →
+  `24px 16px`; `.presentation-slide-card` max-width `900px` → `95vw`,
+  padding `36px 40px` → `28px 32px`; mobile stage `16px 10px 20px`,
+  mobile card `max-width: 98vw`.
+- Links open popup: `presentation.js` now renders links as
+  `<a href=... target="_blank" rel="noopener" data-embed class="presentation-link">`
+  so the global `wireEmbeddedLinkPreview()` handler (src/app/ai.js) opens
+  `#previewModal` on click — same popup as dashboard cards.
+- Popup size matches card popups: reuses `.modal-card-lg` (max-width 88vw).
+- Cleaned an accidental duplicate helper out of `src/app/studio.js`
+  (studio.js is back to 449 lines, zero diff).
+- Added `.presentation-links` / `.presentation-link` styles.
+
+### Verification
+- `node build/build-app.js` → 21 modules, 9,071 lines; split round-trip
+  byte-exact.
+- `node --check` clean on presentation.js, studio.js, app.js.
+- Full server suite: **368/368 pass**, 0 fail (~46s). Coverage unchanged.
+
+### Files changed
+- `src/app/presentation.js` — presentationLinksHtml_(), slide HTML now
+  includes `${presentationLinksHtml_(item)}` (375 lines)
+- `assets/styles.css` — presentation near-full-screen sizing,
+  `.presentation-links` / `.presentation-link` classes
+- `app.js` — rebuilt (presentation.js folded into monolith)
+- SESSION_EXPORT_2026-09-16.md — this section
