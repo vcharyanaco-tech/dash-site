@@ -1013,15 +1013,29 @@ previously navigation commands + record substring search only.
 - Clicking a submission opens the related record detail.
 - All 3 API calls fire in parallel; results merged with same gen guard.
 
-### Verification (v3)
-- `node build/build-app.js` → 21 modules, 9,030 lines; split round-trip
+### v4 — documents search (done — pushed: db99499)
+
+- `ApiService.getDocuments()` added as fourth API call in `paletteSearch`.
+- `getAllDocuments(token)` API on server (documents.js) — auth required,
+  returns all documents ordered by uploaded_at DESC.
+- Documents filtered by fileName, recordId, recordRow — shown in Documents section.
+- Clicking a document opens the related record detail.
+- 4 API calls fire in parallel; same gen guard race protection.
+
+### Verification (v4)
+- `node build/build-app.js` → 21 modules, 9,054 lines; split round-trip
   byte-exact.
-- `node --check` clean on studio.js (427 lines), app.js.
-- Full server suite: **368/368 pass**, 0 fail (~34s). Coverage unchanged.
+- `node --check` clean on studio.js, documents.js, index-dispatch.js,
+  index.js, core.js, app.js.
+- Full server suite: **368/368 pass**, 0 fail (~46s). Coverage unchanged.
 
 ### Files changed
 - `src/app/studio.js` — expanded COMMAND_ACTIONS, recent items tracking,
   keyboard nav, debounced filter, category sections, highlight,
-  paletteSearch with race-safe async API search (tasks, users, submissions)
+  paletteSearch with race-safe async API search (tasks, users, submissions, documents)
+- `src/app/core.js` — added ApiService.getDocuments() client wrapper
+- `src/server/documents.js` — added getAllDocuments(token) server function
+- `src/server/index-dispatch.js` — dispatch entry for getAllDocuments
+- `src/server/index.js` — AUTH_ARG_INDEX entry (token at arg 0)
 - `app.js` — rebuilt (studio.js folded into monolith)
 - SESSION_EXPORT_2026-09-16.md — this section
