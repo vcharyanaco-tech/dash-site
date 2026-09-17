@@ -124,10 +124,12 @@ function wireKeyboardShortcuts() {
       return;
     }
 
-    // Ctrl+R — Refresh (override browser refresh)
+    // Ctrl+R — Refresh (override browser refresh): burst the SW cache to
+    // always load the latest dashboard version, else refresh data in place.
     if ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R')) {
       e.preventDefault();
-      refreshData();
+      if (typeof window.refreshWithCacheBurst === 'function') window.refreshWithCacheBurst();
+      else refreshData();
       return;
     }
 

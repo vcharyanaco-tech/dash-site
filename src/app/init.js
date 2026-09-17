@@ -18,7 +18,17 @@ function closeAbout() {
 
 function updateOfflineBanner() {
   const banner = getEl('offlineBanner');
-  if (banner) banner.classList.toggle('hidden', navigator.onLine);
+  if (!banner) return;
+  // Show the banner while offline, or whenever the offline queue has actions
+  // that need attention (queued, syncing, failed, or conflicts) — even when
+  // the connection is back. Failed mutations stay visible until retried or
+  // removed so users never mistake them for synced.
+  let attention = 0;
+  if (window.OfflineQueue && window.OfflineQueue.status) {
+    const s = window.OfflineQueue.status();
+    attention = (s.queued || 0) + (s.syncing || 0) + (s.failed || 0) + (s.conflict || 0);
+  }
+  banner.classList.toggle('hidden', navigator.onLine && attention === 0);
 }
 
 /* ---------------------------------- Event wiring ---------------------------------- */
@@ -67,7 +77,7 @@ function wireGlobalEvents() {
         cancelConfirmDialog();
         return;
       }
-      ['editModal', 'aboutModal', 'submissionsModal', 'recordDetailModal', 'editUserModal', 'taskModal', 'columnModal', 'commandPalette', 'previewModal', 'linkModal', 'syncPreviewModal'].forEach(function (id) {
+      ['editModal', 'aboutModal', 'submissionsModal', 'recordDetailModal', 'editUserModal', 'taskModal', 'columnModal', 'commandPalette', 'previewModal', 'linkModal', 'syncPreviewModal', 'offlineCenterModal'].forEach(function (id) {
         const el = getEl(id);
         if (el && !el.classList.contains('hidden')) closeDialog(id);
       });
@@ -111,6 +121,7 @@ function wireGlobalEvents() {
         else if (backdrop.id === 'previewModal') closeLinkPreview();
         else if (backdrop.id === 'linkModal') closeLinkModal();
         else if (backdrop.id === 'meetingNotesModal') closeMeetingNotes();
+        else if (backdrop.id === 'offlineCenterModal') closeOfflineCenter();
       }
     });
   });
