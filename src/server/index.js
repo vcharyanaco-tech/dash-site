@@ -36,7 +36,7 @@ const AUTH_ARG_INDEX = Object.freeze({
   createTask: 1, getTasks: 1, getMyTasks: 0, updateTask: 2, deleteTask: 1,
   getDashboardPreferences: 0, saveDashboardPreferences: 1,
   getReportData: 1, exportToSpreadsheet: 0, createPdfReport: 0,
-  emailReport: 0, getRecordDocuments: 1, uploadDocument: 5,
+  emailReport: 0, getAllDocuments: 0, getRecordDocuments: 1, uploadDocument: 5,
   deleteDocument: 1, setDocumentKeep: 2, getSubmissions: 0,
   addSubmission: 3, updateSubmission: 2, lockSubmission: 1,
   unlockSubmission: 1, deleteSubmission: 1, markAllSubmissionsRead: 0,

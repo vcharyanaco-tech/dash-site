@@ -78,6 +78,7 @@ const dispatch = {
   createPdfReport: function (args) { return reports.createPdfReport(A(args, 0)); },
   emailReport: function (args) { return reports.emailReport(A(args, 0), A(args, 1), A(args, 2)); },
 
+  getAllDocuments: function (args) { return documents.getAllDocuments(A(args, 0)); },
   getRecordDocuments: function (args) { return documents.getRecordDocuments(A(args, 0), A(args, 1)); },
   uploadDocument: function (args) { return documents.uploadDocument(A(args, 0), A(args, 1), A(args, 2), A(args, 3), A(args, 4), A(args, 5)); },
   deleteDocument: function (args) { return documents.deleteDocument(A(args, 0), A(args, 1)); },

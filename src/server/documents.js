@@ -59,6 +59,12 @@ function docRecordFromRow_(row) {
   };
 }
 
+function getAllDocuments(token) {
+  auth.requireLogin(token);
+  const rows = db.prepare('SELECT * FROM documents ORDER BY uploaded_at DESC').all();
+  return rows.map(docRecordFromRow_);
+}
+
 function getRecordDocuments_(recordRow) {
   const rows = db.prepare('SELECT * FROM documents WHERE record_row = ? ORDER BY uploaded_at DESC').all(Number(recordRow) || 0);
   return rows.map(docRecordFromRow_);
@@ -179,6 +185,7 @@ function resolveDocumentFile(fileKey) {
 
 module.exports = {
   UPLOADS_DIR,
+  getAllDocuments,
   getRecordDocuments,
   uploadDocument,
   deleteDocument,

@@ -278,12 +278,14 @@ function paletteSearch(query) {
     var taskPromise = ApiService.getMyTasks().catch(function () { return []; });
     var userPromise = ApiService.getAssignableUsers().catch(function () { return []; });
     var submissionPromise = ApiService.getSubmissions().catch(function () { return []; });
-    Promise.all([taskPromise, userPromise, submissionPromise]).then(function (results) {
+    var documentPromise = ApiService.getDocuments().catch(function () { return []; });
+    Promise.all([taskPromise, userPromise, submissionPromise, documentPromise]).then(function (results) {
       if (gen !== CMD_SEARCH_GEN) return;
       CMD_SEARCHING = false;
       var tasks = results[0];
       var users = results[1];
       var submissions = results[2];
+      var documents = results[3];
       var taskResults = tasks.filter(function (t) {
         return String(t.title || '').toLowerCase().indexOf(q) !== -1 ||
           String(t.description || '').toLowerCase().indexOf(q) !== -1;
@@ -322,6 +324,19 @@ function paletteSearch(query) {
           action: function () { openRecordDetail(Number(s.cardRow)); closeCommandPalette(); }
         };
       });
+      var documentResults = documents.filter(function (d) {
+        return String(d.fileName || '').toLowerCase().indexOf(q) !== -1 ||
+          String(d.recordId || '').toLowerCase().indexOf(q) !== -1 ||
+          String(d.recordRow || '').indexOf(q) !== -1;
+      }).slice(0, 6).map(function (d) {
+        return {
+          key: 'document-' + (d.id || ''),
+          label: String(d.fileName || '').slice(0, 60),
+          subtitle: 'Doc R#' + (d.recordRow || ''),
+          category: 'Documents',
+          action: function () { openRecordDetail(Number(d.recordRow)); closeCommandPalette(); }
+        };
+      });
       CMD_RESULTS = [];
       var html = '';
       if (taskResults.length) html += '<div style="padding:8px 16px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Tasks</div>';
@@ -342,6 +357,14 @@ function paletteSearch(query) {
       });
       if (submissionResults.length) html += '<div style="padding:8px 16px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Submissions</div>';
       submissionResults.forEach(function (item) {
+        var idx = CMD_RESULTS.length;
+        html += '<div class="command-item" data-cmd="' + escAttr(item.key) + '" data-idx="' + idx + '" onclick="executeCommand(\'' + escAttr(item.key) + '\')">' +
+          '<span>' + escapeHtml(item.label) + '</span>' +
+          '<span style="margin-left:auto;color:var(--muted);font-size:12px;">' + escapeHtml(item.subtitle || '') + '</span></div>';
+        CMD_RESULTS.push({ key: item.key, action: item.action });
+      });
+      if (documentResults.length) html += '<div style="padding:8px 16px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Documents</div>';
+      documentResults.forEach(function (item) {
         var idx = CMD_RESULTS.length;
         html += '<div class="command-item" data-cmd="' + escAttr(item.key) + '" data-idx="' + idx + '" onclick="executeCommand(\'' + escAttr(item.key) + '\')">' +
           '<span>' + escapeHtml(item.label) + '</span>' +
