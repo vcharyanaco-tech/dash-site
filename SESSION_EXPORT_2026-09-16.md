@@ -1186,3 +1186,45 @@ the parent); (2) the print window should offer both orientations — Vertical
 1. Phase 3 Part 3b — PWA offline improvements (offline activity center) —
    user-authorized, not yet started.
 2. Other Phase 4+ gated items — user-authorized, not yet started.
+
+## Print submenu hover/click accessibility fix (done — pushed: 067be89)
+
+User follow-up: hovering to open the nested submenus still did not work, and
+after the previous hover-only change, even the click access was gone. Fixes:
+
+### What was done
+- **Root cause (hover):** the submenu was positioned with
+  `top: calc(100% - 6px); left: calc(100% + 4px)` — a 4px dead gap + 6px
+  vertical offset between the parent item and the submenu. Moving the pointer
+  from the parent toward the submenu crossed that gap, `:hover` was lost, and
+  the submenu vanished before it could be reached. Now `top: 0; left: 100%`
+  (mobile `right: 100%`) — the submenu touches the parent exactly, so the
+  pointer travels contiguously and hover is never lost.
+- **Root cause (click):** the previous commit removed the `:focus` /
+  `:focus-within` / `.open` display triggers entirely, so clicking a parent
+  item no longer had any effect. Re-added `:focus-within` + `.open` triggers.
+- **Click pin toggle:** new `toggleSubmenu(trigger)` in `src/app/edit.js`
+  toggles `.open` on a nested submenu (closing sibling submenus only, leaving
+  the outer menu open); wired to both `.menu-dropdown-parent` items in
+  `app.html`. The inner submenu span stops click propagation
+  (`onclick="event.stopPropagation()"`) so leaf clicks don't unpin the
+  submenu before the print action fires.
+- **Cache bump** to `2026.09.16j`.
+
+### Verification
+- `node build/build-app.js` → 21 modules, 9,186 lines; split round-trip
+  byte-exact; `node --check` clean.
+- Full server suite: **368/368 pass**, 0 fail. Coverage unchanged.
+
+### Files changed
+- `assets/styles.css` — submenu zero-gap positioning + hover/focus/open rules
+- `src/app/edit.js` — `toggleSubmenu()` pin-toggle helper
+- `app.html` — parent items wired (`onclick="toggleSubmenu(this)"`),
+  submenu stopPropagation
+- `app.js` — rebuilt
+- `sw.js`, `app.html` — cache bump `2026.09.16j`
+
+### Pending Tasks
+1. Phase 3 Part 3b — PWA offline improvements (offline activity center) —
+   user-authorized, not yet started.
+2. Other Phase 4+ gated items — user-authorized, not yet started.
