@@ -121,6 +121,17 @@ function closeColumnDialog() {
 
 /* ---------------------------------- Command Palette ---------------------------------- */
 
+function fuzzyMatch_(query, text) {
+  var q = String(query || '').toLowerCase().trim();
+  var t = String(text || '').toLowerCase();
+  if (!q) return true;
+  var qi = 0;
+  for (var i = 0; i < t.length && qi < q.length; i++) {
+    if (t[i] === q[qi]) qi++;
+  }
+  return qi === q.length;
+}
+
 const COMMAND_ACTIONS = [
   { key: 'goto-dashboard', label: 'Go to Dashboard', shortcut: 'G D', action: function () { openTab('dashboard'); closeCommandPalette(); } },
   { key: 'goto-audit', label: 'Go to Audit log', shortcut: 'G A', action: function () { openTab('audit'); closeCommandPalette(); } },
@@ -182,11 +193,11 @@ function filterCommands(query) {
   const q = String(query || '').toLowerCase().trim();
   let actions = COMMAND_ACTIONS.slice();
   if (appState.isEditor === false) actions = actions.filter(function (a) { return !a.requireEditor; });
-  if (q) actions = actions.filter(function (a) { return a.label.toLowerCase().indexOf(q) !== -1; });
+  if (q) actions = actions.filter(function (a) { return fuzzyMatch_(q, a.label); });
   let records = [];
   if (q.length >= 2) {
     records = (appState.items || []).filter(function (item) {
-      return String(item.id).indexOf(q) !== -1 || String(item.sector || '').toLowerCase().indexOf(q) !== -1 || String(item.description || '').toLowerCase().indexOf(q) !== -1;
+      return fuzzyMatch_(q, String(item.id)) || fuzzyMatch_(q, String(item.sector || '')) || fuzzyMatch_(q, String(item.description || ''));
     }).slice(0, 8).map(function (item) {
       return {
         key: 'record-' + item.row,
@@ -200,7 +211,7 @@ function filterCommands(query) {
   var recent = [];
   if (q.length >= 1) {
     recent = getRecentItems().filter(function (r) {
-      return String(r.label).toLowerCase().indexOf(q) !== -1;
+      return fuzzyMatch_(q, String(r.label));
     }).slice(0, 5).map(function (r) {
       return {
         key: r.key,
@@ -221,7 +232,7 @@ function filterCommands(query) {
   var html = '';
   function addSection(title, items) {
     if (!items.length) return;
-    html += '<div style="padding:8px 16px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">' + escapeHtml(title) + '</div>';
+    html += '<div class="command-category">' + escapeHtml(title) + '</div>';
     items.forEach(function (item) {
       var idx = CMD_RESULTS.length;
       html += '<div class="command-item" data-cmd="' + escAttr(item.key) + '" data-idx="' + idx + '" onclick="executeCommand(\'' + escAttr(item.key) + '\')">' +
@@ -233,7 +244,7 @@ function filterCommands(query) {
   addSection('Commands', actions);
   addSection('Recent', recent);
   addSection('Records', records);
-  if (!html) html = '<div style="padding:16px;color:var(--muted);text-align:center;">No results</div>';
+      if (!html) html = '<div class="command-empty">No results</div>';
   list.innerHTML = html;
   CMD_SELECTED_IDX = 0;
   highlightSelected();
@@ -243,13 +254,8 @@ function filterCommands(query) {
 function highlightSelected() {
   var items = document.querySelectorAll('#commandList .command-item');
   items.forEach(function (el, i) {
-    if (i === CMD_SELECTED_IDX) {
-      el.style.background = 'var(--accent-soft, rgba(37,99,235,0.1))';
-      el.style.outline = '1px solid var(--accent, #2563eb)';
-    } else {
-      el.style.background = '';
-      el.style.outline = '';
-    }
+    if (i === CMD_SELECTED_IDX) el.classList.add('command-selected');
+    else el.classList.remove('command-selected');
   });
 }
 
@@ -287,8 +293,7 @@ function paletteSearch(query) {
       var submissions = results[2];
       var documents = results[3];
       var taskResults = tasks.filter(function (t) {
-        return String(t.title || '').toLowerCase().indexOf(q) !== -1 ||
-          String(t.description || '').toLowerCase().indexOf(q) !== -1;
+        return fuzzyMatch_(q, String(t.title || '')) || fuzzyMatch_(q, String(t.description || ''));
       }).slice(0, 6).map(function (t) {
         return {
           key: 'task-' + (t.id || t.row || ''),
@@ -299,9 +304,7 @@ function paletteSearch(query) {
         };
       });
       var userResults = users.filter(function (u) {
-        return String(u.email || '').toLowerCase().indexOf(q) !== -1 ||
-          String(u.username || '').toLowerCase().indexOf(q) !== -1 ||
-          String(u.name || '').toLowerCase().indexOf(q) !== -1;
+        return fuzzyMatch_(q, String(u.email || '')) || fuzzyMatch_(q, String(u.username || '')) || fuzzyMatch_(q, String(u.name || ''));
       }).slice(0, 6).map(function (u) {
         return {
           key: 'user-' + (u.email || u.username || ''),
@@ -312,9 +315,7 @@ function paletteSearch(query) {
         };
       });
       var submissionResults = submissions.filter(function (s) {
-        return String(s.text || '').toLowerCase().indexOf(q) !== -1 ||
-          String(s.cardRow || '').indexOf(q) !== -1 ||
-          String(s.email || '').toLowerCase().indexOf(q) !== -1;
+        return fuzzyMatch_(q, String(s.text || '')) || fuzzyMatch_(q, String(s.cardRow || '')) || fuzzyMatch_(q, String(s.email || ''));
       }).slice(0, 6).map(function (s) {
         return {
           key: 'submission-' + (s.id || ''),
@@ -325,9 +326,7 @@ function paletteSearch(query) {
         };
       });
       var documentResults = documents.filter(function (d) {
-        return String(d.fileName || '').toLowerCase().indexOf(q) !== -1 ||
-          String(d.recordId || '').toLowerCase().indexOf(q) !== -1 ||
-          String(d.recordRow || '').indexOf(q) !== -1;
+        return fuzzyMatch_(q, String(d.fileName || '')) || fuzzyMatch_(q, String(d.recordId || '')) || fuzzyMatch_(q, String(d.recordRow || ''));
       }).slice(0, 6).map(function (d) {
         return {
           key: 'document-' + (d.id || ''),
@@ -339,31 +338,31 @@ function paletteSearch(query) {
       });
       CMD_RESULTS = [];
       var html = '';
-      if (taskResults.length) html += '<div style="padding:8px 16px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Tasks</div>';
+      if (taskResults.length) html += '<div class="command-category">Tasks</div>';
       taskResults.forEach(function (item) {
         var idx = CMD_RESULTS.length;
         html += '<div class="command-item" data-cmd="' + escAttr(item.key) + '" data-idx="' + idx + '" onclick="executeCommand(\'' + escAttr(item.key) + '\')">' +
           '<span>' + escapeHtml(item.label) + '</span>' +
-          '<span style="margin-left:auto;color:var(--muted);font-size:12px;">' + escapeHtml(item.subtitle || '') + '</span></div>';
+          '<span class="command-meta">' + escapeHtml(item.subtitle || '') + '</span></div>';
         CMD_RESULTS.push({ key: item.key, action: item.action });
       });
-      if (userResults.length) html += '<div style="padding:8px 16px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Users</div>';
+      if (userResults.length) html += '<div class="command-category">Users</div>';
       userResults.forEach(function (item) {
         var idx = CMD_RESULTS.length;
         html += '<div class="command-item" data-cmd="' + escAttr(item.key) + '" data-idx="' + idx + '" onclick="executeCommand(\'' + escAttr(item.key) + '\')">' +
           '<span>' + escapeHtml(item.label) + '</span>' +
-          '<span style="margin-left:auto;color:var(--muted);font-size:12px;">' + escapeHtml(item.subtitle || '') + '</span></div>';
+          '<span class="command-meta">' + escapeHtml(item.subtitle || '') + '</span></div>';
         CMD_RESULTS.push({ key: item.key, action: item.action });
       });
-      if (submissionResults.length) html += '<div style="padding:8px 16px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Submissions</div>';
+      if (submissionResults.length) html += '<div class="command-category">Submissions</div>';
       submissionResults.forEach(function (item) {
         var idx = CMD_RESULTS.length;
         html += '<div class="command-item" data-cmd="' + escAttr(item.key) + '" data-idx="' + idx + '" onclick="executeCommand(\'' + escAttr(item.key) + '\')">' +
           '<span>' + escapeHtml(item.label) + '</span>' +
-          '<span style="margin-left:auto;color:var(--muted);font-size:12px;">' + escapeHtml(item.subtitle || '') + '</span></div>';
+          '<span class="command-meta">' + escapeHtml(item.subtitle || '') + '</span></div>';
         CMD_RESULTS.push({ key: item.key, action: item.action });
       });
-      if (documentResults.length) html += '<div style="padding:8px 16px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Documents</div>';
+      if (documentResults.length) html += '<div class="command-category">Documents</div>';
       documentResults.forEach(function (item) {
         var idx = CMD_RESULTS.length;
         html += '<div class="command-item" data-cmd="' + escAttr(item.key) + '" data-idx="' + idx + '" onclick="executeCommand(\'' + escAttr(item.key) + '\')">' +

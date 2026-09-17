@@ -2647,9 +2647,18 @@ body.modal-open { overflow: hidden; }
 }
 
 /* ---------------------------------- Command Palette ---------------------------------- */
-.command-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px; cursor: pointer; transition: background var(--transition); }
+#commandPalette .modal-card { max-width: 560px; max-height: 80vh; }
+#commandPalette .input { padding: 8px 0; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.command-list { scrollbar-width: thin; scrollbar-color: var(--scrollbar, var(--muted)) transparent; }
+.command-list::-webkit-scrollbar { width: 6px; }
+.command-list::-webkit-scrollbar-thumb { background: var(--scrollbar, var(--muted)); border-radius: 3px; }
+.command-category { padding: 8px 16px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.command-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px; cursor: pointer; transition: background var(--transition); border-radius: var(--radius-xs); margin: 2px 8px; }
 .command-item:hover { background: var(--surface-3); }
-.command-shortcut { font-size: 11px; color: var(--muted); background: var(--surface-3); padding: 2px 6px; border-radius: var(--radius-xs); }
+.command-item.command-selected { background: var(--accent-soft, rgba(37,99,235,0.1)); outline: 1px solid var(--accent, #2563eb); }
+.command-meta { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.command-shortcut { font-size: 11px; color: var(--muted); background: var(--surface-3); padding: 2px 6px; border-radius: var(--radius-xs); white-space: nowrap; }
+.command-empty { padding: 24px 16px; color: var(--muted); text-align: center; font-size: 14px; }
 
 /* ---------------------------------- Documents ---------------------------------- */
 .detail-docs { margin-top: var(--sp-3); border-top: 1px solid var(--border); padding-top: var(--sp-2); }
