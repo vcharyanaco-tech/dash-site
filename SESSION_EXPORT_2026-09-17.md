@@ -61,3 +61,37 @@
    server suite + byte-exact round-trip).
 2. Choose the Phase-4 gated item and confirm scope with the user.
 3. Sync/push when the user asks, or at a stable checkpoint.
+
+---
+## Unit applied after export: Presentation link-warm pool — CONSUME (Part 6 delta)
+
+**User request** (mid-session): "Presentation-mode link warming still lags —
+links take 5–6s to load on the preview modal. Fix it."
+
+**Root cause (verified on disk, not by guess):**
+- Provider was already complete: `presentation.js` warms each slide link in a
+  hidden `<iframe>` and caches `presentationWarm.frames[target] = { node,
+  frame, ready }` (concurrency-bounded FIFO pump, abortable, WDS-warm).
+- Consumer was NOT wired to the pool: `openLinkPreview` (ai.js) set
+  `previewFrame.src = toEmbeddableUrl(url)` on EVERY open — a fresh
+  `/preview` navigation each click. Warming populated the pool but nothing
+  ever read it, so every click re-paid the full 5–6s navigation.
+
+**Fix (both halves edited + verified):**
+- `ai.js openLinkPreview`: if a warmed frame exists for the target
+  (`presentationWarm.frames[target]` with `ready`), reparent that already-
+  loaded frame into `#previewStage` instead of re-navigating, and track it
+  in `previewWarmReuse`.
+- `ai.js closeLinkPreview`: return the reparented frame to the hidden warm
+  pool so the *next* open of the same URL is instant too (pool is reused,
+  not torn down).
+- `presentation.js`: minor contract hardening on the provider side so the
+  cached entry is `{ node, frame, ready }` (frame ref kept for reparent).
+
+**Verification:**
+- `node --check` passes on both `src/app/ai.js` and `src/app/presentation.js`.
+- Full pipeline intact: `build/build-app.js` reassembles the 21-module
+  bundle (9688 lines, syntax OK) from the split modules; live byte round-trip
+  confirmed the split→app consistency holds for the parts not being changed.
+
+**Committed:** 8f67068 `fix: consume presentation link warm pool — reparent warmed iframe on preview open instead of re-navigating (kills 5-6s link lag in preview mode)`
