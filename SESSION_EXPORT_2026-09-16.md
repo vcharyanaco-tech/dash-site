@@ -1039,3 +1039,32 @@ previously navigation commands + record substring search only.
 - `src/server/index.js` — AUTH_ARG_INDEX entry (token at arg 0)
 - `app.js` — rebuilt (studio.js folded into monolith)
 - SESSION_EXPORT_2026-09-16.md — this section
+
+### v5 — fuzzy matching + visual polish (done — pushed: e060885)
+
+- Added `fuzzyMatch_(query, text)` helper: all query characters in order
+  (e.g. "tsk" matches "task", "adm" matches "admin").
+- Applied fuzzy matching across all palette filters: commands, records,
+  recent items, tasks, users, submissions, documents.
+- Replaced inline styles with CSS classes:
+  `.command-category`, `.command-item`, `.command-selected`,
+  `.command-meta`, `.command-empty`, `.command-list` (scrollbar).
+- Palette modal: `max-height: 80vh`, input bottom border.
+- Selected item highlighting via CSS class toggle instead of inline
+  styles (background/outline).
+- Empty state uses `.command-empty` class.
+
+### Verification (v5)
+- `node build/build-app.js` → 21 modules, 9,053 lines; split round-trip
+  byte-exact.
+- `node --check` clean on studio.js, app.js.
+- Full server suite: **368/368 pass**, 0 fail (~46s). Coverage unchanged.
+
+### Files changed
+- `src/app/studio.js` — fuzzyMatch_ helper, fuzzy filters across all
+  categories, CSS class-based highlighting/empty state, category/meta
+  classes replacing inline styles
+- `assets/styles.css` — command palette CSS: scrollbar, category,
+  selected, meta, empty classes
+- `app.js` — rebuilt (studio.js folded into monolith)
+- SESSION_EXPORT_2026-09-16.md — this section
