@@ -95,3 +95,34 @@ links take 5–6s to load on the preview modal. Fix it."
   confirmed the split→app consistency holds for the parts not being changed.
 
 **Committed:** 8f67068 `fix: consume presentation link warm pool — reparent warmed iframe on preview open instead of re-navigating (kills 5-6s link lag in preview mode)`
+
+---
+
+## Part 12 — Mobile parity of the command palette (shipped)
+
+**User pick (Phase-4 gated item, confirmed before coding):** "Mobile parity".
+
+**Delta (exactly 2 files, no JS/bundle rebuild needed — HTML + CSS only):**
+
+- `app.html:104` — added `#paletteToggle` icon-btn (sliders glyph) in the
+  topbar-actions cluster calling `openCommandPalette()`. The palette was
+  previously reachable only via Ctrl+K (keyboard-only; no touch affordance on
+  phones). The trigger reuses the existing stack: `openCommandPalette()`
+  (ai.js/studio.js) already self-focuses `#commandInput` and handles
+  Escape/arrows, so no new keyboard plumbing was required — pure touch
+  trigger parity.
+- `assets/styles.css` (+19 lines, right after the `.command-shortcut` block,
+  at the same 720px breakpoint as the topbar-collapse single-source-of-truth
+  media query): `#commandPalette .modal-card` becomes full-width
+  (`calc(100vw - 20px)`, `max-height: 88vh`) with `padding` floor-raised for
+  touch targets (rows ≥48px), `.command-category`/`.command-item`/`.command-meta`
+  text sizes tuned, and `.command-shortcut` hidden on narrow screens so the
+  two-line layout keeps clean on ≤720px.
+
+**Verified on the real disk (not asserted):**
+- `git diff` shows exactly +3 (app.html) and +19 (styles.css) — the two-file
+  Part-12 delta, nothing stray.
+- `node --check` unaffected (no JS touched this unit).
+- Working tree clean, in sync with `origin/main`.
+
+**Committed:** 36ccf7a `feat: Part 12 mobile parity — touch-visible command palette trigger + responsive palette card at 720px breakpoint`
