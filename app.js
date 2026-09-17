@@ -8053,6 +8053,7 @@ function presentationSlideHtml_(item) {
         <span class="presentation-subcount">${subCount} submission${subCount === 1 ? '' : 's'}</span>
       </div>
       <div class="card-fields">${fieldsHtml || '<div class="card-field"><span class="field-label">Details</span><div class="field-value preserve-whitespace">No details available</div></div>'}${updatesBlock}</div>
+      ${presentationLinksHtml_(item)}
       <div class="presentation-slide-actions">${actions || '<span class="presentation-actions-empty">No actions available</span>'}</div>
     </article>`;
 }
@@ -8205,6 +8206,23 @@ function wirePresentationTouch_() {
     if (dx < 0) presentationNext_();
     else presentationPrev_();
   }, { passive: true });
+}
+
+/* ---- Links ---- */
+
+function presentationLinksHtml_(item) {
+  const links = (item && item.linkUrls) || {};
+  const keys = Object.keys(links);
+  if (!keys.length) return '';
+  let html = '<div class="presentation-links">';
+  keys.forEach(function (key) {
+    const url = String(links[key] || '').trim();
+    if (!url || !/^https?:\/\//i.test(url)) return;
+    const text = (item.linkTexts && item.linkTexts[key]) || key;
+    html += '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener" data-embed class="presentation-link">' + escapeHtml(text) + '</a><br>';
+  });
+  html += '</div>';
+  return html;
 }
 
 /* ---- Link preloading / buffering ---- */
