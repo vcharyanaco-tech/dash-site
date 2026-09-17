@@ -2528,13 +2528,25 @@ function askLinkAi(elm) {
    embedding. */
 
 /* Rewrite shareable URLs to an embeddable form where possible (Drive file
-   links -> /preview host). Returns the URL unchanged when not recognized. */
+   links -> /preview host, Google Spreadsheets -> htmlview grid-only view).
+   Returns the URL unchanged when not recognized. */
 function toEmbeddableUrl(url) {
   if (!url) return '';
   const m = url.match(/drive\.google\.com\/file\/d\/([^/?#]+)/);
   if (m) return 'https://drive.google.com/file/d/' + m[1] + '/preview';
   const o = url.match(/drive\.google\.com\/open\?id=([^&#]+)/);
   if (o) return 'https://drive.google.com/file/d/' + o[1] + '/preview';
+  const s = url.match(/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (s) {
+    const gid = (url.match(/(?:[#&?]gid=)(\d+)/) || [])[1];
+    const range = (url.match(/(?:[#&?]range=)([^#&=?]+)/) || [])[1];
+    let out = 'https://docs.google.com/spreadsheets/d/' + s[1] + '/htmlview';
+    const frag = [];
+    if (gid) frag.push('gid=' + gid);
+    if (range) frag.push('range=' + range);
+    if (frag.length) out += '#' + frag.join('&');
+    return out;
+  }
   return url;
 }
 
@@ -8260,10 +8272,11 @@ function presentationLinksHtml_(item) {
 /* ---- Link preloading / buffering ---- */
 /* Warm links in the background while presentation mode is open so a click
    loads instantly. Warms the URL the popup actually loads (toEmbeddableUrl,
-   which rewrites Drive links to their /preview form) rather than the raw
-   href. Targets queue up FIFO and are processed with a bounded concurrency —
-   URLs are never silently dropped at the cap. Current slide is appended
-   first so it always gets priority over later slides. */
+   which rewrites Drive links to their /preview form and Google Sheets to the
+   grid-only /htmlview) rather than the raw href. Targets queue up FIFO and
+   are processed with a bounded concurrency — URLs are never silently dropped
+   at the cap. Current slide is appended first so it always gets priority
+   over later slides. */
 function warmPresentationLinks_(targets) {
   if (!presentationState.active) return;
   const urls = [];

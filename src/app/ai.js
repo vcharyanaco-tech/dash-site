@@ -504,13 +504,25 @@ function askLinkAi(elm) {
    embedding. */
 
 /* Rewrite shareable URLs to an embeddable form where possible (Drive file
-   links -> /preview host). Returns the URL unchanged when not recognized. */
+   links -> /preview host, Google Spreadsheets -> htmlview grid-only view).
+   Returns the URL unchanged when not recognized. */
 function toEmbeddableUrl(url) {
   if (!url) return '';
   const m = url.match(/drive\.google\.com\/file\/d\/([^/?#]+)/);
   if (m) return 'https://drive.google.com/file/d/' + m[1] + '/preview';
   const o = url.match(/drive\.google\.com\/open\?id=([^&#]+)/);
   if (o) return 'https://drive.google.com/file/d/' + o[1] + '/preview';
+  const s = url.match(/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (s) {
+    const gid = (url.match(/(?:[#&?]gid=)(\d+)/) || [])[1];
+    const range = (url.match(/(?:[#&?]range=)([^#&=?]+)/) || [])[1];
+    let out = 'https://docs.google.com/spreadsheets/d/' + s[1] + '/htmlview';
+    const frag = [];
+    if (gid) frag.push('gid=' + gid);
+    if (range) frag.push('range=' + range);
+    if (frag.length) out += '#' + frag.join('&');
+    return out;
+  }
   return url;
 }
 

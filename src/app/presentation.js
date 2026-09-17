@@ -344,10 +344,11 @@ function presentationLinksHtml_(item) {
 /* ---- Link preloading / buffering ---- */
 /* Warm links in the background while presentation mode is open so a click
    loads instantly. Warms the URL the popup actually loads (toEmbeddableUrl,
-   which rewrites Drive links to their /preview form) rather than the raw
-   href. Targets queue up FIFO and are processed with a bounded concurrency —
-   URLs are never silently dropped at the cap. Current slide is appended
-   first so it always gets priority over later slides. */
+   which rewrites Drive links to their /preview form and Google Sheets to the
+   grid-only /htmlview) rather than the raw href. Targets queue up FIFO and
+   are processed with a bounded concurrency — URLs are never silently dropped
+   at the cap. Current slide is appended first so it always gets priority
+   over later slides. */
 function warmPresentationLinks_(targets) {
   if (!presentationState.active) return;
   const urls = [];
