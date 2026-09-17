@@ -6,8 +6,9 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
-const TMP = path.join('D:/tmp', 'subs-overview-' + Date.now());
+const TMP = path.join(os.tmpdir(), 'subs-overview-' + Date.now());
 process.env.DASH_DATA_DIR = TMP;
 fs.mkdirSync(TMP, { recursive: true });
 

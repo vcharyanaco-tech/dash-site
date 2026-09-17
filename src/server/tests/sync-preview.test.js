@@ -6,8 +6,9 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
-const TMP = path.join('D:/tmp', 'sync-preview-' + Date.now());
+const TMP = path.join(os.tmpdir(), 'sync-preview-' + Date.now());
 process.env.DASH_DATA_DIR = TMP;
 process.env.GOOGLE_SHEETS_API_KEY = 'test-key';
 fs.mkdirSync(TMP, { recursive: true });

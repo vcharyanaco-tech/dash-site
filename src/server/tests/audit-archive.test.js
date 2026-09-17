@@ -4,8 +4,9 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
+const os = require('os');
 
-const TMP = path.join('D:/tmp', 'audit-archive-' + Date.now());
+const TMP = path.join(os.tmpdir(), 'audit-archive-' + Date.now());
 process.env.DASH_DATA_DIR = TMP;
 
 const { db } = require('../db');

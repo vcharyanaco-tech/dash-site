@@ -5,8 +5,9 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
-const TMP = path.join('D:/tmp', 'retention-' + Date.now());
+const TMP = path.join(os.tmpdir(), 'retention-' + Date.now());
 process.env.DASH_DATA_DIR = TMP;
 process.env.DASH_RETENTION_DAYS = '1';
 

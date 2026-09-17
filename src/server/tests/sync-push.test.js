@@ -3,8 +3,9 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
-const TMP = path.join('D:/tmp', 'sync-push-' + Date.now());
+const TMP = path.join(os.tmpdir(), 'sync-push-' + Date.now());
 process.env.DASH_DATA_DIR = TMP;
 process.env.DASH_PUSH_TO_SHEET = 'true';
 process.env.GOOGLE_OAUTH_TOKEN = 'test-oauth-token';
