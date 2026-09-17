@@ -126,3 +126,37 @@ links take 5–6s to load on the preview modal. Fix it."
 - Working tree clean, in sync with `origin/main`.
 
 **Committed:** 36ccf7a `feat: Part 12 mobile parity — touch-visible command palette trigger + responsive palette card at 720px breakpoint`
+
+---
+
+## Pending Tasks (next gated units — scope re-confirmed with user)
+
+Two items confirmed to work next, each shipped as its own
+commit → export delta → push → deploy unit:
+
+1. **PART 13 — MOBILE EXPERIENCE** (dash-site-improvement-prompt.md ~line 722-746):
+   Full app-wide mobile phase, app is a first-class mobile product:
+   - bottom navigation (`Home | Tasks | + | Notifications | More`)
+   - compact top bar
+   - large touch targets (≥44px)
+   - swipe-friendly cards / drawers where useful
+   - mobile record detail + mobile task views
+   - simplified filters
+   - sticky action bar
+   Not the narrower accessibility sub-item — user picked mobile experience.
+   Do at the 720px breakpoint; follow the "treat mobile as first-class, not a
+   collapsed desktop" guidance.
+
+2. **PART 11 — VISUAL / LOOK-AND-FEEL** (dash-site-improvement-prompt.md ~line 460):
+   "Modern enterprise operations platform with India Post identity," restrained
+   and professional: typography hierarchy, spacing consistency, card density,
+   status indicators, button hierarchy, empty/loading/error states,
+   hover/focus states. 8-12px radii, subtle borders, restrained shadows,
+   strong typography.
+
+## Deploy-status notes (this session)
+- Deploy pipeline `src/scripts/deploy-all.ps1` run after push: **git/GH Pages
+  OK**, GAS `clasp` SKIP (not installed — `npm i -g @google/clasp` + login),
+  Apps Script redeploy SKIP, Cloudflare Worker Pending (needs
+  `CLOUDFLARE_API_TOKEN` env, or CI). Live: https://dashboardharyana.site/app.html
+- Working tree clean, `HEAD == origin/main`, ahead 0 behind 0.
