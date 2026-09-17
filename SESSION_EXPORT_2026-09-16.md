@@ -1103,3 +1103,86 @@ previously navigation commands + record substring search only.
   `.presentation-links` / `.presentation-link` classes
 - `app.js` — rebuilt (presentation.js folded into monolith)
 - SESSION_EXPORT_2026-09-16.md — this section
+
+## Print-report submenus + spacious layout (done — pushed: 9e93489)
+
+User request: (1) restructure the Reports → Print report dropdown into
+submenus — "Print all records" and "Print only visible records", each with
+the existing "With submissions / Without submissions" leaf options; (2) the
+printed document was too tight/fonts too small — make it spacious.
+
+### What was done
+- **Nested Print submenu** in `app.html`: the Print dropdown now holds two
+  parent items — **Print all records** and **Print only visible records** —
+  each with a nested child menu (With submissions / Without submissions).
+  Structure uses spin-off `.menu-dropdown-parent` / `.menu-dropdown-submenu`
+  CSS (pre-existing generic dropdown mechanism reused).
+- **Scope support in `printReport(scope, includeSubmissions)`**:
+  - `'visible'` → uses `sortedItems()` = current search/sector/review
+    filtered + dashboard-sorted list (what the user actually sees).
+  - `'all'` → full `appState.items` set (every record).
+  - Subtitle line now begins with the scope label, e.g.
+    "visible records · 12 records with submissions (34)".
+- **Spacious print layout** in `buildPrintPage` (shared by report + card
+  print): page margin `12mm → 16mm`; body font `12 → 14px` with
+  `line-height 1.6`; title `18 → 26px` with `letter-spacing`; table cell
+  padding `5x7 → 10x12px`, `line-height 1.55`; th font `13.5px`; empty state,
+  sub-blocks, sub-items, and footer all given more breathing room.
+- **Cache bump** to `2026.09.16h` (sw.js `SW_VERSION` + app.html
+  `styles.css?v=`).
+
+### Verification
+- `node build/build-app.js` → 21 modules, 9,140 lines; split round-trip
+  byte-exact; `node --check` clean.
+- Full server suite: **368/368 pass**, 0 fail. Coverage unchanged.
+
+### Files changed
+- `app.html` — Print dropdown restructured into nested submenus
+- `src/app/reports.js` — `printReport(scope, includeSubmissions)`,
+  `buildPrintPage` spacious layout
+- `assets/styles.css` — `.menu-dropdown-parent`/`.menu-dropdown-submenu`,
+  `.menu-caret`
+- `app.js` — rebuilt
+- `sw.js`, `app.html` — cache bump `2026.09.16h`
+
+### Pending Tasks
+1. Phase 3 Part 3b — PWA offline improvements (offline activity center
+   with queued/syncing/synced/failed/conflict states) — previously Phase 4
+   gated, but this evening the user authorized "do all the pending tasks and
+   clean the working tree" — still not started.
+2. Other Phase 4+ gated items — user-authorized but not yet started.
+
+## Print tweak — hover-only submenus + orientation switch (done — pushed: ba38e4f)
+
+Follow-up: (1) submenus should open on hover only (not only after a click on
+the parent); (2) the print window should offer both orientations — Vertical
+(portrait) and Horizontal (landscape).
+
+### What was done
+- **Hover-only submenus**: removed the `:focus` / `:focus-within` /
+  `.menu-dropdown-submenu.open` display triggers from `.menu-dropdown-submenu`
+  so it shows purely on `.menu-dropdown-parent:hover`. No click needed.
+- **Vertical / Horizontal print option**: `buildPrintPage` no longer
+  hard-codes orientation + auto-prints on load. It now renders a sticky,
+  print-hidden toolbar with **Vertical** / **Horizontal** toggle buttons and
+  a **Print** button. A hidden `#pageRule` `<style>` holds the live `@page`
+  rule; `setOrient('portrait'|'landscape')` rewrites it and toggles the
+  active button class; `doPrint()` calls `window.print()`. Initial
+  orientation still respects the caller (`opts.landscape`).
+- **Cache bump** to `2026.09.16i`.
+
+### Verification
+- `node build/build-app.js` → 21 modules, 9,173 lines; split round-trip
+  byte-exact; `node --check` clean.
+- Full server suite: **368/368 pass**, 0 fail. Coverage unchanged.
+
+### Files changed
+- `assets/styles.css` — hover-only `.menu-dropdown-submenu` display rule
+- `src/app/reports.js` — `buildPrintPage` toolbar + `setOrient`/`doPrint`
+- `app.js` — rebuilt
+- `sw.js`, `app.html` — cache bump `2026.09.16i`
+
+### Pending Tasks
+1. Phase 3 Part 3b — PWA offline improvements (offline activity center) —
+   user-authorized, not yet started.
+2. Other Phase 4+ gated items — user-authorized, not yet started.
