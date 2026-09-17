@@ -334,6 +334,19 @@ function closeDropdowns(exceptMenu) {
   });
 }
 
+/* Pin/unpin a nested submenu (print-report parent items) on click. Only
+   sibling submenus are closed; the outer menu stays open. */
+function toggleSubmenu(trigger) {
+  const wrap = trigger.closest ? trigger.closest('.menu-dropdown-parent') : trigger.parentElement;
+  const menu = wrap ? wrap.querySelector('.menu-dropdown-submenu') : null;
+  if (!menu) return;
+  const isOpen = menu.classList.toggle('open');
+  document.querySelectorAll('.menu-dropdown-submenu.open').forEach(function (m) {
+    if (m !== menu) m.classList.remove('open');
+  });
+  return isOpen;
+}
+
 function toggleReviewDropdown(btn) {
   const menu = btn.parentElement.querySelector('.review-dropdown-menu');
   if (!menu) return;
