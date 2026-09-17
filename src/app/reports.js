@@ -55,25 +55,25 @@ function buildPrintPage(opts) {
 <meta charset="utf-8">
 <title>${escapeHtml(title)}</title>
 <style>
-  @page { size: ${opts.landscape ? 'A4 landscape' : 'A4 portrait'}; margin: 12mm; }
+  @page { size: ${opts.landscape ? 'A4 landscape' : 'A4 portrait'}; margin: 16mm; }
   * { box-sizing: border-box; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; margin: 0; font-size: 12px; }
-  .report-header { border-bottom: 3px solid #1f5c2e; padding-bottom: 8px; margin-bottom: 12px; }
-  .report-header h1 { margin: 0; font-size: 18px; color: #1f5c2e; }
-  .report-header .meta { margin-top: 4px; color: #6b7280; font-size: 11px; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; margin: 0; font-size: 14px; line-height: 1.6; }
+  .report-header { border-bottom: 3px solid #1f5c2e; padding-bottom: 14px; margin-bottom: 20px; }
+  .report-header h1 { margin: 0; font-size: 26px; color: #1f5c2e; letter-spacing: 0.2px; }
+  .report-header .meta { margin-top: 8px; color: #6b7280; font-size: 13px; }
   table { width: 100%; border-collapse: collapse; }
-  th, td { border: 1px solid #d1d5db; padding: 5px 7px; text-align: left; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
-  th { background: #1f5c2e; color: #fff; font-weight: 600; white-space: nowrap; }
+  th, td { border: 1px solid #d1d5db; padding: 10px 12px; text-align: left; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; line-height: 1.55; }
+  th { background: #1f5c2e; color: #fff; font-weight: 600; white-space: nowrap; font-size: 13.5px; letter-spacing: 0.2px; }
   td.num { white-space: nowrap; }
   tr:nth-child(even) td { background: #f9fafb; }
-  .empty { text-align: center; color: #6b7280; padding: 16px; }
-  .sub-block { background: #f3f7f4; border-left: 3px solid #1f5c2e; margin-top: 6px; padding: 8px 10px; }
-  .sub-block h2, .sub-block h4 { margin: 0 0 6px; font-size: 12px; color: #1f5c2e; }
-  .sub-item { padding: 4px 0; border-bottom: 1px dotted #d1d5db; }
+  .empty { text-align: center; color: #6b7280; padding: 28px 16px; font-size: 14px; }
+  .sub-block { background: #f3f7f4; border-left: 4px solid #1f5c2e; margin-top: 10px; padding: 14px 16px; }
+  .sub-block h2, .sub-block h4 { margin: 0 0 10px; font-size: 14px; color: #1f5c2e; }
+  .sub-item { padding: 8px 0; border-bottom: 1px dotted #d1d5db; }
   .sub-item:last-child { border-bottom: none; }
-  .sub-meta { color: #6b7280; font-size: 10px; }
+  .sub-meta { color: #6b7280; font-size: 12px; margin-bottom: 4px; }
   .preserve-whitespace { white-space: pre-wrap; }
-  .report-footer { margin-top: 12px; color: #6b7280; font-size: 10px; }
+  .report-footer { margin-top: 22px; padding-top: 10px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -121,7 +121,7 @@ function printCard(row, includeSubmissions) {
     }).join('');
 
     const subsHtml = (subs && subs.length) ? `
-      <h2 style="margin:16px 0 6px;font-size:14px;color:#1f5c2e;">Submissions (${subs.length})</h2>
+      <h2 style="margin:20px 0 10px;font-size:16px;color:#1f5c2e;">Submissions (${subs.length})</h2>
       <div class="sub-block">
         ${subs.map(function (s) {
           return `
@@ -155,9 +155,13 @@ function printCard(row, includeSubmissions) {
   }
 }
 
-function printReport(includeSubmissions) {
-  const items = appState.items || [];
+/* Print a report of the records. scope: 'all' (every record, the full
+   appState.items set) or 'visible' (the current search/sector/review-filtered
+   and sorted list, exactly what the dashboard shows). */
+function printReport(scope, includeSubmissions) {
   const useSubs = includeSubmissions === true;
+  const items = scope === 'visible' ? sortedItems() : (appState.items || []).slice();
+  const scopeLabel = scope === 'visible' ? 'visible records' : 'all records';
 
   const run = function (subMap) {
     const rowsHtml = items.length ? items.map(function (item) {
@@ -186,9 +190,9 @@ function printReport(includeSubmissions) {
 
     const count = items.length;
     const subCount = useSubs ? countSubmissions_(subMap) : 0;
-    const subtitle = useSubs
-      ? count + ' record' + (count === 1 ? '' : 's') + ' &middot; with submissions (' + subCount + ')'
-      : count + ' record' + (count === 1 ? '' : 's') + ' &middot; without submissions';
+    const subtitle = (scopeLabel + ' &middot; ' + (useSubs
+      ? count + ' record' + (count === 1 ? '' : 's') + ' with submissions (' + subCount + ')'
+      : count + ' record' + (count === 1 ? '' : 's') + ' without submissions'));
 
     openPrintWindow(buildPrintPage({
       title: (appState.settings.appName || 'India Post Dashboard') + ' - Report',

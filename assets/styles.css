@@ -2016,6 +2016,7 @@ body.col-resizing * { cursor: col-resize !important; user-select: none; }
 }
 .menu-dropdown-menu.open { display: block; }
 
+.menu-dropdown-item { position: relative; }
 .menu-dropdown-item {
   display: block;
   width: 100%;
@@ -2030,6 +2031,32 @@ body.col-resizing * { cursor: col-resize !important; user-select: none; }
   cursor: pointer;
 }
 .menu-dropdown-item:hover { background: var(--surface-3); }
+
+/* Nested submenu (parent item opens a child list to the right). Opens on
+   hover, focus, or when the open class is set explicitly. */
+.menu-dropdown-submenu {
+  display: none;
+  top: calc(100% - 6px);
+  left: calc(100% + 4px);
+  z-index: calc(var(--z-dropdown) + 1);
+}
+@media (max-width: 720px) {
+  .menu-dropdown-submenu {
+    left: auto;
+    right: calc(100% + 4px);
+  }
+}
+.menu-dropdown-parent:hover > .menu-dropdown-submenu,
+.menu-dropdown-parent:focus > .menu-dropdown-submenu,
+.menu-dropdown-parent:focus-within .menu-dropdown-submenu,
+.menu-dropdown-parent > .menu-dropdown-submenu.open { display: block; }
+.menu-caret {
+  float: right;
+  margin-left: 14px;
+  opacity: .55;
+  font-size: 11px;
+  line-height: 16px;
+}
 
 /* Submission counter badge on the card button */
 .submit-update-wrap { position: relative; display: inline-flex; }
