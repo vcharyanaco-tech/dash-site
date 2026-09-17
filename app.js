@@ -4563,15 +4563,29 @@ function buildPrintPage(opts) {
   const title = opts.title || (appState.settings.appName || 'India Post Dashboard');
   const now = new Date().toLocaleString();
   const subtitle = opts.subtitle ? ' &middot; ' + escapeHtml(opts.subtitle) : '';
+  const initialOrient = opts.landscape ? 'landscape' : 'portrait';
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <title>${escapeHtml(title)}</title>
 <style>
-  @page { size: ${opts.landscape ? 'A4 landscape' : 'A4 portrait'}; margin: 16mm; }
   * { box-sizing: border-box; }
   body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; margin: 0; font-size: 14px; line-height: 1.6; }
+  .print-toolbar {
+    display: flex; align-items: center; gap: 10px;
+    position: sticky; top: 0; z-index: 10;
+    background: #eef3ef; border-bottom: 1px solid #d1d5db;
+    padding: 10px 14px; margin-bottom: 18px;
+  }
+  .print-toolbar .toolbar-title { font-weight: 600; color: #1f5c2e; margin-right: 4px; }
+  .print-toolbar button {
+    border: 1px solid #1f5c2e; background: #fff; color: #1f5c2e;
+    padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .print-toolbar button.active { background: #1f5c2e; color: #fff; }
+  .print-toolbar .print-btn { background: #1f5c2e; color: #fff; margin-left: auto; }
+  @media print { .print-toolbar { display: none; } }
   .report-header { border-bottom: 3px solid #1f5c2e; padding-bottom: 14px; margin-bottom: 20px; }
   .report-header h1 { margin: 0; font-size: 26px; color: #1f5c2e; letter-spacing: 0.2px; }
   .report-header .meta { margin-top: 8px; color: #6b7280; font-size: 13px; }
@@ -4588,16 +4602,35 @@ function buildPrintPage(opts) {
   .sub-meta { color: #6b7280; font-size: 12px; margin-bottom: 4px; }
   .preserve-whitespace { white-space: pre-wrap; }
   .report-footer { margin-top: 22px; padding-top: 10px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px; }
+  #pageRule { display: none; }
 </style>
 </head>
 <body>
+  <div class="print-toolbar">
+    <span class="toolbar-title">Print layout</span>
+    <button type="button" id="btnOrientV" class="${initialOrient === 'portrait' ? 'active' : ''}" onclick="setOrient('portrait')">Vertical</button>
+    <button type="button" id="btnOrientH" class="${initialOrient === 'landscape' ? 'active' : ''}" onclick="setOrient('landscape')">Horizontal</button>
+    <button type="button" class="print-btn" onclick="doPrint()">Print</button>
+  </div>
+  <style id="pageRule">@page { size: ${opts.landscape ? 'A4 landscape' : 'A4 portrait'}; margin: 16mm; }</style>
   <div class="report-header">
     <h1>${escapeHtml(title)}</h1>
     <div class="meta">Generated ${escapeHtml(now)}${subtitle}</div>
   </div>
   ${opts.body}
   <div class="report-footer">India Post Dashboard &middot; Circle Office Haryana</div>
-  <script>window.onload = function () { window.focus(); setTimeout(function () { window.print(); }, 100); };<\/script>
+  <script>
+    function setOrient(o) {
+      var rule = '@page { size: ' + (o === 'landscape' ? 'A4 landscape' : 'A4 portrait') + '; margin: 16mm; }';
+      document.getElementById('pageRule').textContent = rule;
+      document.getElementById('btnOrientV').classList.toggle('active', o === 'portrait');
+      document.getElementById('btnOrientH').classList.toggle('active', o === 'landscape');
+    }
+    function doPrint() {
+      window.focus();
+      setTimeout(function () { window.print(); }, 60);
+    }
+  <\/script>
 </body>
 </html>`;
 }

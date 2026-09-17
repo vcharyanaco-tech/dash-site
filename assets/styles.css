@@ -2032,8 +2032,8 @@ body.col-resizing * { cursor: col-resize !important; user-select: none; }
 }
 .menu-dropdown-item:hover { background: var(--surface-3); }
 
-/* Nested submenu (parent item opens a child list to the right). Opens on
-   hover, focus, or when the open class is set explicitly. */
+/* Nested submenu (parent item opens a child list to the right). Hover-only:
+   the submenu appears purely on hover, no click required. */
 .menu-dropdown-submenu {
   display: none;
   top: calc(100% - 6px);
@@ -2046,10 +2046,7 @@ body.col-resizing * { cursor: col-resize !important; user-select: none; }
     right: calc(100% + 4px);
   }
 }
-.menu-dropdown-parent:hover > .menu-dropdown-submenu,
-.menu-dropdown-parent:focus > .menu-dropdown-submenu,
-.menu-dropdown-parent:focus-within .menu-dropdown-submenu,
-.menu-dropdown-parent > .menu-dropdown-submenu.open { display: block; }
+.menu-dropdown-parent:hover > .menu-dropdown-submenu { display: block; }
 .menu-caret {
   float: right;
   margin-left: 14px;
