@@ -40,6 +40,7 @@ const {
 } = require('./config');
 const helpers = require('./helpers');
 const auth = require('./auth');
+const { checkAskQuota_ } = require('./ai-quota');
 const records = require('./records');
 
 // Same DASH_DATA_DIR convention as db.js / data-sync.js so saved recordings
@@ -698,6 +699,8 @@ async function getLinkContentAiInsight(token, row) {
    linked file content via the configured AI provider (Groq by default). */
 async function askLinkAi(token, row, question) {
   auth.requireEditor(token);
+  const q = checkAskQuota_(token);
+  if (!q.ok) return { success: false, message: q.message };
   if (!aiEnabled_()) {
     return { success: false, message: 'AI insights are not enabled.' };
   }
