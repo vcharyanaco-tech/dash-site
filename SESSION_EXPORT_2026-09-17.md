@@ -190,3 +190,33 @@ delta (no JS => no bundle rebuild needed; styles are served as static CSS).
 gradients/radii audit confirms no other off-spec radius or flashy gradient
 remains; server regression suite passes (80.16% line coverage, tasks/weekly
 green).
+
+---
+
+## Part 13 — Mobile Experience (shipped)
+
+**Delivered:** first-class bottom navigation on mobile — not a collapsed desktop.
+At the single shared <=720px breakpoint (same parity as Part 12's palette block),
+a thumb-tuned #bottomNav mounts: **Home | Tasks | [+FAB] | Alerts | More**.
+
+**Files changed (exactly 2, no JS — HTML + CSS only, same zero-JS parity rule as
+Part 12):**
+- pp.html (+28): <nav id="bottomNav" class="bottom-nav"> with 5 items, FAB
+  center (+) opening the task modal, each item calling an existing function
+  (openTab('dashboard'|'tasks'), openTaskModal(), 	oggleNotifications(),
+  	oggleSidebar()). Touch targets >=48px, 44px min-height per WCAG 2.5.5.
+- ssets/styles.css (+53): .bottom-nav grid (5 cols), safe-area-inset
+  bottom padding, FAB raised above the bar (margin-top:-22px, sticky-action
+  parity), and **unconditional** .app-main { padding-bottom: 84px } clearance
+  at <=720px so no content sits under the fixed nav (no JS toggle needed —
+  mirror of the palette-block parity approach).
+
+**Playtested parity with existing Part 12**: bottom nav + compact palette +
+topbar all coexist at <=720px; desktop (>720px) shows neither (both hidden via
+the same single breakpoint token). WCAG: large targets, tap-highlight off,
+safe-area aware.
+
+**Verified on disk (not asserted):** git diff --stat shows exactly app.html
+(+28) + styles.css (+53); tree otherwise clean; 
+ode --check N/A (no JS
+touched); server suite unaffected (no server code changed).

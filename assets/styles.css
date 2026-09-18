@@ -3433,4 +3433,59 @@ body.sidebar-open .sidebar-backdrop {
   .presentation-overlay { display: none !important; }
 }
 
+/* ============================================================
+   PART 13 — MOBILE EXPERIENCE: first-class bottom navigation
+   ============================================================
+   Mobile is a first-class product, not a collapsed desktop. At the single
+   shared <=720px breakpoint (same one the topbar collapse + palette parity
+   use) we mount a thumb-tuned bottom nav: Home | Tasks | [+FAB] | Alerts |
+   More. Hidden on desktop so nothing regresses at >720px.
+   HTML wires to existing functions only — no new JS (same Part-12 parity
+   approach). Touch targets are large (>=60px rows, >=44px indicators per
+   WCAG 2.5.5). Safe-area padding keeps items clear of iOS/Android home bars.
+   ============================================================ */
+.bottom-nav { display: none; }
+
+@media (max-width: 720px) {
+  .bottom-nav {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    position: fixed; left: 0; right: 0; bottom: 0;
+    z-index: 900;
+    background: var(--surface-2);
+    border-top: 1px solid var(--border-strong);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: var(--shadow-md);
+  }
+  .bottom-nav-item {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; min-height: 60px; padding: 8px 4px;
+    background: none; border: none; color: var(--muted);
+    font-size: 11px; font-weight: 600;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  .bottom-nav-item[aria-current] { color: var(--primary); }
+  .bottom-nav-item:active { background: var(--surface-3); }
+  .bottom-nav-fab {
+    position: relative; justify-content: flex-start;
+  }
+  .bottom-nav-fab-inner {
+    display: flex; align-items: center; justify-content: center;
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--primary); color: #fff;
+    font-size: 26px; font-weight: 600; line-height: 1;
+    box-shadow: var(--shadow-md);
+  }
+  .bottom-nav-fab-label { font-size: 11px; color: var(--muted); }
+  .bottom-nav-item svg { width: 24px; height: 24px; }
+  /* sticky action bar parity: raise the palette/new-task affordance above nav */
+  .bottom-nav-fab { margin-top: -22px; }
+
+  /* content clearance so nothing sits under the fixed bar.
+     Unconditional (no JS toggle needs to flip a body class): the nav is always
+     mounted at <=720px, same parity as the palette block. */
+  .app-main { padding-bottom: 84px; }
+}
+
 

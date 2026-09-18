@@ -1266,6 +1266,34 @@
   </div>
   <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="false"></div>
 
+  <!-- ================= MOBILE BOTTOM NAVIGATION (Part 13) =================
+       First-class mobile nav, shown only at <=720px (same single breakpoint
+       as the palette + topbar parity). Mirrors the sidebar destinations but
+       tuned for thumbs: Home | Tasks | + (new task) | Notifications | More.
+       Wires to existing functions only - no new JS. -->
+  <nav id="bottomNav" class="bottom-nav" aria-label="Mobile navigation">
+    <button class="bottom-nav-item" type="button" data-mtab="dashboard" onclick="openTab('dashboard')" aria-label="Home">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+      <span>Home</span>
+    </button>
+    <button class="bottom-nav-item" type="button" data-mtab="tasks" onclick="openTab('tasks')" aria-label="Tasks">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+      <span>Tasks</span>
+    </button>
+    <button class="bottom-nav-item bottom-nav-fab" type="button" onclick="openTaskModal()" aria-label="New task">
+      <span class="bottom-nav-fab-inner" aria-hidden="true">+</span>
+      <span class="bottom-nav-fab-label">New</span>
+    </button>
+    <button class="bottom-nav-item" type="button" data-mtab="notifications" onclick="toggleNotifications()" aria-label="Notifications">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+      <span>Alerts</span>
+    </button>
+    <button class="bottom-nav-item" type="button" data-mtab="more" onclick="toggleSidebar()" aria-label="More menu">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
+      <span>More</span>
+    </button>
+  </nav>
+
   <!-- ============================ PRESENTATION MODE ============================ -->
   <div id="presentationOverlay" class="presentation-overlay" role="region" aria-label="Presentation mode">
     <button id="presentationPrevBtn" class="presentation-nav-btn presentation-nav-prev" type="button" aria-label="Previous record">&#10094;</button>
