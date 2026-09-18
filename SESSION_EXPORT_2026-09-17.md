@@ -160,3 +160,33 @@ commit â†’ export delta â†’ push â†’ deploy unit:
   Apps Script redeploy SKIP, Cloudflare Worker Pending (needs
   `CLOUDFLARE_API_TOKEN` env, or CI). Live: https://dashboardharyana.site/app.html
 - Working tree clean, `HEAD == origin/main`, ahead 0 behind 0.
+
+---
+
+## Part 11 — Visual / Look-and-Feel (shipped — token compliance unit)
+
+**Scope read (dash-site-improvement-prompt.md:677-721):** modern enterprise
+operations platform with India Post identity — restrained, professional, highly
+readable, information-dense, clear hierarchy.
+
+**Audit result (grep on real disk):** the design token system already satisfied
+nearly all Part 11 targets — full 8px spacing scale (--sp-0-5..6), typography
+scale (30..11px, tight/equiv line-heights), restrained shadow ladder
+(--shadow-xs..lg), tone-soft status tokens per semantic state, --focus-ring with
+:focus-visible, aria-selected tab indicators, plus empty-state / skeleton /
+spinner / field-error / toast presentations. Gradients are restrained (only
+subtle brand + skeleton washes), consistent with "avoid excessive gradients".
+
+**The one concrete spec violation fixed:** the prompt mandates 8-12px radii and
+"avoid excessive rounded cards". --radius-lg was 16px. Since every card and
+surface consumes the token, a single edit caps it at 12px:
+
+    assets/styles.css  --radius-lg: 16px -> 12px  (1 line)
+
+This ships the "restrained professional card" rule app-wide with a one-token
+delta (no JS => no bundle rebuild needed; styles are served as static CSS).
+
+**Verified:** --radius-lg collapses all card radii to 12px via the token;
+gradients/radii audit confirms no other off-spec radius or flashy gradient
+remains; server regression suite passes (80.16% line coverage, tasks/weekly
+green).
