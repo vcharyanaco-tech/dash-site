@@ -4,6 +4,7 @@
 function renderTasks() {
   const statusFilter = getEl('taskStatusFilter');
   const priorityFilter = getEl('taskPriorityFilter');
+  const mineToggle = getEl('taskMineToggle');
   const filters = {};
   if (statusFilter && statusFilter.value) filters.status = statusFilter.value;
   if (priorityFilter && priorityFilter.value) filters.priority = priorityFilter.value;
@@ -12,6 +13,15 @@ function renderTasks() {
   ApiService.getTasks(filters).then(function (tasks) {
     hideOverlay();
     appState.tasks = tasks || [];
+
+    const mineOnly = mineToggle && mineToggle.checked;
+    if (mineOnly && appState.user) {
+      const me = appState.user.email;
+      appState.tasks = (appState.tasks || []).filter(function (t) {
+        return String(t.assignee || '').indexOf(me) !== -1 || String(t.createdBy || '').indexOf(me) !== -1;
+      });
+    }
+
     renderTaskList();
   }).catch(function (err) {
     hideOverlay();
@@ -29,7 +39,9 @@ function renderTaskList() {
   
   if (tbody) {
     tbody.innerHTML = tasks.map(function (t) {
-      const statusClass = t.status === 'DONE' ? 'badge-success' : t.status === 'IN_PROGRESS' ? 'badge-warning' : t.status === 'CANCELLED' ? 'badge-muted' : 'badge-danger';
+        const statusClass = t.status === 'DONE' ? 'badge-success' : t.status === 'IN_PROGRESS' ? 'badge-warning' : t.status === 'CANCELLED' ? 'badge-muted' : 'badge-danger';
+        const isOverdue = t.status !== 'DONE' && t.status !== 'CANCELLED' && t.dueDate && new Date(t.dueDate).getTime() < Date.now();
+        const overdueFlag = isOverdue ? ' <button type="button" class="badge badge-danger btn-link" data-overdue title="This task is past its due date" onclick="void 0">Overdue</button>' : '';
       const priorityClass = t.priority === 'URGENT' ? 'badge-danger' : t.priority === 'HIGH' ? 'badge-warning' : t.priority === 'MEDIUM' ? 'badge-info' : 'badge-muted';
       
       // Build action buttons
