@@ -220,3 +220,29 @@ safe-area aware.
 (+28) + styles.css (+53); tree otherwise clean; 
 ode --check N/A (no JS
 touched); server suite unaffected (no server code changed).
+
+---
+## Part 7 — Record experience: detail-drawer CTAs (prompt PART 7, lines 543-573)
+
+**Unit (gated + confirmed): deep-link drawer action set.**
+
+**On-disk defect found while scoping (fixed as part of this unit):** the
+editor action block in `src/app/detail.js` openRecordDetail had a DOUBLED
+`if (appState.isEditor) {` gate (lines 78-79), so the first Edit/Create task
+buttons were rendered under a broken nested gate and the **Submit update /
+Attach document / Ask AI** chain sat at the wrong indentation — permissive
+render for all visitors on the drawer. Collapsed to a single gate.
+
+**Delta (exactly `src/app/detail.js`, actions builder ~lines 76-93):**
+- Single `if (appState.isEditor)` now wraps: **Edit**, **Create task**,
+  **Submit update**, **Attach document** (label-wrapped hidden `<input
+  type=file>` invoking the EXISTING `handleDocUpload(row, input)` — zero new
+  JS, matches the docs-section pattern already in the file), and **Ask AI**.
+- Admin gate (isAdmin) keeps: **Mark done / Mark not done** on the drawer.
+- Close preserved.
+
+**Verification:** `node --check src/app/detail.js` ? exit 0 (clean). Drawer
+token audit: all four CTA classes present, single gate confirmed on disk after
+edit. No rebuild required (HTML/CSS/JS already in bundle; no new identifiers).
+
+**Commits:** `PART-7` squashed into the Part-14/7 record-drawer CTA fix.
