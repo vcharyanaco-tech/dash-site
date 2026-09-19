@@ -214,6 +214,37 @@ grouped to answer "what do I need to do now?" with role-based visibility:
 - Keyboard shortcut `Ctrl+3` (`realtime.js`) now no-ops when the target tab's
   nav item is hidden.
 
+## Part 18 — Testing — EXPANDED
+
+Server suite: **372 → 391 tests**, all passing, two new files.
+
+- **`src/server/tests/part18-security.test.js` (new, 10 tests):**
+  - invalid session token → `validateSession` false and protected op rejected;
+  - expired session (forced via `UPDATE sessions SET expires_at = 0`) rejected;
+  - login throttling — 6 bad logins lock the identifier
+    (`login_attempts` in-memory counter, independent of `RATE_LIMIT_DISABLED`);
+  - `requestPasswordReset` does not enumerate accounts (same generic success
+    for known/unknown, validator rejects empty);
+  - **object-level authorization** on tasks: assignee may update their own
+    task, a different viewer is denied, a non-editor cannot reassign;
+  - document file route: traversal key and unknown key both 404 and never
+    serve source.
+- **`src/server/tests/frontend-contract.test.js` (new, 7 tests):** dependency-
+  free frontend coverage against the committed `app.html` + `app.js` — Part 4
+  groups present, every nav item has a group, Audit is the only `data-perm`
+  destination, `applyNavPermissions` defined + called, System Health card +
+  live region wired, `aria-sort` managed with no `role=button`, dialog focus
+  helpers bundled. A manual `app.js` edit that skips the rebuild now fails CI's
+  suite, not just the round-trip check.
+
+## Part 9 — Notifications — VERIFIED ALREADY SHIPPED
+
+Re-checked after the earlier pending report: Web Push is fully implemented
+(`src/server/push-notifications.js` + `subscribePush`/`unsubscribePush`/
+`sendReviewDeadlinePushNotifications` dispatch ops; client `subscribePush`/
+`enablePush`/`disablePush` in `init.js`; notification preferences + center in
+`app.html`/`session.js`). No work required.
+
 ## Verification
 
 - `node build/build-app.js` → "Reassembled app.js (21 modules, 9958 lines)";
@@ -225,6 +256,8 @@ grouped to answer "what do I need to do now?" with role-based visibility:
 - `node scripts/check-db-migrations.cjs` → fresh + idempotent re-boot OK;
   `node scripts/check-bundle-size.cjs` → both bundles within budget.
 - Part 4 rebuild → 21 modules / 9982 lines; suite still 372/372 pass, exit 0.
+- Part 18 additions → **391 tests / 391 pass / 0 fail**, exit 0.
+- Part 9 push/notification preferences confirmed present end-to-end.
 
 ## Commits
 
@@ -238,12 +271,12 @@ grouped to answer "what do I need to do now?" with role-based visibility:
   budget checks to the workflow`.
 - (this unit) `feat: Part 4 grouped, role-aware sidebar navigation
   (Overview / Work / Insights / Admin)`.
+- (this unit) `test: Part 18 security + frontend-contract coverage
+  (invalid/expired sessions, throttling, object-level authz, traversal)`.
 - Session export (docs) pushed with each unit.
 
 ## Pending Tasks
 
-- **Part 18 — Testing:** frontend + end-to-end viewer/editor/admin workflow
-  tests (server side is at 372 tests).
 - **Part 16 — Worker review:** cold-start/memory/origin-timeout/retry review
   has no recorded completion.
 - **Phase-4 Kanban** remains opt-in only; requires an explicit user ask.
