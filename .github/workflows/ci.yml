@@ -31,6 +31,9 @@ jobs:
         working-directory: src/server
         run: npm audit --audit-level=high
 
+      - name: Validate DB migrations (fresh + idempotent re-boot)
+        run: node scripts/check-db-migrations.cjs
+
       - name: Server test suite
         working-directory: src/server
         run: npm test
@@ -54,6 +57,9 @@ jobs:
 
       - name: Syntax check worker
         run: node --check src/worker/worker.js
+
+      - name: Frontend bundle size budget
+        run: node scripts/check-bundle-size.cjs
 
       - name: Syntax check server sources
         run: |

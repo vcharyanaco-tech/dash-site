@@ -168,6 +168,25 @@ existed — there was **no aggregated admin view**.
 - **Test:** `src/server/tests/system-health.test.js` — admin snapshot shape,
   viewer rejected (`permission`), missing-token rejected.
 
+## Part 19 — CI/CD hardening — SHIPPED
+
+`ci.yml` already ran secret-scan, `npm audit`, the server suite, syntax checks
+and an `app.js` ↔ module round-trip diff. Two gaps remained:
+
+- **`scripts/check-db-migrations.cjs` (new):** boots `src/server/db.js` against
+  a throwaway `DASH_DATA_DIR`, then asserts all 15 tables, all 6 migrated
+  columns (`submissions.read_at`, `records.source`/`displayed`,
+  `documents.keep`, `notifications.priority`/`record_row`) and the two user
+  indexes exist. It boots a **second** time on the same dir to prove the
+  migrations are idempotent — i.e. that a deploy against the persistent volume
+  is safe.
+- **`scripts/check-bundle-size.cjs` (new):** gzip + raw size budget for
+  `app.js` (150 KB gz) and `assets/styles.css` (45 KB gz), overridable via
+  `BUNDLE_BUDGET_*`. Current: `app.js` 94.7 KB gz / 411.4 KB raw,
+  `styles.css` 20.7 KB gz.
+- Both wired into `.github/workflows/ci.yml` (migration check after the audit;
+  bundle budget after the syntax checks).
+
 ## Verification
 
 - `node build/build-app.js` → "Reassembled app.js (21 modules, 9958 lines)";
@@ -176,22 +195,23 @@ existed — there was **no aggregated admin view**.
   372 pass / 0 fail (4 new System Health tests).
 - `node --check` on every touched server file; contrast ratios computed per
   WCAG relative-luminance formula.
+- `node scripts/check-db-migrations.cjs` → fresh + idempotent re-boot OK;
+  `node scripts/check-bundle-size.cjs` → both bundles within budget.
 
 ## Commits
 
 - `08f36b3` feat: Part 12 a11y (dialog focus trap/restore, keyboard sortable
   headers, multi-select listbox keys, ARIA names/errors/unread tags) + Part 10
   Ask-AI quota keyed on email with two-phase commit + AI-generated labels.
-- (this unit) `feat: Part 17 admin System Health view (metrics/counters/recent
+- `36ff0a3` feat: Part 17 admin System Health view (metrics/counters/recent
   errors + backup/AI/Worker/notification status) + Part 12 contrast token
-  sweep + reduced-motion confirmation`.
+  sweep + reduced-motion confirmation.
+- (this unit) `ci: add DB-migration validation and frontend bundle-size
+  budget checks to the workflow`.
 - Session export (docs) pushed with each unit.
 
 ## Pending Tasks
 
-- **Part 19 — CI/CD:** add migration validation + frontend bundle-size check to
-  `.github/workflows/ci.yml` (secret-scan, npm audit, tests, syntax and
-  module round-trip already run).
 - **Part 4 — Information Architecture:** group the flat sidebar into
   Overview / Work / Insights / Admin with role-based visibility.
 - **Part 18 — Testing:** frontend + end-to-end viewer/editor/admin workflow
