@@ -150,6 +150,13 @@ const dispatch = {
     return enterprise.getEnterpriseHealth();
   },
 
+  // Part 17 — admin-only System Health snapshot (process, db, backup, worker,
+  // AI, notifications, request metrics, counters + recent errors).
+  getSystemHealth: function (args) {
+    auth.requireAdmin(A(args, 0));
+    return require('./system-health').getSystemHealth_();
+  },
+
   // Full database backup download (VACUUM'd SQLite copy). Admin only.
   exportFullBackup: function (args) { return require('./full-backup').exportFullBackup(A(args, 0)); },
 

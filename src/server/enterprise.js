@@ -453,6 +453,10 @@ async function generateAiText_(prompt, systemPrompt, opts) {
     }
     result.kiloFallbackError = kiloResult.message || '';
   }
+  if (!result.success) {
+    // Part 17: surface AI failures in the admin System Health counters.
+    try { require('./system-health').recordCount_('aiFailures'); } catch (err) {}
+  }
   return result;
 }
 

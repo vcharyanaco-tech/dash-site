@@ -10,6 +10,9 @@
 const MAX_POST_PER_MIN = Number(process.env.RATE_LIMIT_POST || 120);
 const WINDOW_MS = 60 * 1000; // 1 minute
 
+let systemHealth = null;
+try { systemHealth = require('./system-health'); } catch (err) { systemHealth = null; }
+
 // Map<string, { count: number, resetAt: number }>
 const buckets = new Map();
 
@@ -47,6 +50,7 @@ function rateLimiter(req, res, next) {
   entry.count++;
   if (entry.count > MAX_POST_PER_MIN) {
     const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+    if (systemHealth) systemHealth.recordCount_('rateLimitEvents');
     res.setHeader('Retry-After', String(retryAfter));
     return res.status(429).json({
       error: 'Too many requests. Please try again in ' + retryAfter + ' seconds.'

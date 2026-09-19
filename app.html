@@ -470,6 +470,20 @@
               <div id="backupStatus" class="form-status" aria-live="polite"></div>
             </div>
 
+            <div id="systemHealthCard" class="settings-card hidden">
+              <div class="settings-card-head">
+                <h3 class="text-subheading">System health</h3>
+                <p class="section-copy">Live backend, database, KV backup, Worker, AI and notification status — plus request metrics, failure counters and recent server errors.</p>
+              </div>
+              <div class="settings-card-actions">
+                <button id="systemHealthRefreshBtn" class="btn btn-secondary" type="button" onclick="loadSystemHealth(true)">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><polyline points="21 3 21 9 15 9"></polyline></svg>
+                  Refresh
+                </button>
+              </div>
+              <div id="systemHealthBody" class="health-body" aria-live="polite"></div>
+            </div>
+
             <div id="csvImportCard" class="settings-card hidden">
               <div class="settings-card-head">
                 <h3 class="text-subheading">CSV Import</h3>

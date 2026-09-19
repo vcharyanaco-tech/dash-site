@@ -123,28 +123,82 @@ The only residual candidate is **Kanban**, which the prompt explicitly gates to
 opt-in ("do not build speculatively"), so no speculative build was started. The
 backlog item is closed as resolved rather than deferred.
 
+## Part 12 — Accessibility (unit 3: contrast + reduced motion) — SHIPPED
+
+On-disk audit of the colour tokens found four text-on-surface pairs below the
+WCAG AA 4.5:1 threshold for normal text; `prefers-reduced-motion` was already
+handled globally (`styles.css:3389`). Fixed at the token level so every
+consumer benefits:
+
+| Token | Before | After | Worst pair |
+| --- | --- | --- | --- |
+| `--muted` | `#667085` | `#5d6a7e` | on `--surface-3` 4.47 → 4.93 |
+| `--success` | `#15803d` | `#14713a` | on `--success-soft` 4.46 → 5.41 |
+| `--brand-gold` | `#c9861f` | `#94610c` (light) / `#d9a441` (dark override) | footer org name 3.04 → 4.84 |
+| `.footer-version` / `.badge[data-tone="primary"]` text | `--primary` | `--primary-hover` | on tinted pill 3.60 / 4.26 → 4.68 / 5.54 |
+
+Dark-theme `--muted`/`--success` are separate overrides and were already ≥5.7:1.
+
+## Part 17 — Observability / System Health — SHIPPED
+
+The prompt asked for an admin System Health view (backend/db/Worker/backup/
+uptime/memory/errors/latency/AI/notification status + structured counters).
+Only `GET /api/health` (liveness) and a config-only `getEnterpriseHealth`
+existed — there was **no aggregated admin view**.
+
+- **`src/server/system-health.js` (new, admin-gated aggregation layer):**
+  - `getSystemHealth_()` composes process/uptime/memory, SQLite ping + DB size,
+    KV-backup bridge status (last backup + age + budget left), Worker URL/token
+    flags, AI enabled/key flags, notification unread + last-generated, request
+    metrics, failure counters and a bounded recent-error ring.
+  - In-memory counters: `apiErrors`, `authFailures`, `rateLimitEvents`,
+    `aiFailures`; `recentErrors` ring buffer (50). Every subsection degrades to
+    `{ error }` rather than throwing.
+  - `setMetricsProvider_()` lets `index.js` inject the request/p95 snapshot
+    without a circular require.
+- **Wiring:** `index.js` records API failures (`recordApiError_`, classifying
+  authN/authZ refusals separately) and registers the metrics provider;
+  `rate-limiter.js` counts 429s; `enterprise.js` `generateAiText_` counts AI
+  failures. New `getSystemHealth` op added to the dispatch with
+  `auth.requireAdmin(...)`, to `AUTH_ARG_INDEX` (slot 0) and to `VALIDATORS`.
+- **Frontend:** `ApiService.getSystemHealth()`, an admin-only **System health**
+  card in Settings (`#systemHealthCard`, full-width), colour-independent
+  OK/Error pills + text, counters strip, and a recent-errors list. Auto-loads on
+  entering Settings, manual Refresh button, `aria-live` container.
+- **Test:** `src/server/tests/system-health.test.js` — admin snapshot shape,
+  viewer rejected (`permission`), missing-token rejected.
+
 ## Verification
 
-- `node build/build-app.js` → "Reassembled app.js (21 modules, 9820 lines)";
+- `node build/build-app.js` → "Reassembled app.js (21 modules, 9958 lines)";
   `node --check app.js` exit 0.
-- Server suite (`node src/server/run-tests.cjs` from `src/server`) → **exit 0**,
-  368 tests / 368 pass / 0 fail (re-run after the final rebuild).
-- `git diff --stat`: 13 files, +377/-86; only intended lines.
-- No server contract change beyond `ai-quota`'s exports (both callers updated).
+- Server suite (`node src/server/run-tests.cjs`) → **exit 0**, 372 tests /
+  372 pass / 0 fail (4 new System Health tests).
+- `node --check` on every touched server file; contrast ratios computed per
+  WCAG relative-luminance formula.
 
 ## Commits
 
-- (this unit) `feat: Part 12 a11y (dialog focus trap + restore, keyboard
-  sortable headers, multi-select listbox keys, ARIA names/errors/unread tags)
-  + Part 10 Ask-AI quota keyed on email with two-phase commit + AI-generated
-  labels` — pushed to `origin/main`.
-- (docs) this export.
+- `08f36b3` feat: Part 12 a11y (dialog focus trap/restore, keyboard sortable
+  headers, multi-select listbox keys, ARIA names/errors/unread tags) + Part 10
+  Ask-AI quota keyed on email with two-phase commit + AI-generated labels.
+- (this unit) `feat: Part 17 admin System Health view (metrics/counters/recent
+  errors + backup/AI/Worker/notification status) + Part 12 contrast token
+  sweep + reduced-motion confirmation`.
+- Session export (docs) pushed with each unit.
 
 ## Pending Tasks
 
-- **Part 12 residual (low priority, not blocking):** notification panel/center
-  `<li>` rows are mouse-click-to-open with keyboard-reachable inner action
-  buttons; making the whole row focusable would nest interactive controls, so
-  it was intentionally left. Remaining audit items are contrast checks on
-  dynamic badges and a reduced-motion sweep.
+- **Part 19 — CI/CD:** add migration validation + frontend bundle-size check to
+  `.github/workflows/ci.yml` (secret-scan, npm audit, tests, syntax and
+  module round-trip already run).
+- **Part 4 — Information Architecture:** group the flat sidebar into
+  Overview / Work / Insights / Admin with role-based visibility.
+- **Part 18 — Testing:** frontend + end-to-end viewer/editor/admin workflow
+  tests (server side is at 372 tests).
+- **Part 16 — Worker review:** cold-start/memory/origin-timeout/retry review
+  has no recorded completion.
 - **Phase-4 Kanban** remains opt-in only; requires an explicit user ask.
+- Notification panel/center `<li>` rows left mouse-only on purpose (focusing the
+  whole row would nest interactive controls); inner action buttons are
+  keyboard-reachable.

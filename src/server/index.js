@@ -19,6 +19,7 @@ const dispatch = require('./index-dispatch');
 const { rateLimiter } = require('./rate-limiter');
 const { registerSseRoute, broadcast } = require('./events');
 const { cspMiddleware } = require('./csp');
+const systemHealth = require('./system-health');
 
 const PORT = Number(process.env.PORT || process.env.DASH_PORT || 8787);
 const STATIC_ROOT = process.env.DASH_STATIC_ROOT || path.join(__dirname, '..', '..');
@@ -55,6 +56,7 @@ const AUTH_ARG_INDEX = Object.freeze({
   sendWeeklyReport: 0, adminImportCsv: 1,
   setupEnterpriseAddons: 0, installEnterpriseTriggers: 0,
   validateEnterpriseConfiguration: 0, getEnterpriseHealth: 0,
+  getSystemHealth: 0,
   getEnterpriseFrontendConfig: 0,
   setRecordDisplay: 2, generateReviewNotifications: 0,
   reconcileRecordOrder: 1, exportFullBackup: 0,
@@ -84,6 +86,21 @@ const metrics = {
   errors: 0,
   latencies: []
 };
+
+// Let the admin System Health view read the in-process request metrics without
+// system-health.js having to require this HTTP layer back (no circular dep).
+systemHealth.setMetricsProvider_(function () {
+  const samples = metrics.latencies.slice().sort(function (a, b) { return a - b; });
+  const idx = samples.length ? Math.min(samples.length - 1, Math.ceil(samples.length * 0.95) - 1) : 0;
+  const requests = metrics.requests || 0;
+  return {
+    requestCount: requests,
+    errorCount: metrics.errors,
+    errorRatePct: requests ? Math.round((metrics.errors / requests) * 10000) / 100 : 0,
+    p95LatencyMs: samples.length ? samples[idx] : 0,
+    windowSamples: samples.length
+  };
+});
 
 // NOTE: the baked-in src/server/migration-export/*.csv snapshot is no longer
 // auto-imported on boot. The live SQLite DB (restored from the KV backup
@@ -265,6 +282,7 @@ app.post(API_PREFIX, async function (req, res) {
     res.json({ result: result === undefined ? null : result });
   } catch (err) {
     metrics.errors++;
+    systemHealth.recordApiError_(fn, err);
     console.error('API request failed (' + String(fn || 'unknown') + '): ' + ((err && err.message) || String(err)));
     res.json({ error: (err && err.message) || String(err) });
   }
@@ -749,6 +767,10 @@ getTaskCounts: function (args) {
   },
   getEnterpriseHealth: function (args) {
     if (args.length < 1) return 'getEnterpriseHealth requires (token)';
+    return null;
+  },
+  getSystemHealth: function (args) {
+    if (args.length < 1) return 'getSystemHealth requires (token)';
     return null;
   },
   adminSyncFromSheet: function (args) {

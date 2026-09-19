@@ -189,7 +189,9 @@ getMyNotifications: function () { return apiCall_('getMyNotifications'); },
   // Session refresh
   refreshSession: function () { return apiCall_('refreshSession'); },
   // Admin CSV import
-  adminImportCsv: function (csvText) { return apiCall_('adminImportCsv', csvText); }
+  adminImportCsv: function (csvText) { return apiCall_('adminImportCsv', csvText); },
+  // Part 17 — admin System Health
+  getSystemHealth: function () { return apiCall_('getSystemHealth'); }
 };
 
 const appState = {

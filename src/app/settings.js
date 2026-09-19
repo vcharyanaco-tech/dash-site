@@ -16,6 +16,13 @@ function renderSettings() {
   if (backupCard) backupCard.classList.toggle('hidden', !appState.isAdmin);
   if (appState.isAdmin) loadAutoSyncStatus();
 
+  // System health — admin only (Part 17)
+  const systemHealthCard = getEl('systemHealthCard');
+  if (systemHealthCard) {
+    systemHealthCard.classList.toggle('hidden', !appState.isAdmin);
+    if (appState.isAdmin) loadSystemHealth();
+  }
+
   const usersAdmin = getEl('usersAdmin');
   const userActivityCard = getEl('userActivityCard');
   if (appState.isAdmin && can('users', 'view')) {
@@ -49,6 +56,135 @@ function renderSettings() {
       fathomCard.classList.add('hidden');
     }
   }
+}
+
+/* ---------------------------- System health (Part 17) ---------------------------- */
+
+function healthDuration_(sec) {
+  sec = Number(sec) || 0;
+  var d = Math.floor(sec / 86400);
+  var h = Math.floor((sec % 86400) / 3600);
+  var m = Math.floor((sec % 3600) / 60);
+  if (d) return d + 'd ' + h + 'h';
+  if (h) return h + 'h ' + m + 'm';
+  if (m) return m + 'm';
+  return sec + 's';
+}
+
+function healthAge_(ms) {
+  if (ms == null) return 'never';
+  var s = Math.round(Number(ms) / 1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.round(s / 60) + 'm ago';
+  if (s < 172800) return Math.round(s / 3600) + 'h ago';
+  return Math.round(s / 86400) + 'd ago';
+}
+
+function healthBytes_(n) {
+  n = Number(n) || 0;
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+  return (n / 1073741824).toFixed(2) + ' GB';
+}
+
+function healthPill_(ok, okText, badText) {
+  var text = ok ? (okText || 'OK') : (badText || 'Error');
+  return '<span class="health-pill ' + (ok ? 'health-pill-ok' : 'health-pill-bad') + '">' + escapeHtml(text) + '</span>';
+}
+
+function healthRow_(label, valueHtml) {
+  return '<div class="health-row"><span class="health-label">' + escapeHtml(label) + '</span><span class="health-value">' + valueHtml + '</span></div>';
+}
+
+function renderSystemHealth(h) {
+  var body = getEl('systemHealthBody');
+  if (!body || !h) return;
+  var b = h.backend || {};
+  var mem = b.memory || {};
+  var metrics = h.metrics || {};
+  var c = h.counters || {};
+  var parts = ['<div class="health-grid">'];
+
+  parts.push('<div class="health-card"><div class="health-card-title">Backend</div>' +
+    healthRow_('Status', healthPill_(!!b.ok)) +
+    healthRow_('Uptime', escapeHtml(healthDuration_(b.uptimeSec))) +
+    healthRow_('Node', escapeHtml(b.node || '—')) +
+    healthRow_('Memory', escapeHtml((mem.heapUsedMb || 0) + ' / ' + (mem.rssMb || 0) + ' MB')) +
+    '</div>');
+
+  parts.push('<div class="health-card"><div class="health-card-title">Database</div>' +
+    healthRow_('Status', healthPill_(!!(h.database && h.database.ok))) +
+    healthRow_('Size', escapeHtml(healthBytes_(h.database && h.database.sizeBytes))) +
+    healthRow_('P95 latency', escapeHtml((metrics.p95LatencyMs == null ? '—' : metrics.p95LatencyMs + ' ms'))) +
+    healthRow_('Requests', escapeHtml(String(metrics.requestCount == null ? '—' : metrics.requestCount))) +
+    '</div>');
+
+  var bk = h.backup || {};
+  parts.push('<div class="health-card"><div class="health-card-title">KV backup</div>' +
+    healthRow_('Bridge', healthPill_(!!bk.enabled, 'Enabled', 'Disabled')) +
+    healthRow_('Last backup', escapeHtml(bk.lastBackupAt ? healthAge_(bk.ageMs) : 'never')) +
+    healthRow_('Budget left', escapeHtml(String(bk.budgetLeft == null ? '—' : bk.budgetLeft) + ' / ' + String(bk.budget == null ? '—' : bk.budget))) +
+    (bk.error ? healthRow_('Error', '<span class="health-error">' + escapeHtml(bk.error) + '</span>') : '') +
+    '</div>');
+
+  var w = h.worker || {};
+  var ai = h.ai || {};
+  parts.push('<div class="health-card"><div class="health-card-title">Worker + AI</div>' +
+    healthRow_('Worker URL', healthPill_(!!w.urlSet, 'Set', 'Not set')) +
+    healthRow_('Worker token', healthPill_(!!w.tokenSet, 'Set', 'Not set')) +
+    healthRow_('AI enabled', healthPill_(!!ai.enabled, 'Yes', 'No')) +
+    healthRow_('AI key', healthPill_(!!ai.keySet, 'Set', 'Not set')) +
+    '</div>');
+
+  var nf = h.notifications || {};
+  parts.push('<div class="health-card"><div class="health-card-title">Notifications</div>' +
+    healthRow_('Unread', escapeHtml(nf.unread == null ? '—' : String(nf.unread))) +
+    healthRow_('Last generated', escapeHtml(nf.lastGeneratedAt ? healthAge_(Date.now() - new Date(nf.lastGeneratedAt).getTime()) : '—')) +
+    healthRow_('Error rate', escapeHtml((metrics.errorRatePct == null ? '—' : metrics.errorRatePct + '%'))) +
+    healthRow_('Server errors', escapeHtml(String(metrics.errorCount == null ? '—' : metrics.errorCount))) +
+    '</div>');
+
+  parts.push('</div>');
+
+  parts.push('<div class="health-counters">' +
+    '<span class="health-counter">API errors <b>' + escapeHtml(String(c.apiErrors || 0)) + '</b></span>' +
+    '<span class="health-counter">Auth failures <b>' + escapeHtml(String(c.authFailures || 0)) + '</b></span>' +
+    '<span class="health-counter">Rate-limit events <b>' + escapeHtml(String(c.rateLimitEvents || 0)) + '</b></span>' +
+    '<span class="health-counter">AI failures <b>' + escapeHtml(String(c.aiFailures || 0)) + '</b></span>' +
+    '</div>');
+
+  var errors = h.recentErrors || [];
+  parts.push('<div class="health-errors"><div class="health-errors-title">Recent errors (' + errors.length + ')</div>');
+  if (!errors.length) {
+    parts.push('<p class="section-copy muted">No errors recorded since the server started.</p>');
+  } else {
+    parts.push('<ul class="health-error-list">' + errors.slice(0, 20).map(function (e) {
+      return '<li><span class="health-error-src">' + escapeHtml(e.source) + '</span>' +
+        '<span class="health-error-msg">' + escapeHtml(e.message) + '</span>' +
+        '<span class="health-error-time">' + escapeHtml(new Date(e.at).toLocaleString()) + '</span></li>';
+    }).join('') + '</ul>');
+  }
+  parts.push('</div>');
+
+  body.innerHTML = parts.join('');
+}
+
+function loadSystemHealth(userTriggered) {
+  var body = getEl('systemHealthBody');
+  if (body && !body.innerHTML.trim()) body.innerHTML = '<p class="section-copy muted">Loading system health…</p>';
+  var btn = getEl('systemHealthRefreshBtn');
+  if (btn) btn.disabled = true;
+  return ApiService.getSystemHealth().then(function (data) {
+    if (!data || data.success === false) throw new Error((data && data.message) || 'System health unavailable');
+    renderSystemHealth(data);
+    if (userTriggered) showToast('System health refreshed.', 'success');
+  }).catch(function (err) {
+    if (body) body.innerHTML = '<p class="section-copy health-error">Could not load system health: ' + escapeHtml(err && err.message || String(err)) + '</p>';
+    if (userTriggered) showToast('Could not load system health.', 'error');
+  }).then(function () {
+    if (btn) btn.disabled = false;
+  });
 }
 
 function saveSettingsFathomKey() {
