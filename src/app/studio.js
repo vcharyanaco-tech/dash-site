@@ -134,7 +134,7 @@ function fuzzyMatch_(query, text) {
 
 const COMMAND_ACTIONS = [
   { key: 'goto-dashboard', label: 'Go to Dashboard', shortcut: 'G D', action: function () { openTab('dashboard'); closeCommandPalette(); } },
-  { key: 'goto-audit', label: 'Go to Audit log', shortcut: 'G A', action: function () { openTab('audit'); closeCommandPalette(); } },
+  { key: 'goto-audit', label: 'Go to Audit log', shortcut: 'G A', perm: 'audit', action: function () { openTab('audit'); closeCommandPalette(); } },
   { key: 'goto-reports', label: 'Go to Reports', shortcut: 'G R', action: function () { openTab('reports'); closeCommandPalette(); } },
   { key: 'goto-settings', label: 'Go to Settings', shortcut: 'G S', action: function () { openTab('settings'); closeCommandPalette(); } },
   { key: 'goto-tasks', label: 'Go to Tasks', shortcut: 'G T', action: function () { openTab('tasks'); closeCommandPalette(); } },
@@ -193,6 +193,7 @@ function filterCommands(query) {
   const q = String(query || '').toLowerCase().trim();
   let actions = COMMAND_ACTIONS.slice();
   if (appState.isEditor === false) actions = actions.filter(function (a) { return !a.requireEditor; });
+  actions = actions.filter(function (a) { return !a.perm || can(a.perm, 'view'); });
   if (q) actions = actions.filter(function (a) { return fuzzyMatch_(q, a.label); });
   let records = [];
   if (q.length >= 2) {

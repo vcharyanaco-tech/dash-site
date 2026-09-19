@@ -275,6 +275,7 @@ function applyAppData(data) {
   appState.responsibilities = (data && data.responsibilities) || [];
   appState.reminders = (data && data.reminders) || [];
   appState.auditPage = 1;
+  applyNavPermissions();
 }
 
 let auditLoaded = false;

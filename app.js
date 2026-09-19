@@ -627,6 +627,7 @@ function applyAppData(data) {
   appState.responsibilities = (data && data.responsibilities) || [];
   appState.reminders = (data && data.reminders) || [];
   appState.auditPage = 1;
+  applyNavPermissions();
 }
 
 let auditLoaded = false;
@@ -3189,6 +3190,26 @@ function openNotification(id, type, recordRow) {
 }
 
 /* ---------------------------------- Tabs ---------------------------------- */
+
+/* Part 4 — information architecture: the sidebar is grouped into
+   Overview / Work / Insights / Admin. Items carry data-perm when the module
+   permission map gates them (e.g. Audit is editor/admin + the Auditor group);
+   a group label is hidden when every item in it is hidden, so viewers never
+   see an empty "Admin" heading. Settings stays visible to all roles because it
+   also holds personal controls (password change, theme, push preferences). */
+function applyNavPermissions() {
+  document.querySelectorAll('.nav-item[data-perm]').forEach(function (btn) {
+    btn.classList.toggle('hidden', !can(btn.getAttribute('data-perm'), 'view'));
+  });
+  document.querySelectorAll('.sidebar-section-label[data-group-label]').forEach(function (label) {
+    const group = label.getAttribute('data-group-label');
+    const items = document.querySelectorAll('.nav-item[data-group="' + group + '"]');
+    const anyVisible = Array.prototype.some.call(items, function (btn) {
+      return !btn.classList.contains('hidden');
+    });
+    label.classList.toggle('hidden', items.length > 0 && !anyVisible);
+  });
+}
 
 function openTab(tabId) {
   document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.add('hidden'));
@@ -7037,7 +7058,7 @@ function fuzzyMatch_(query, text) {
 
 const COMMAND_ACTIONS = [
   { key: 'goto-dashboard', label: 'Go to Dashboard', shortcut: 'G D', action: function () { openTab('dashboard'); closeCommandPalette(); } },
-  { key: 'goto-audit', label: 'Go to Audit log', shortcut: 'G A', action: function () { openTab('audit'); closeCommandPalette(); } },
+  { key: 'goto-audit', label: 'Go to Audit log', shortcut: 'G A', perm: 'audit', action: function () { openTab('audit'); closeCommandPalette(); } },
   { key: 'goto-reports', label: 'Go to Reports', shortcut: 'G R', action: function () { openTab('reports'); closeCommandPalette(); } },
   { key: 'goto-settings', label: 'Go to Settings', shortcut: 'G S', action: function () { openTab('settings'); closeCommandPalette(); } },
   { key: 'goto-tasks', label: 'Go to Tasks', shortcut: 'G T', action: function () { openTab('tasks'); closeCommandPalette(); } },
@@ -7096,6 +7117,7 @@ function filterCommands(query) {
   const q = String(query || '').toLowerCase().trim();
   let actions = COMMAND_ACTIONS.slice();
   if (appState.isEditor === false) actions = actions.filter(function (a) { return !a.requireEditor; });
+  actions = actions.filter(function (a) { return !a.perm || can(a.perm, 'view'); });
   if (q) actions = actions.filter(function (a) { return fuzzyMatch_(q, a.label); });
   let records = [];
   if (q.length >= 2) {
@@ -8861,6 +8883,8 @@ function wireKeyboardShortcuts() {
       var tabMap = { '1': 'dashboard', '2': 'analytics', '3': 'audit', '4': 'reports', '5': 'tasks', '6': 'settings' };
       var tabName = tabMap[e.key];
       if (tabName) {
+        var navBtn = document.querySelector('.nav-item[data-tab="' + tabName + '"]');
+        if (!navBtn || navBtn.classList.contains('hidden')) return;
         e.preventDefault();
         openTab(tabName);
       }

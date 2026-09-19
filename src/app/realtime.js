@@ -146,6 +146,8 @@ function wireKeyboardShortcuts() {
       var tabMap = { '1': 'dashboard', '2': 'analytics', '3': 'audit', '4': 'reports', '5': 'tasks', '6': 'settings' };
       var tabName = tabMap[e.key];
       if (tabName) {
+        var navBtn = document.querySelector('.nav-item[data-tab="' + tabName + '"]');
+        if (!navBtn || navBtn.classList.contains('hidden')) return;
         e.preventDefault();
         openTab(tabName);
       }

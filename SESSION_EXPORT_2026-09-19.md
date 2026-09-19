@@ -187,6 +187,33 @@ and an `app.js` ↔ module round-trip diff. Two gaps remained:
 - Both wired into `.github/workflows/ci.yml` (migration check after the audit;
   bundle budget after the syntax checks).
 
+## Part 4 — Information Architecture — SHIPPED
+
+The sidebar was a flat 7-item list with a single "Menu" label. It is now
+grouped to answer "what do I need to do now?" with role-based visibility:
+
+| Group | Items |
+| --- | --- |
+| Overview | Dashboard, My Day |
+| Work | Tasks |
+| Insights | Reports, Analytics |
+| Admin | Audit Log, Settings |
+
+- `app.html`: added `data-group-label` headings and `data-group` on each
+  `nav-item`; `data-perm="audit"` on Audit Log. No items were removed; only
+  grouped and reordered.
+- `src/app/session.js`: `applyNavPermissions()` hides `[data-perm]` items the
+  user's `permissions` map does not grant (`can(perm,'view')`) and hides a
+  group heading when all its items are hidden. Called from `applyAppData()` so
+  it follows every role/data refresh, not just login.
+- Settings stays visible to every role on purpose — it also holds personal
+  controls (change password, theme, push preferences), so gating it on
+  `settings:view` would lock viewers out of their own account.
+- Command palette (`studio.js`): `goto-audit` carries `perm: 'audit'` and the
+  list is filtered by `can()`, so viewers never see a dead entry.
+- Keyboard shortcut `Ctrl+3` (`realtime.js`) now no-ops when the target tab's
+  nav item is hidden.
+
 ## Verification
 
 - `node build/build-app.js` → "Reassembled app.js (21 modules, 9958 lines)";
@@ -197,6 +224,7 @@ and an `app.js` ↔ module round-trip diff. Two gaps remained:
   WCAG relative-luminance formula.
 - `node scripts/check-db-migrations.cjs` → fresh + idempotent re-boot OK;
   `node scripts/check-bundle-size.cjs` → both bundles within budget.
+- Part 4 rebuild → 21 modules / 9982 lines; suite still 372/372 pass, exit 0.
 
 ## Commits
 
@@ -208,12 +236,12 @@ and an `app.js` ↔ module round-trip diff. Two gaps remained:
   sweep + reduced-motion confirmation.
 - (this unit) `ci: add DB-migration validation and frontend bundle-size
   budget checks to the workflow`.
+- (this unit) `feat: Part 4 grouped, role-aware sidebar navigation
+  (Overview / Work / Insights / Admin)`.
 - Session export (docs) pushed with each unit.
 
 ## Pending Tasks
 
-- **Part 4 — Information Architecture:** group the flat sidebar into
-  Overview / Work / Insights / Admin with role-based visibility.
 - **Part 18 — Testing:** frontend + end-to-end viewer/editor/admin workflow
   tests (server side is at 372 tests).
 - **Part 16 — Worker review:** cold-start/memory/origin-timeout/retry review

@@ -437,6 +437,26 @@ function openNotification(id, type, recordRow) {
 
 /* ---------------------------------- Tabs ---------------------------------- */
 
+/* Part 4 — information architecture: the sidebar is grouped into
+   Overview / Work / Insights / Admin. Items carry data-perm when the module
+   permission map gates them (e.g. Audit is editor/admin + the Auditor group);
+   a group label is hidden when every item in it is hidden, so viewers never
+   see an empty "Admin" heading. Settings stays visible to all roles because it
+   also holds personal controls (password change, theme, push preferences). */
+function applyNavPermissions() {
+  document.querySelectorAll('.nav-item[data-perm]').forEach(function (btn) {
+    btn.classList.toggle('hidden', !can(btn.getAttribute('data-perm'), 'view'));
+  });
+  document.querySelectorAll('.sidebar-section-label[data-group-label]').forEach(function (label) {
+    const group = label.getAttribute('data-group-label');
+    const items = document.querySelectorAll('.nav-item[data-group="' + group + '"]');
+    const anyVisible = Array.prototype.some.call(items, function (btn) {
+      return !btn.classList.contains('hidden');
+    });
+    label.classList.toggle('hidden', items.length > 0 && !anyVisible);
+  });
+}
+
 function openTab(tabId) {
   document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.add('hidden'));
   document.querySelectorAll('.nav-item').forEach(function (btn) {
