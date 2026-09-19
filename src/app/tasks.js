@@ -41,7 +41,7 @@ function renderTaskList() {
     tbody.innerHTML = tasks.map(function (t) {
         const statusClass = t.status === 'DONE' ? 'badge-success' : t.status === 'IN_PROGRESS' ? 'badge-warning' : t.status === 'CANCELLED' ? 'badge-muted' : 'badge-danger';
         const isOverdue = t.status !== 'DONE' && t.status !== 'CANCELLED' && t.dueDate && new Date(t.dueDate).getTime() < Date.now();
-        const overdueFlag = isOverdue ? ' <button type="button" class="badge badge-danger btn-link" data-overdue title="This task is past its due date" onclick="void 0">Overdue</button>' : '';
+        const overdueFlag = isOverdue ? ' <span class="badge badge-danger" data-overdue title="This task is past its due date">Overdue</span>' : '';
       const priorityClass = t.priority === 'URGENT' ? 'badge-danger' : t.priority === 'HIGH' ? 'badge-warning' : t.priority === 'MEDIUM' ? 'badge-info' : 'badge-muted';
       
       // Build action buttons

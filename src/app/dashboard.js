@@ -602,7 +602,7 @@ function buildTableRowHtml(item) {
   if (linkPanel) persistedPanels += '<tr class="ai-link-tr"><td colspan="8">' + linkPanel + '</td></tr>';
   return `
     <tr class="row-clickable ${item.reviewStatus === 'due' ? 'row-flagged' : ''} ${item.displayed === false ? 'row-hidden' : ''}" data-row="${escAttr(item.row)}" tabindex="0">
-      <td><span class="id-badge">#${escapeHtml(item.id)}</span>${appState.isEditor ? `<label class="display-toggle" title="${item.displayed !== false ? 'Hide this record from viewers' : 'Show this record to viewers'}"><input type="checkbox" ${item.displayed !== false ? 'checked' : ''} onchange="event.stopPropagation(); toggleRecordDisplay('${escAttr(item.row)}', this.checked)"><span></span></label>` : ''}</td>
+      <td><span class="id-badge">#${escapeHtml(item.id)}</span>${appState.isEditor ? `<label class="display-toggle" title="${item.displayed !== false ? 'Hide this record from viewers' : 'Show this record to viewers'}"><input type="checkbox" aria-label="Show this record to viewers" ${item.displayed !== false ? 'checked' : ''} onchange="event.stopPropagation(); toggleRecordDisplay('${escAttr(item.row)}', this.checked)"><span></span></label>` : ''}</td>
       <td class="preserve-whitespace">${escapeHtml(item.sector || '')}</td>
       <td class="details-cell preserve-whitespace">${escapeHtml(item.description || '')}</td>
       <td class="action-cell ${item.reviewStatus === 'due' ? 'action-cell-due' : 'action-cell-ok'} preserve-whitespace">${item.actionHtml || renderLinkableText(item.action || '')}</td>

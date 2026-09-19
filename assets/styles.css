@@ -539,7 +539,7 @@ body.sidebar-collapsed .nav-item.active { box-shadow: inset 0 0 0 2px var(--seco
 
 .dp-cell.dp-today { border-color: var(--primary); color: var(--primary); font-weight: 700; }
 
-.dp-cell.dp-selected { background: var(--primary); border-color: var(--primary); color: var(--color-on-solid); }
+.dp-cell.dp-selected { background: var(--primary); border-color: var(--primary); color: var(--color-on-solid); font-weight: 700; text-decoration: underline; }
 
 .dp-blank { cursor: default; }
 
@@ -657,6 +657,20 @@ body.sidebar-collapsed .nav-item.active { box-shadow: inset 0 0 0 2px var(--seco
 }
 
 .notif-item-unread:hover { background: var(--secondary-soft); }
+
+.notif-unread-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--color-on-solid);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  vertical-align: middle;
+}
 
 .notif-item-title { font-size: 13px; font-weight: 700; }
 
@@ -1565,9 +1579,23 @@ body.sidebar-collapsed .nav-item.active { box-shadow: inset 0 0 0 2px var(--seco
 .card-ai-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--sp-2);
   margin-bottom: var(--sp-1);
+}
+.card-ai-head > .btn { margin-left: auto; }
+.ai-generated-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--border, #e4e7ec);
+  border-radius: 999px;
+  background: var(--surface-3, #f1f3f5);
+  color: var(--muted, #667085);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 .card-ai-title {
   font-size: 12px;
@@ -3260,6 +3288,11 @@ body.sidebar-open .sidebar-backdrop {
   gap: 8px;
 }
 .ms-option:hover {
+  background: var(--surface-3, #f1f3f5);
+}
+.ms-option:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
   background: var(--surface-3, #f1f3f5);
 }
 .ms-option.ms-selected {

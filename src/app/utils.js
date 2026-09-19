@@ -328,11 +328,13 @@ function initMultiSelect(containerId, hiddenInputId, placeholder) {
       labels[it.getAttribute('data-value')] = it.textContent.trim();
     });
     chipsContainer.innerHTML = vals.map(function (v) {
-      return '<span class="ms-chip" data-value="' + escAttr(v) + '">' + escapeHtml(labels[v] || v) + '<button type="button" class="ms-chip-remove" aria-label="Remove" data-remove="' + escAttr(v) + '">&times;</button></span>';
+      return '<span class="ms-chip" data-value="' + escAttr(v) + '">' + escapeHtml(labels[v] || v) + '<button type="button" class="ms-chip-remove" aria-label="Remove ' + escAttr(labels[v] || v) + '" data-remove="' + escAttr(v) + '">&times;</button></span>';
     }).join('');
     triggerBtn.textContent = vals.length ? vals.length + ' selected' : (placeholder || 'Select...');
     container.querySelectorAll('.ms-option').forEach(function (it) {
-      it.classList.toggle('ms-selected', vals.indexOf(it.getAttribute('data-value')) !== -1);
+      var on = vals.indexOf(it.getAttribute('data-value')) !== -1;
+      it.classList.toggle('ms-selected', on);
+      it.setAttribute('aria-selected', String(on));
     });
   }
 
@@ -354,7 +356,33 @@ function initMultiSelect(containerId, hiddenInputId, placeholder) {
     document.querySelectorAll('.ms-dropdown.open').forEach(function (d) {
       if (d !== dropdown) d.classList.remove('open');
     });
-    dropdown.classList.toggle('open');
+    var open = dropdown.classList.toggle('open');
+    triggerBtn.setAttribute('aria-expanded', String(open));
+    if (open) {
+      var first = dropdown.querySelector('.ms-option');
+      if (first) first.focus();
+    }
+  });
+
+  // Keyboard support for the option list (listbox semantics)
+  dropdown.addEventListener('keydown', function (e) {
+    var opts = Array.prototype.slice.call(dropdown.querySelectorAll('.ms-option'));
+    var idx = opts.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (opts.length) opts[Math.min(idx + 1, opts.length - 1)].focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (opts.length) opts[Math.max(idx - 1, 0)].focus();
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (idx !== -1) toggleValue(opts[idx].getAttribute('data-value'));
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      dropdown.classList.remove('open');
+      triggerBtn.setAttribute('aria-expanded', 'false');
+      triggerBtn.focus();
+    }
   });
 
   // Chip removal — event delegation on stable parent
@@ -389,7 +417,7 @@ function populateMultiSelectOptions(containerId, options) {
   var dropdown = container.querySelector('.ms-dropdown');
   if (!dropdown) return;
   dropdown.innerHTML = options.map(function (opt) {
-    return '<div class="ms-option" data-value="' + escAttr(opt.value) + '">' + escapeHtml(opt.label) + '</div>';
+    return '<div class="ms-option" role="option" tabindex="0" aria-selected="false" data-value="' + escAttr(opt.value) + '">' + escapeHtml(opt.label) + '</div>';
   }).join('');
   // Re-render chips so labels match the new options
   var inst = msInstances[containerId];

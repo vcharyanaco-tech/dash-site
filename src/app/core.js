@@ -419,15 +419,37 @@ function hideSplash() {
    native confirm() boxes. openDialog/closeDialog also manage the body scroll
    lock and aria state so all dialogs behave consistently. */
 
+var dialogReturnFocus_ = {};
+
+function getDialogFocusable_(modal) {
+  if (!modal) return [];
+  const nodes = modal.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  );
+  return Array.prototype.filter.call(nodes, function (el) {
+    return el.offsetWidth > 0 || el.offsetHeight > 0 || el.getClientRects().length > 0;
+  });
+}
+
+function topOpenDialog_() {
+  const modals = document.querySelectorAll('.modal-backdrop:not(.hidden)');
+  return modals.length ? modals[modals.length - 1] : null;
+}
+
 function openDialog(id) {
   const modal = getEl(id);
   if (!modal) return;
+  const active = document.activeElement;
+  if (active && active !== document.body && active !== document.documentElement &&
+      typeof active.focus === 'function' && !modal.contains(active)) {
+    dialogReturnFocus_[id] = active;
+  }
   modal.classList.remove('hidden');
   modal.setAttribute('aria-hidden', 'false');
   document.body.classList.add('modal-open');
   restoreModalSize_(modal);
-  const focusable = modal.querySelector('input:not([type=hidden]), textarea, select, button, [tabindex]');
-  if (focusable) focusable.focus();
+  const focusable = getDialogFocusable_(modal);
+  if (focusable.length) focusable[0].focus();
 }
 
 function closeDialog(id) {
@@ -438,7 +460,31 @@ function closeDialog(id) {
   if (!document.querySelector('.modal-backdrop:not(.hidden)')) {
     document.body.classList.remove('modal-open');
   }
+  const returnEl = dialogReturnFocus_[id];
+  delete dialogReturnFocus_[id];
+  if (returnEl && document.contains(returnEl) && typeof returnEl.focus === 'function') {
+    returnEl.focus();
+  }
   if (typeof flushPendingAutoRefresh === 'function') flushPendingAutoRefresh();
+}
+
+/* Trap Tab focus inside the top-most open dialog (WCAG 2.1.2 / 2.4.3). */
+if (typeof document !== 'undefined') {
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Tab') return;
+    const modal = topOpenDialog_();
+    if (!modal) return;
+    const focusable = getDialogFocusable_(modal);
+    if (!focusable.length) { e.preventDefault(); return; }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey) {
+      if (active === first || !modal.contains(active)) { e.preventDefault(); last.focus(); }
+    } else if (active === last || !modal.contains(active)) {
+      e.preventDefault(); first.focus();
+    }
+  }, true);
 }
 
 /* ---------------------------------- Drag-resizable windows ---------------------------------- */

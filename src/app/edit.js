@@ -57,12 +57,12 @@ function appendLinkRow_(link) {
     '</div>' +
     '<div class="field">' +
     '  <label>Display text</label>' +
-    '  <input type="text" class="input link-row-text" placeholder="Link text shown in the field" value="' + escAttr(String(link.text || '')) + '">' +
+    '  <input type="text" class="input link-row-text" aria-label="Link display text" placeholder="Link text shown in the field" value="' + escAttr(String(link.text || '')) + '">' +
     '  <span class="field-error"></span>' +
     '</div>' +
     '<div class="field">' +
     '  <label>Link URL</label>' +
-    '  <input type="text" class="input link-row-url" placeholder="https://example.com" value="' + escAttr(String(link.url || '')) + '">' +
+    '  <input type="text" class="input link-row-url" aria-label="Link URL" placeholder="https://example.com" value="' + escAttr(String(link.url || '')) + '">' +
     '  <span class="field-error"></span>' +
     '</div>';
   list.appendChild(row);

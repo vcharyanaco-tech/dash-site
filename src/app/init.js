@@ -34,6 +34,13 @@ function updateOfflineBanner() {
 /* ---------------------------------- Event wiring ---------------------------------- */
 
 function wireGlobalEvents() {
+  // Brand logos carry the name via aria-label on a role=img wrapper so the
+  // inner (data-URI) image is decorative and can stay alt="".
+  document.querySelectorAll('.brand-mark').forEach(function (el) {
+    if (!el.hasAttribute('role')) el.setAttribute('role', 'img');
+    el.querySelectorAll('img').forEach(function (img) { img.setAttribute('alt', ''); });
+  });
+
   const searchInput = getEl('searchInput');
   if (searchInput) {
     searchInput.addEventListener('input', debounce(function () {
@@ -77,7 +84,7 @@ function wireGlobalEvents() {
         cancelConfirmDialog();
         return;
       }
-      ['editModal', 'aboutModal', 'submissionsModal', 'recordDetailModal', 'editUserModal', 'taskModal', 'columnModal', 'commandPalette', 'previewModal', 'linkModal', 'syncPreviewModal', 'offlineCenterModal'].forEach(function (id) {
+      ['editModal', 'aboutModal', 'submissionsModal', 'recordDetailModal', 'editUserModal', 'taskModal', 'columnModal', 'commandPalette', 'previewModal', 'linkModal', 'syncPreviewModal', 'offlineCenterModal', 'notifCenterModal'].forEach(function (id) {
         const el = getEl(id);
         if (el && !el.classList.contains('hidden')) closeDialog(id);
       });
@@ -130,8 +137,16 @@ function wireGlobalEvents() {
   if (dashboardTable) {
     dashboardTable.querySelectorAll('thead th[data-dash-sort]').forEach(function (th) {
       th.classList.add('sortable');
+      th.setAttribute('tabindex', '0');
+      th.setAttribute('title', 'Sort by ' + th.textContent.trim());
       th.addEventListener('click', function () {
         setDashSort(th.getAttribute('data-dash-sort'));
+      });
+      th.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          setDashSort(th.getAttribute('data-dash-sort'));
+        }
       });
     });
     const dashTbody = dashboardTable.querySelector('tbody');
@@ -157,8 +172,16 @@ function wireGlobalEvents() {
   if (auditTable) {
     auditTable.querySelectorAll('thead th[data-sort]').forEach(function (th) {
       th.classList.add('sortable');
+      th.setAttribute('tabindex', '0');
+      th.setAttribute('title', 'Sort by ' + th.textContent.trim());
       th.addEventListener('click', function () {
         setAuditSort(th.getAttribute('data-sort'));
+      });
+      th.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          setAuditSort(th.getAttribute('data-sort'));
+        }
       });
     });
   }

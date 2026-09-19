@@ -193,8 +193,9 @@ function renderNotifications() {
         '<div class="notif-group-title">' + escapeHtml(g.label) + ' <span class="notif-group-count">' + g.items.length + '</span></div>' +
         '<ul class="notif-group-list">' + g.items.map(function (item) {
           const unreadClass = item.readAt ? '' : ' notif-item-unread';
+          const unreadTag = item.readAt ? '' : '<span class="notif-unread-tag">Unread</span>';
           return '<li class="notif-item' + unreadClass + notifPriorityClass_(item) + '" data-notif-id="' + escAttr(String(item.id || '')) + '" data-notif-type="' + escAttr(String(item.type || 'system')) + '">' +
-            '<div class="notif-item-title">' + (Number(item.priority) >= 1 ? '<span class="notif-urgent" title="Urgent">&#9888;</span> ' : '') + escapeHtml(item.title) + '</div>' +
+            '<div class="notif-item-title">' + unreadTag + (Number(item.priority) >= 1 ? '<span class="notif-urgent" title="Urgent">&#9888;</span> ' : '') + escapeHtml(item.title) + '</div>' +
             '<div class="notif-item-body">' + escapeHtml(item.body) + '</div>' +
             '<div class="notif-item-meta"><span class="notif-item-time">' + escapeHtml(formatNotifTime(item.createdAt)) + '</span>' +
             '<span class="notif-item-actions">' + notifActionHtml_(item) + '</span></div>' +
@@ -208,19 +209,15 @@ function renderNotifications() {
 function openNotificationCenter() {
   closeNotificationsPanel();
   loadNotifications(true).then(function () {
-    const modal = getEl('notifCenterModal');
-    if (modal) {
-      modal.classList.remove('hidden');
-      document.body.classList.add('modal-open');
+    if (getEl('notifCenterModal')) {
+      openDialog('notifCenterModal');
       renderNotificationCenter('all');
     }
   });
 }
 
 function closeNotificationCenter() {
-  const modal = getEl('notifCenterModal');
-  if (modal) modal.classList.add('hidden');
-  document.body.classList.remove('modal-open');
+  closeDialog('notifCenterModal');
 }
 
 function renderNotificationCenter(filter) {
@@ -254,8 +251,9 @@ function renderNotificationCenter(filter) {
 
 function notifCenterItemHtml_(item) {
   const unreadClass = item.readAt ? '' : ' notif-item-unread';
+  const unreadTag = item.readAt ? '' : '<span class="notif-unread-tag">Unread</span>';
   return '<li class="notif-item' + unreadClass + notifPriorityClass_(item) + '" data-notif-id="' + escAttr(String(item.id || '')) + '">' +
-    '<div class="notif-item-title">' + (Number(item.priority) >= 1 ? '<span class="notif-urgent" title="Urgent">&#9888;</span> ' : '') + escapeHtml(item.title) + '</div>' +
+    '<div class="notif-item-title">' + unreadTag + (Number(item.priority) >= 1 ? '<span class="notif-urgent" title="Urgent">&#9888;</span> ' : '') + escapeHtml(item.title) + '</div>' +
     '<div class="notif-item-body">' + escapeHtml(item.body) + '</div>' +
     '<div class="notif-item-meta"><span class="notif-item-time">' + escapeHtml(formatTimestamp(item.createdAt)) + '</span>' +
     '<span class="notif-item-actions">' + notifActionHtml_(item) + '</span></div>' +
@@ -705,7 +703,26 @@ function setFieldInvalid(inputEl, message) {
   const field = inputEl.closest('.field');
   if (!field) return !message;
   const err = field.querySelector('.field-error');
-  if (err) err.textContent = message || '';
+  if (err) {
+    if (message && !err.id) {
+      err.id = 'err-' + (inputEl.id || 'field') + '-' + Math.random().toString(36).slice(2, 8);
+    }
+    err.textContent = message || '';
+    if (message) {
+      inputEl.setAttribute('aria-invalid', 'true');
+      inputEl.setAttribute('aria-describedby', err.id);
+    } else {
+      inputEl.removeAttribute('aria-invalid');
+      if (err.id) {
+        const describedBy = (inputEl.getAttribute('aria-describedby') || '')
+          .split(/\s+/).filter(function (x) { return x && x !== err.id; });
+        if (describedBy.length) inputEl.setAttribute('aria-describedby', describedBy.join(' '));
+        else inputEl.removeAttribute('aria-describedby');
+      }
+    }
+  } else if (!message) {
+    inputEl.removeAttribute('aria-invalid');
+  }
   field.classList.toggle('invalid', !!message);
   return !message;
 }
