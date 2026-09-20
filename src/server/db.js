@@ -95,6 +95,13 @@ db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_records_record_id ON records(reco
   { table: 'documents', rowCol: 'record_row' },
   { table: 'record_changes', rowCol: 'record_row' }
 ].forEach(function (child) {
+  // Older restored DBs predate the child record_id column: CREATE TABLE IF NOT
+  // EXISTS in schema.sql never alters an existing table, so add it here before
+  // the re-anchor UPDATE references it.
+  const childCols = db.prepare('PRAGMA table_info(' + child.table + ')').all();
+  if (!childCols.some(function (c) { return String(c.name) === 'record_id'; })) {
+    db.exec("ALTER TABLE " + child.table + " ADD COLUMN record_id TEXT NOT NULL DEFAULT ''");
+  }
   db.exec(
     'UPDATE ' + child.table +
     ' SET record_id = COALESCE((SELECT r.record_id FROM records r WHERE r.row = ' +

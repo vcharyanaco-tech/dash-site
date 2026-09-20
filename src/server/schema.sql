@@ -189,7 +189,10 @@ CREATE TABLE IF NOT EXISTS ask_ai_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_records_row ON records(row);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_records_record_id ON records(record_id) WHERE record_id != '';
+-- idx_records_record_id is created by db.js AFTER its migration adds the
+-- records.record_id column, so booting against an older restored database
+-- (which lacks the column) cannot fail here. Do not move it back into this
+-- schema: CREATE TABLE IF NOT EXISTS never adds columns to existing tables.
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_submissions_card_row ON submissions(card_row);
 CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee);
