@@ -224,3 +224,37 @@ bundle.
 **"Updated instructions section" (the prompt the user chased earlier) is this
 feature: the per-record `last_meeting_instructions` editor in the record detail
 view. On main and live.**
+
+## v1.2.0 follow-up -- instructions editor + presentation changes (were NOT shipped)
+
+The zip's prebuilt `app.js` was internally inconsistent with its `src/app/*`
+modules: the bundle had the Last Meeting Instructions UI + presentation
+changes, while the modules (which the canonical rebuild regenerates from) had
+the divisional/attachment client code. Rebuilding from the modules silently
+DROPPED the instructions feature + presentation change while the zip's app.js
+"looked stale" because it lacked the divisional/attachment APIs. Result: the
+"updated instructions section" was committed but never rendered client-side,
+and presentation slides were unchanged.
+
+Root-cause lesson: the zip was cut from two different trees; neither the
+bundle nor the modules was a superset. Compare BOTH directions before deciding
+a bundle is stale.
+
+Fixed at `f9e8c3f` by porting the missing behavior back into the modules:
+- `dashboardColumnKey_`: maps "Last Meeting Instructions" label; card fields
+  now carry `card-field-last-meeting-instructions` between Action and the
+  bottom row.
+- New `openLastMeetingInstructions` / `closeLastMeetingInstructions` /
+  `saveLastMeetingInstructions` (uses `#lastMeetingInstructionsModal` +
+  `ApiService.updateItem` carrying the field; app.html markup came from zip).
+- Editors get a pencil quick-action on cards (`svgIcon('edit')` added -- the
+  zip bundle reused the edit icon that didn't exist, falling back to `info`).
+- Edit modal wired: `#editLastMeetingInstructions` reset/populate/save.
+- Presentation mode is now meeting-focused -- slides show only Action and
+  Last Meeting Instructions (`presentationSlideHtml_` builds from
+  `groups.action.concat(groups.instructions || [])`).
+- Print report adds the Last Meeting Instructions column (block layout per
+  record when submissions are included) + `.record-print-block` page-break
+  rule. Table view intentionally unchanged (zip did not add the column).
+- app.js rebuilt; round-trip byte-identical; suite 399/399, secret-scan + 
+  bundle-size OK.
