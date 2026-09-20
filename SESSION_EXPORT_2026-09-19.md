@@ -333,7 +333,44 @@ Verification: `node build/build-app.js` → 21 modules / 9975 lines; round-trip
 diff OK; `node --check` on app.js/presentation.js/ai.js/init.js; bundle sizes
 OK (app.js 95.4 KB gz); server suite 391/391 pass.
 
+## Part 8 - Kanban board - SHIPPED
+
+- Added a **List / Board** segmented toggle to the Tasks toolbar
+  (`taskViewListBtn` / `taskViewBoardBtn`, `aria-pressed` states).
+- New board renderer (`renderKanbanBoard_`, `kanbanCardHtml_`) in `src/app/tasks.js`
+  with four columns matching the real server enum: Open / In progress / Done /
+  Cancelled (no invented "Waiting" status — no second data model).
+- Cards carry title, friendly assignee (incl. "All Divisional Heads"), priority
+  badge, "Overdue" badge, due date, one-click Complete (non-terminal states),
+  Edit for admins/editors, and a keyboard-reachable **Move** select. Status
+  moves go through the existing `ApiService.updateTask` (permitted by existing
+  object-level authz — viewers may move their own tasks, never reassign).
+- Drag-and-drop is a progressive enhancement wired via delegated events
+  (dragstart/dragover/drop on `.kanban-column[data-status]`); full keyboard
+  path = the Move select. All colors duplicated on text/border (color-independent).
+- `renderTasks()` now renders the active view; switching away from List clears
+  the list-only status filter so every column populates. Moves update
+  `appState.tasks` optimistically + re-render board locally and refresh KPI counts.
+- CSS in `assets/styles.css`: `.kanban-board` is 4 fixed columns ≥720px, becomes
+  a horizontally scrollable rail on ≤900px; columns/cards use existing surface/
+  border/shadow tokens so dark mode is free.
+- **Offline-sync visibility (previously gated) verified already shipped**, no code
+  change: `offlineBanner` + count-aware label, `openOfflineCenter()` modal with
+  summary/list/retry, wired to `online`/`offline` events and
+  `OfflineQueue.status()` (queued/syncing/failed/conflict).
+- **Presentation responsive nits** fixed in `assets/styles.css`: new
+  721–1024px tablet step (intermediate padding/arrow sizing), and a
+  ≤400px rule that narrows the slide (`76vw`) so the floating nav arrows no
+  longer sit under the card edge.
+
 ## Verification
+
+- `node build/build-app.js` → "Reassembled app.js (21 modules, 10129 lines)";
+  `node --check app.js` + `node --check src/app/tasks.js` exit 0.
+- Round-trip rebuild → SHA-256 of `app.js` stable.
+- `node scripts/check-bundle-size.cjs` → app.js 419.9 KB / gz 96.8 KB OK,
+  styles.css 112.4 KB / gz 21.3 KB OK (both under budget).
+- Server suite (`node src/server/run-tests.cjs`) → **exit 0**, 391 tests / 391 pass.
 
 - `node build/build-app.js` → "Reassembled app.js (21 modules, 9958 lines)";
   `node --check app.js` exit 0.
@@ -372,14 +409,21 @@ OK (app.js 95.4 KB gz); server suite 391/391 pass.
 - (this unit) `fix: presentation link swarming + dead preview close button —
   de-duplicate warmPresentationUrl_, warm only the nearby slide window,
   adopt warmed frames AS #previewFrame, close via closeLinkPreview everywhere`.
+- `a7f3351` `feat: Kanban board view for tasks (List/Board toggle, four status
+  columns, drag-and-drop + Move select, optimistic status moves via updateTask)
+  + presentation responsive nits (721-1024px tablet step, <=400px arrow pass)`.
 - Session export (docs) pushed with each unit.
 
 ## Pending Tasks
 
-- **Nothing runtime pending.** With Part 16 complete there are no open items;
-  a fresh-first, corroborating `SESSION_EXPORT_*.md` will be created in the
-  next session.
-- **Phase-4 Kanban** remains opt-in only; requires an explicit user ask.
+- **Nothing runtime pending.** Kanban, offline-sync visibility, and the
+  presentation responsive nits complete the previously-Phase-4-gated items.
+- **Part 10 "AI / Copilot" concept** — deliberately NOT buildable: the prompt
+  offers no concrete spec and Part 25 warns against feature-showcase. Copilot
+  remains gated behind a real, justified request.
+- **Parts 14 / 15 / 20 (API migration, refactors)** — demoted Phase-5
+  restructurings; the prompt itself says "do not mechanically create folders /
+  migrate without measured need". Left as documented, not speculative work.
 - Notification panel/center `<li>` rows left mouse-only on purpose (focusing the
   whole row would nest interactive controls); inner action buttons are
   keyboard-reachable.
