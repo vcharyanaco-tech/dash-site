@@ -52,6 +52,9 @@ function openRecordDetail(row) {
       : '<span class="badge" data-tone="muted">Not reviewed</span>';
 
   const detailUpdatesHtml = rowUpdatesHtml_(item.row);
+  const detailUpdatesCount = (appState.displayedSubmissions || [])
+    .filter(function (s) { return Number(s.cardRow) === Number(item.row); })
+    .length;
   const detailUpdatesHidden = isRowUpdatesHidden_(item.row);
   const detailUpdatesSection = detailUpdatesHtml
     ? `<div class="detail-updates"><span class="text-subheading">Updates</span><div class="card-updates${detailUpdatesHidden ? ' updates-hidden' : ''}" data-updates-row="${escAttr(item.row)}">${detailUpdatesHtml}</div></div>`
@@ -73,7 +76,9 @@ function openRecordDetail(row) {
     actionsHtml += `<button class="btn btn-primary" type="button" onclick="closeRecordDetail(); editItem('${escAttr(item.row)}');">Edit</button>`;
   }
   if (appState.isEditor && subCount > 0) {
-    actionsHtml += `<button class="btn btn-secondary" data-updates-toggle="${escAttr(item.row)}" type="button" onclick="toggleCardUpdates('${escAttr(item.row)}', this)">${detailUpdatesHidden ? 'Show updates' : 'Hide updates'} (${subCount})</button>`;
+    actionsHtml += detailUpdatesCount > 0
+      ? `<button class="btn btn-secondary" data-updates-toggle="${escAttr(item.row)}" type="button" onclick="toggleCardUpdates('${escAttr(item.row)}', this)">${detailUpdatesHidden ? 'Show updates' : 'Hide updates'}</button>`
+      : `<button class="btn btn-secondary" type="button" onclick="closeRecordDetail(); openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}');">View updates (${subCount})</button>`;
   }
   if (appState.isEditor) {
     actionsHtml += `<button class="btn btn-secondary" type="button" onclick="closeRecordDetail(); openTaskModal(${escAttr(item.row)});">Create task</button>`;

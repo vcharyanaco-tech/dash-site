@@ -305,3 +305,16 @@ Verification: `node src/server/run-tests.cjs` green — **406 tests, 0 fail** (i
 Bug report: the counter badge lived inside `.submit-update-wrap`, which became empty for editors/admin after hiding Submit update, so staff lost both the badge and — for records with zero *displayed* updates (e.g. records whose admin updates were shifted into instructions) — the Show/Hide updates toggle itself. Only Submit update was meant to go away.
 
 Fix (dashboard.js + detail.js): for editors/admin the toggle now renders whenever any submissions exist (`subCount > 0`) instead of requiring displayed ones, and its label carries the count — "Show updates (3)" / "Hide updates (3)" — with the unread `.submission-badge.flash` still pinned top-right when flashing. Toggle wrapped in `.submit-update-wrap` so the absolute badge positions correctly inside the button. Viewers unchanged (Submit update + counter badge). Dropped now-dead `updatesCount`/`detailUpdatesCount` locals. app.js rebuilt (22 modules, 11195 lines), split byte-exact, 406/406 tests, secret-scan + bundle-size OK.
+
+## fix: dead Show/Hide toggle + read-sensitive counter badges (after a93a528)
+
+Second bug report on the same footer: (1) the Show/Hide updates button "does nothing"; (2) the counter badges are no longer read-sensitive. Root causes found:
+- The button was gated on `subCount > 0` (total submissions) but it toggles the on-card update blocks, which only exist for *displayed* submissions (`updatesCount`). Post-migration many records have submissions yet zero displayed update blocks, so the button flipped state with no target visible.
+- `toggleCardUpdates` used `el.textContent` when re-labelling, which DESTROYED the `.submission-badge` span placed inside the button on the first click — so the counter/flash vanished (read-sensitivity lost) and (in the earlier round) the label text clobbering made things look stale.
+
+Fix:
+- dashboard.js `toggleCardUpdates`: re-label via `innerHTML` that keeps a `.submission-badge` with the live count; badge now pinned inside the button (wrapped in `.submit-update-wrap`) exactly like the original Submit-update badge (flashes while unread, stops on read, count always shown) — so the counter reflects read state again.
+- `buildCardHtml`: toggle only rendered when there is something to show/hide (`updatesCount > 0`) so it always works; when a record has submissions but none displayed, editors/admins get a "View updates" button that opens the submissions modal — the counter button is never dead. Badge (count, flash class) shown on both. `updatesCount` local restored.
+- detail.js: same split — toggle when the dialog has displayed update blocks (`detailUpdatesCount > 0`), otherwise "View updates (N)" opening the submissions modal.
+
+Verification: app.js rebuilt (22 modules, 11209 lines), `split-app.js` byte-exact, 406/406 tests, secret-scan + bundle-size OK. Committed + pushed after Render redeploy verified.

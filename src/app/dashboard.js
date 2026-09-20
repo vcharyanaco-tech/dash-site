@@ -399,10 +399,12 @@ function toggleCardUpdates(row, btn, allowViewer) {
   document.querySelectorAll('[data-updates-row="' + key + '"]').forEach(function (el) {
     el.classList.toggle('updates-hidden', hidden);
   });
+  const label = (hidden ? 'Show updates' : 'Hide updates') +
+    ' <span class="submission-badge">' + (Number((appState.submissionCounts || {})[Number(key)] || 0)) + '</span>';
   document.querySelectorAll('[data-updates-toggle="' + key + '"]').forEach(function (el) {
-    el.textContent = hidden ? 'Show updates' : 'Hide updates';
+    el.innerHTML = label;
   });
-  if (btn) btn.textContent = hidden ? 'Show updates' : 'Hide updates';
+  if (btn) btn.innerHTML = label;
 }
 
 function buildCardHtml(item) {
@@ -431,6 +433,10 @@ function buildCardHtml(item) {
 
   const updateFieldsHtml = rowUpdatesHtml_(item.row);
 
+  const updatesCount = (appState.displayedSubmissions || [])
+    .filter(function (s) { return Number(s.cardRow) === Number(item.row); })
+    .length;
+
   const updatesHidden = isRowUpdatesHidden_(item.row);
 
   const reviewBadgeHtml = item.reviewStatus === 'due'
@@ -456,7 +462,10 @@ function buildCardHtml(item) {
       <button class="btn btn-secondary btn-small" onclick="openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}')">Submit update</button>
       ${subCount > 0 ? `<span class="submission-badge${subFlash ? ' flash' : ''}">${subCount}</span>` : ''}
     </div>` : ''}
-    ${appState.isEditor && subCount > 0 ? `<div class="submit-update-wrap"><button class="btn btn-secondary btn-small toggle-updates-btn" data-updates-toggle="${escAttr(item.row)}" onclick="toggleCardUpdates('${escAttr(item.row)}', this)">${updatesHidden ? 'Show updates' : 'Hide updates'} (${subCount})</button>${subFlash ? `<span class="submission-badge flash">${subCount}</span>` : ''}</div>` : ''}
+    ${appState.isEditor && subCount > 0 ? `<div class="submit-update-wrap">${updatesCount > 0
+      ? `<button class="btn btn-secondary btn-small toggle-updates-btn" data-updates-toggle="${escAttr(item.row)}" onclick="toggleCardUpdates('${escAttr(item.row)}', this)">${updatesHidden ? 'Show updates' : 'Hide updates'}</button>`
+      : `<button class="btn btn-secondary btn-small" onclick="openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}')">View updates</button>`}
+      <span class="submission-badge${subFlash ? ' flash' : ''}">${subCount}</span></div>` : ''}
     <div class="menu-dropdown">
       <button class="btn btn-secondary btn-small" type="button" onclick="event.stopPropagation(); toggleDropdown(this);">Print</button>
       <span class="menu-dropdown-menu">
