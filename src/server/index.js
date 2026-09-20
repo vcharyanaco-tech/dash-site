@@ -279,6 +279,12 @@ app.post(API_PREFIX, async function (req, res) {
     const result = await fnRef(args);
     if (fn === 'login' && result && result.success && result.token) {
       setSessionCookie_(res, result.token);
+    } else if (fn === 'rotateSession' && result && result.success && result.token) {
+      // Session rotation: the old token is already destroyed server-side. The
+      // browser must be handed the replacement token now, or it keeps making
+      // requests with a destroyed session and the user is silently logged out
+      // (Phase 13, section 3).
+      setSessionCookie_(res, result.token);
     } else if (fn === 'logout' && result && result.success) {
       clearSessionCookie_(res);
     }

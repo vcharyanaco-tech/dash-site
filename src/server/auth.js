@@ -5,7 +5,7 @@
  * Password-based authentication, sessions and user management
  * (port of Auth.gs against the 'users' table).
  * ============================================================
- */  const { db, createSession_, sessionEmail_, destroySession_, refreshSession_, destroySessionsForEmail_, cacheGetTTL, cachePut, cacheRemove } = require('./db');
+ */  const { db, createSession_, sessionEmail_, destroySession_, refreshSession_, destroySessionsForEmail_, destroySessionsForEmailExcept_, cacheGetTTL, cachePut, cacheRemove } = require('./db');
 const {
   CONFIG,
   ROLES,
@@ -659,6 +659,11 @@ function changePassword(currentPassword, newPassword, token) {
     setUserField_(user.email, 'resetExpires', null);
     setUserField_(user.email, 'resetRequested', '');
 
+    // A password change must kill every other session: a stolen session token
+    // must not outlive the credential it was minted under. The session that
+    // performed the change stays alive (the browser is mid-flow on it).
+    destroySessionsForEmailExcept_(user.email, token);
+
     try { logAudit_(require('./audit'), 'CHANGE_PASSWORD', '', '', user.email); } catch (err) {}
     try { require('./notifications').notify_(user.email, 'user', 'Password changed', 'Your dashboard password was changed successfully.', ''); } catch (err) {}
 
@@ -1092,7 +1097,11 @@ function adminResetPassword(email, newPassword, token) {
     setUserField_(email, 'mustChange', false);
     setUserField_(email, 'resetToken', '');
     setUserField_(email, 'resetExpires', null);
-    setUserField_(email, 'resetRequested', null);
+    setUserField_(email, 'resetRequested', '');
+
+    // A reset issues a new credential: the target's existing sessions must not
+    // survive it (the compromised/forgotten credential must not linger).
+    destroySessionsForEmail_(email);
 
     try { logAudit_(require('./audit'), 'USER_RESET_PASSWORD', '', email, admin.email); } catch (err) {}
     try { require('./notifications').notify_(email, 'user', 'Password reset', 'An administrator reset your dashboard password. Please sign in with the new password.', ''); } catch (err) {}

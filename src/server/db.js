@@ -273,6 +273,13 @@ function destroySessionsForEmail_(email) {
   db.prepare('DELETE FROM sessions WHERE email = ?').run(String(email).toLowerCase());
 }
 
+/** Delete every session for an email except the given live token. Used after a
+ * password change: the changing session stays, every other session dies. */
+function destroySessionsForEmailExcept_(email, keepToken) {
+  db.prepare('DELETE FROM sessions WHERE email = ? AND token != ?')
+    .run(String(email).toLowerCase(), String(keepToken || ''));
+}
+
 /* ============================================================
  * Script-cache replacement (login throttling, reminders dedupe)
  * ============================================================ */
@@ -373,6 +380,7 @@ module.exports = {
   destroySession_,
   refreshSession_,
   destroySessionsForEmail_,
+  destroySessionsForEmailExcept_,
   cacheGet,
   cachePut,
   cacheRemove,
