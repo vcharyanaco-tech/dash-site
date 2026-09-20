@@ -219,6 +219,7 @@ function updateTask(id, fields, token) {
       notifyRecipients_(reassignEmails, NOTIFICATION_TYPES.USER, 'Task reassigned', reassignNotifyBody, reassignMailSubject, reassignMailBody);
     }
     if (updates.status && updates.status !== existing.status) {
+      if (updates.status === TASK_STATUS.DONE) { try { require('./automation').evaluate_('TASK_COMPLETED', { key: 'taskdone:'+id+':'+now, email: existing.assignee, recordRow: existing.recordRow, message: 'Task completed: '+existing.title }); } catch (err) {} }
       // For status-change notifications, resolve the existing assignee (which
       // may be a group marker) so every member learns about the change.
       const statusEmails = resolveAssigneeEmails_(existing.assignee);

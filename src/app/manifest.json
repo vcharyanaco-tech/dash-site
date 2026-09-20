@@ -1,26 +1,95 @@
 {
   "version": 2,
   "modules": [
-    { "name": "i18n",         "file": "i18n.js",         "src": "src/i18n.js" },
-    { "name": "core",         "file": "core.js" },
-    { "name": "meetings",     "file": "meetings.js" },
-    { "name": "recording",    "file": "recording.js" },
-    { "name": "ai",           "file": "ai.js" },
-    { "name": "session",      "file": "session.js" },
-    { "name": "dashboard",    "file": "dashboard.js" },
-    { "name": "audit",        "file": "audit.js" },
-    { "name": "reports",      "file": "reports.js" },
-    { "name": "settings",     "file": "settings.js" },
-    { "name": "detail",       "file": "detail.js" },
-    { "name": "tasks",        "file": "tasks.js" },
-    { "name": "utils",        "file": "utils.js" },
-    { "name": "studio",       "file": "studio.js" },
-    { "name": "edit",         "file": "edit.js" },
-    { "name": "submissions",  "file": "submissions.js" },
-    { "name": "myday",        "file": "myday.js" },
-    { "name": "presentation", "file": "presentation.js" },
-    { "name": "realtime",     "file": "realtime.js" },
-    { "name": "init",         "file": "init.js" },
-    { "name": "offline-queue", "file": "offline-queue.js", "src": "offline-queue.js" }
+    {
+      "name": "i18n",
+      "file": "i18n.js",
+      "src": "src/i18n.js"
+    },
+    {
+      "name": "core",
+      "file": "core.js"
+    },
+    {
+      "name": "meetings",
+      "file": "meetings.js"
+    },
+    {
+      "name": "recording",
+      "file": "recording.js"
+    },
+    {
+      "name": "ai",
+      "file": "ai.js"
+    },
+    {
+      "name": "session",
+      "file": "session.js"
+    },
+    {
+      "name": "dashboard",
+      "file": "dashboard.js"
+    },
+    {
+      "name": "audit",
+      "file": "audit.js"
+    },
+    {
+      "name": "reports",
+      "file": "reports.js"
+    },
+    {
+      "name": "settings",
+      "file": "settings.js"
+    },
+    {
+      "name": "detail",
+      "file": "detail.js"
+    },
+    {
+      "name": "tasks",
+      "file": "tasks.js"
+    },
+    {
+      "name": "utils",
+      "file": "utils.js"
+    },
+    {
+      "name": "studio",
+      "file": "studio.js"
+    },
+    {
+      "name": "edit",
+      "file": "edit.js"
+    },
+    {
+      "name": "submissions",
+      "file": "submissions.js"
+    },
+    {
+      "name": "myday",
+      "file": "myday.js"
+    },
+    {
+      "name": "presentation",
+      "file": "presentation.js"
+    },
+    {
+      "name": "workspace",
+      "file": "workspace.js"
+    },
+    {
+      "name": "realtime",
+      "file": "realtime.js"
+    },
+    {
+      "name": "init",
+      "file": "init.js"
+    },
+    {
+      "name": "offline-queue",
+      "file": "offline-queue.js",
+      "src": "offline-queue.js"
+    }
   ]
 }

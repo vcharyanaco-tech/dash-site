@@ -200,6 +200,7 @@ function addSubmission(cardRow, cardId, text, token) {
     try {
       require('./notifications').notifyStaffLocked_('submission', 'New submission', 'Update submitted on record #' + cardRow + ' by ' + user.email + '.', '', user.email, { priority: NOTIFICATION_PRIORITY.HIGH, recordRow: Number(cardRow) });
     } catch (err) {}
+    try { require('./automation').evaluate_('SUBMISSION_CREATED', { id: id, key: id, email: user.email, recordRow: Number(cardRow), message: 'New submission on record #' + cardRow }); } catch (err) {}
     try { require('./data-sync').requestBackup(); } catch (err) {}
     return submissionsForCard_(cardRow, user);
   });

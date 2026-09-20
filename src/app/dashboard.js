@@ -835,4 +835,5 @@ function renderAnalytics() {
     </div>`;
 
   getEl('analyticsReport').innerHTML = reportHtml;
+  if (typeof renderExecutiveSnapshot === 'function') renderExecutiveSnapshot();
 }

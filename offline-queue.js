@@ -177,6 +177,8 @@
 
   function flush() {
     var q = load();
+    var now = Date.now();
+    q = q.filter(function(item){ return !item.nextRetryAt || item.nextRetryAt <= now || item.status === 'conflict'; });
     if (!q.length) return Promise.resolve({ flushed: 0, failed: 0, pending: 0, status: summary() });
     var flushed = 0;
     var failed = 0;
@@ -200,6 +202,8 @@
           failed++;
           item.status = classifyError_(err);
           item.lastError = describeError_(err);
+          if (item.status === 'failed' && item.attempts < 4) item.nextRetryAt = Date.now() + Math.min(120000, Math.pow(2, item.attempts) * 5000);
+          else item.nextRetryAt = 0;
           item.lastErrorAt = Date.now();
           save(q);
           renderQueueStatus();
@@ -224,6 +228,7 @@
     if (i === -1) return Promise.resolve({ queued: 0, pending: q.length });
     q[i].status = 'queued';
     q[i].lastError = null;
+    q[i].nextRetryAt = 0;
     save(q);
     renderQueueStatus();
     emit('OfflineQueueChange', { pending: q.length, status: summary() });

@@ -124,6 +124,11 @@ getMyNotifications: function () { return apiCall_('getMyNotifications'); },
     clearMyNotifications: function () { return apiCall_('clearMyNotifications'); },
     getNotificationPrefs: function () { return apiCall_('getNotificationPrefs'); },
     setNotificationPrefs: function (prefs) { return apiCall_('setNotificationPrefs', prefs); },
+  updateNotificationState: function (id, state) { return apiCall_('updateNotificationState', id, state); },
+  snoozeNotification: function (id, minutes) { return apiCall_('snoozeNotification', id, minutes); },
+  dismissNotification: function (id) { return apiCall_('dismissNotification', id); },
+  restoreNotification: function (id) { return apiCall_('restoreNotification', id); },
+  getNotificationDigest: function () { return apiCall_('getNotificationDigest'); },
   createTask: function (params) { return apiCall_('createTask', params); },
   getTaskCounts: function () { return apiCall_('getTaskCounts'); },
   getTasks: function (filters) { return apiCall_('getTasks', filters || {}); },
@@ -161,6 +166,7 @@ getMyNotifications: function () { return apiCall_('getMyNotifications'); },
   getCardAiInsight: function (row) { return apiCall_('getCardAiInsight', row); },
   getLinkContentAiInsight: function (row) { return apiCall_('getLinkContentAiInsight', row); },
   askLinkAi: function (row, question) { return apiCall_('askLinkAi', row, question); },
+  askDashboardAi: function (question, context) { return apiCall_('askDashboardAi', question, context); },
   getAllAskLinkHistory: function () { return apiCall_('getAllAskLinkHistory'); },
   saveAskLinkHistory: function (row, history) { return apiCall_('saveAskLinkHistory', row, history); },
   processMeetingRecording: function (payload) { return apiCall_('processMeetingRecording', payload); },
@@ -191,7 +197,14 @@ getMyNotifications: function () { return apiCall_('getMyNotifications'); },
   // Admin CSV import
   adminImportCsv: function (csvText) { return apiCall_('adminImportCsv', csvText); },
   // Part 17 — admin System Health
-  getSystemHealth: function () { return apiCall_('getSystemHealth'); }
+  getSystemHealth: function () { return apiCall_('getSystemHealth'); },
+  getAnalytics: function (range) { return apiCall_('getAnalytics', range || { days: 30 }); },
+  listAutomationRules: function () { return apiCall_('listAutomationRules'); },
+  saveAutomationRule: function (rule) { return apiCall_('saveAutomationRule', rule); },
+  deleteAutomationRule: function (id) { return apiCall_('deleteAutomationRule', id); },
+  runAutomationNow: function () { return apiCall_('runAutomationNow'); },
+  getSecurityStatus: function () { return apiCall_('getSecurityStatus'); },
+  rotateSession: function () { return apiCall_('rotateSession'); }
 };
 
 const appState = {

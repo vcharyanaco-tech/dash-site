@@ -12,13 +12,16 @@ const { primaryEmail_, isValidEmail_, uuid_, now_, runWithLock_ } = require('./h
 const settings = require('./settings');
 
 const auth = require('./auth');
+const events = require('./events');
 
 const NOTIFICATION_PREFS_DEFAULT = Object.freeze({
   record: true,
   submission: true,
   user: true,
   system: true,
-  push: true
+  push: true,
+  digest: true,
+  digestHour: 8
 });
 
 function notificationRecordFromRow_(row) {
@@ -32,7 +35,10 @@ function notificationRecordFromRow_(row) {
     createdAt: row.created_at ? Number(row.created_at) : 0,
     readAt: row.read_at ? Number(row.read_at) : 0,
     priority: row.priority !== undefined && row.priority !== null ? Number(row.priority) : NOTIFICATION_PRIORITY.NORMAL,
-    recordRow: row.record_row !== undefined && row.record_row !== null ? Number(row.record_row) : 0
+    recordRow: row.record_row !== undefined && row.record_row !== null ? Number(row.record_row) : 0,
+    snoozedUntil: row.snoozed_until ? Number(row.snoozed_until) : 0,
+    dismissedAt: row.dismissed_at ? Number(row.dismissed_at) : 0,
+    groupKey: String(row.group_key || '')
   };
 }
 
@@ -89,7 +95,7 @@ function appendNotification_(email, type, title, body, link, opts) {
 
   const id = uuid_();
   db.prepare(
-    'INSERT INTO notifications (id, email, type, title, body, link, created_at, read_at, priority, record_row) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO notifications (id, email, type, title, body, link, created_at, read_at, priority, record_row, snoozed_until, dismissed_at, group_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(
     id,
     email,
@@ -100,9 +106,11 @@ function appendNotification_(email, type, title, body, link, opts) {
     Date.now(),
     null,
     opts.priority !== undefined && opts.priority !== null ? Number(opts.priority) : NOTIFICATION_PRIORITY.NORMAL,
-    opts.recordRow !== undefined && opts.recordRow !== null ? Number(opts.recordRow) : 0
+    opts.recordRow !== undefined && opts.recordRow !== null ? Number(opts.recordRow) : 0,
+    0, 0, String(opts.groupKey || '')
   );
   pruneNotifications_(email);
+  try { events.broadcast('notificationChanged', { id: id, type: String(type || 'system') }); } catch (e) {}
 }
 
 function notify_(email, type, title, body, link, opts) {
@@ -157,24 +165,23 @@ function notifyStaffLocked_(type, title, body, link, excludeEmail, opts) {
 function getMyNotifications(token) {
   const user = auth.requireLogin(token);
   const rows = db.prepare('SELECT * FROM notifications WHERE email = ?').all(user.email);
-  const all = rows.map(notificationRecordFromRow_);
+  const all = rows.map(notificationRecordFromRow_).filter(function (n) { return !n.dismissedAt; });
   all.sort(function (a, b) { return b.createdAt - a.createdAt; });
+  const now = Date.now();
+  const active = all.filter(function (n) { return !n.snoozedUntil || n.snoozedUntil <= now; });
   let unread = 0;
   const byTypeUnread = {};
   const byTypeCount = {};
-  for (let i = 0; i < all.length; i++) {
-    const n = all[i];
-    if (!n.readAt) {
-      unread++;
-      byTypeUnread[n.type] = (byTypeUnread[n.type] || 0) + 1;
-    }
+  for (let i = 0; i < active.length; i++) {
+    const n = active[i];
+    if (!n.readAt) { unread++; byTypeUnread[n.type] = (byTypeUnread[n.type] || 0) + 1; }
     byTypeCount[n.type] = (byTypeCount[n.type] || 0) + 1;
   }
   return {
     unread: unread,
-    recent: all.slice(0, NOTIFICATION_RECENT_LIMIT),
-    count: all.length,
-    history: all,
+    recent: active.slice(0, NOTIFICATION_RECENT_LIMIT),
+    count: active.length,
+    history: active,
     byTypeUnread: byTypeUnread,
     byTypeCount: byTypeCount,
     prefs: getPrefs_(user.email)
@@ -206,12 +213,15 @@ function markNotificationsRead(ids, token) {
       db.prepare('UPDATE notifications SET read_at = ? WHERE id = ?').run(Date.now(), r.id);
     }
   });
-  return getMyNotifications(token);
+  const result = getMyNotifications(token);
+  try { events.broadcast('notificationChanged', { action: 'read' }); } catch (e) {}
+  return result;
 }
 
 function clearMyNotifications(token) {
   const user = auth.requireLogin(token);
   db.prepare('DELETE FROM notifications WHERE email = ?').run(user.email);
+  try { events.broadcast('notificationChanged', { action: 'clear' }); } catch (e) {}
   return getMyNotifications(token);
 }
 
@@ -229,6 +239,26 @@ function setNotificationPrefs(prefs, token) {
   return { prefs: clean };
 }
 
+function updateNotificationState(id, state, token) {
+  const user = auth.requireLogin(token); id=String(id||''); state=state||{};
+  const row=db.prepare('SELECT id FROM notifications WHERE id=? AND email=?').get(id,user.email); if(!row) throw new Error('Notification not found.');
+  if(state.read===true) db.prepare('UPDATE notifications SET read_at=? WHERE id=?').run(Date.now(),id);
+  if(state.read===false) db.prepare('UPDATE notifications SET read_at=NULL WHERE id=?').run(id);
+  if(state.dismiss===true) db.prepare('UPDATE notifications SET dismissed_at=? WHERE id=?').run(Date.now(),id);
+  if(state.dismiss===false) db.prepare('UPDATE notifications SET dismissed_at=0 WHERE id=?').run(id);
+  if(state.snoozeUntil!==undefined) db.prepare('UPDATE notifications SET snoozed_until=? WHERE id=?').run(Math.max(0,Number(state.snoozeUntil)||0),id);
+  try { events.broadcast('notificationChanged', { id: id, action: 'state' }); } catch (e) {}
+  return getMyNotifications(token);
+}
+function snoozeNotification(id, minutes, token){return updateNotificationState(id,{snoozeUntil:Date.now()+Math.max(1,Math.min(7*24*60,Number(minutes)||60))*60000},token);}
+function dismissNotification(id, token){return updateNotificationState(id,{dismiss:true},token);}
+function restoreNotification(id, token){return updateNotificationState(id,{dismiss:false,snoozeUntil:0},token);}
+function getNotificationDigest(token){
+  const user=auth.requireLogin(token); const prefs=getPrefs_(user.email); const rows=db.prepare('SELECT type,priority,title,body,created_at FROM notifications WHERE email=? AND created_at>=? AND (dismissed_at IS NULL OR dismissed_at=0) ORDER BY created_at DESC').all(user.email,Date.now()-86400000);
+  const groups={}; rows.forEach(r=>{const k=String(r.type||'system');if(!groups[k])groups[k]={type:k,count:0,high:0,items:[]};groups[k].count++;if(Number(r.priority)>=1)groups[k].high++;if(groups[k].items.length<5)groups[k].items.push({title:r.title,body:r.body,createdAt:Number(r.created_at)||0,priority:Number(r.priority)||0});});
+  return {enabled:prefs.digest!==false,prefs,periodHours:24,total:rows.length,groups:Object.keys(groups).map(k=>groups[k])};
+}
+
 module.exports = {
   appendNotification_,
   notify_,
@@ -239,6 +269,11 @@ module.exports = {
   clearMyNotifications,
   getNotificationPrefs,
   setNotificationPrefs,
+  updateNotificationState,
+  snoozeNotification,
+  dismissNotification,
+  restoreNotification,
+  getNotificationDigest,
   allowTypeFor_,
   getPrefs_
 };

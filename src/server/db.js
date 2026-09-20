@@ -137,6 +137,12 @@ if (!notifColumns.some(function (c) { return String(c.name) === 'record_row'; })
   db.exec('ALTER TABLE notifications ADD COLUMN record_row INTEGER NOT NULL DEFAULT 0');
 }
 
+/* ---- Migration: notification lifecycle metadata ---- */
+const notifLifeCols = db.prepare('PRAGMA table_info(notifications)').all();
+if (!notifLifeCols.some(function (c) { return String(c.name) === 'snoozed_until'; })) db.exec('ALTER TABLE notifications ADD COLUMN snoozed_until INTEGER NOT NULL DEFAULT 0');
+if (!notifLifeCols.some(function (c) { return String(c.name) === 'dismissed_at'; })) db.exec('ALTER TABLE notifications ADD COLUMN dismissed_at INTEGER NOT NULL DEFAULT 0');
+if (!notifLifeCols.some(function (c) { return String(c.name) === 'group_key'; })) db.exec("ALTER TABLE notifications ADD COLUMN group_key TEXT NOT NULL DEFAULT ''");
+
 settings.setDb(db);
 
 /* ============================================================
@@ -285,3 +291,12 @@ module.exports = {
   aiCacheGet,
   aiCachePut
 };
+
+/* ---- Migration: operational query indexes (Targets 10–12) ---- */
+db.exec('CREATE INDEX IF NOT EXISTS idx_records_review_date ON records(review_date)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_records_created_at ON records(created_at)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_due_status ON tasks(status, due_date)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_assignee_status ON tasks(assignee, status)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_submissions_card_created ON submissions(card_row, created_at)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_email_created ON notifications(email, created_at DESC)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_email_read ON notifications(email, read_at)');

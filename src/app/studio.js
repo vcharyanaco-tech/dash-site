@@ -125,6 +125,7 @@ function fuzzyMatch_(query, text) {
   var q = String(query || '').toLowerCase().trim();
   var t = String(text || '').toLowerCase();
   if (!q) return true;
+  if (t.indexOf(q) !== -1) return true;
   var qi = 0;
   for (var i = 0; i < t.length && qi < q.length; i++) {
     if (t[i] === q[qi]) qi++;
@@ -132,22 +133,40 @@ function fuzzyMatch_(query, text) {
   return qi === q.length;
 }
 
+function commandScore_(query, item) {
+  var q = String(query || '').toLowerCase().trim();
+  if (!q) return 0;
+  var label = String(item.label || '').toLowerCase();
+  var subtitle = String(item.subtitle || '').toLowerCase();
+  var score = 0;
+  if (label === q) score += 1000;
+  if (label.indexOf(q) === 0) score += 700;
+  else if (label.indexOf(q) !== -1) score += 500;
+  if (subtitle.indexOf(q) !== -1) score += 120;
+  if (fuzzyMatch_(q, label)) score += 80;
+  return score;
+}
+
+
 const COMMAND_ACTIONS = [
-  { key: 'goto-dashboard', label: 'Go to Dashboard', shortcut: 'G D', action: function () { openTab('dashboard'); closeCommandPalette(); } },
-  { key: 'goto-audit', label: 'Go to Audit log', shortcut: 'G A', perm: 'audit', action: function () { openTab('audit'); closeCommandPalette(); } },
-  { key: 'goto-reports', label: 'Go to Reports', shortcut: 'G R', action: function () { openTab('reports'); closeCommandPalette(); } },
-  { key: 'goto-settings', label: 'Go to Settings', shortcut: 'G S', action: function () { openTab('settings'); closeCommandPalette(); } },
-  { key: 'goto-tasks', label: 'Go to Tasks', shortcut: 'G T', action: function () { openTab('tasks'); closeCommandPalette(); } },
-  { key: 'refresh', label: 'Refresh data', shortcut: 'R', action: function () { refreshData(); closeCommandPalette(); } },
-  { key: 'add-record', label: 'Add new record', shortcut: 'N', action: function () { openAddModal(); closeCommandPalette(); }, requireEditor: true },
-  { key: 'create-task', label: 'Create task', shortcut: '', action: function () { openTaskModal(); closeCommandPalette(); }, requireEditor: true },
-  { key: 'toggle-theme', label: 'Toggle dark mode', shortcut: 'T', action: function () { toggleDarkMode(); closeCommandPalette(); } },
-  { key: 'logout', label: 'Sign out', shortcut: 'Q', action: function () { handleLogout(); closeCommandPalette(); } },
-  { key: 'export-records', label: 'Export records to spreadsheet', shortcut: '', action: function () { exportToSpreadsheet(); closeCommandPalette(); } },
-  { key: 'export-pdf', label: 'Create PDF report', shortcut: '', action: function () { createPdfReport(); closeCommandPalette(); } },
-  { key: 'email-report', label: 'Send report via email', shortcut: '', action: function () { openEmailReportDialog(); closeCommandPalette(); } },
-  { key: 'generate-review-notifications', label: 'Generate review notifications', shortcut: '', action: function () { ApiService.generateReviewNotifications().then(function () { showToast('Review notifications generated.', 'success'); }).catch(function (e) { showToast('Could not generate.', 'error'); }); closeCommandPalette(); } },
-  { key: 'mark-all-submissions-read', label: 'Mark all submissions read', shortcut: '', action: function () { markAllSubmissionsRead(); closeCommandPalette(); } }
+  { key: 'goto-myday', label: 'Open My Day', subtitle: 'Today’s priorities and workload', shortcut: 'G D', action: function () { openTab('myday'); closeCommandPalette(); } },
+  { key: 'focus-next', label: 'Focus next priority', subtitle: 'Open the most urgent item', shortcut: '', action: function () { closeCommandPalette(); openMyDayFocus(); } },
+  { key: 'start-presentation', label: 'Start Presentation Mode', subtitle: 'Project the dashboard one card at a time', shortcut: 'P', action: function () { closeCommandPalette(); enterPresentationMode(); } },
+  { key: 'goto-dashboard', label: 'Go to Dashboard', subtitle: 'Records and dashboard cards', shortcut: '', action: function () { openTab('dashboard'); closeCommandPalette(); } },
+  { key: 'goto-tasks', label: 'Go to Tasks', subtitle: 'Tasks and due dates', shortcut: '', action: function () { openTab('tasks'); closeCommandPalette(); } },
+  { key: 'goto-reports', label: 'Go to Reports', subtitle: 'Reports and exports', shortcut: '', action: function () { openTab('reports'); closeCommandPalette(); } },
+  { key: 'goto-audit', label: 'Go to Audit log', subtitle: 'Activity and audit history', shortcut: '', perm: 'audit', action: function () { openTab('audit'); closeCommandPalette(); } },
+  { key: 'goto-settings', label: 'Go to Settings', subtitle: 'Application and account settings', shortcut: '', action: function () { openTab('settings'); closeCommandPalette(); } },
+  { key: 'refresh', label: 'Refresh data', subtitle: 'Reload dashboard data', shortcut: 'R', action: function () { refreshData(); closeCommandPalette(); } },
+  { key: 'add-record', label: 'Add new record', subtitle: 'Create a dashboard record', shortcut: 'N', action: function () { openAddModal(); closeCommandPalette(); }, requireEditor: true },
+  { key: 'create-task', label: 'Create task', subtitle: 'Add a task to your workload', shortcut: '', action: function () { openTaskModal(); closeCommandPalette(); }, requireEditor: true },
+  { key: 'toggle-theme', label: 'Toggle dark mode', subtitle: 'Switch appearance', shortcut: 'T', action: function () { toggleDarkMode(); closeCommandPalette(); } },
+  { key: 'export-records', label: 'Export records to spreadsheet', subtitle: 'Download dashboard records', shortcut: '', action: function () { exportToSpreadsheet(); closeCommandPalette(); } },
+  { key: 'export-pdf', label: 'Create PDF report', subtitle: 'Generate a report PDF', shortcut: '', action: function () { createPdfReport(); closeCommandPalette(); } },
+  { key: 'email-report', label: 'Send report via email', subtitle: 'Open the report email workflow', shortcut: '', action: function () { openEmailReportDialog(); closeCommandPalette(); } },
+  { key: 'generate-review-notifications', label: 'Generate review notifications', subtitle: 'Create due-review notifications', shortcut: '', action: function () { closeCommandPalette(); ApiService.generateReviewNotifications().then(function () { showToast('Review notifications generated.', 'success'); }).catch(function () { showToast('Could not generate.', 'error'); }); } },
+  { key: 'mark-all-submissions-read', label: 'Mark all submissions read', subtitle: 'Clear unread submission indicators', shortcut: '', action: function () { markAllSubmissionsRead(); closeCommandPalette(); } },
+  { key: 'logout', label: 'Sign out', subtitle: 'End the current session', shortcut: '', action: function () { handleLogout(); closeCommandPalette(); } }
 ];
 
 var CMD_RESULTS = [];
@@ -171,20 +190,39 @@ function addRecentItem(item) {
   saveRecentItems(recent);
 }
 
-function openCommandPalette() {
+function openCommandPalette(initialQuery) {
   openDialog('commandPalette');
   const input = getEl('commandInput');
   CMD_RESULTS = [];
   CMD_SELECTED_IDX = 0;
+  CMD_SEARCH_GEN++;
+  if (CMD_SEARCH_DEBOUNCE) clearTimeout(CMD_SEARCH_DEBOUNCE);
+  CMD_SEARCHING = false;
   if (input) {
-    input.value = '';
+    input.value = String(initialQuery || '');
     input.focus();
-    filterCommands('');
+    if (input.value) input.select();
+    filterCommands(input.value);
   }
 }
 
 function closeCommandPalette() {
+  CMD_SEARCH_GEN++;
+  if (CMD_SEARCH_DEBOUNCE) clearTimeout(CMD_SEARCH_DEBOUNCE);
+  CMD_SEARCHING = false;
+  hideSearching();
   closeDialog('commandPalette');
+}
+
+function openMyDayFocus() {
+  openTab('myday');
+  setTimeout(function () {
+    if (typeof renderMyDay === 'function') renderMyDay();
+    setTimeout(function () {
+      var focus = document.querySelector('.myday-focus-card button');
+      if (focus) focus.focus();
+    }, 180);
+  }, 60);
 }
 
 function filterCommands(query) {
@@ -194,7 +232,10 @@ function filterCommands(query) {
   let actions = COMMAND_ACTIONS.slice();
   if (appState.isEditor === false) actions = actions.filter(function (a) { return !a.requireEditor; });
   actions = actions.filter(function (a) { return !a.perm || can(a.perm, 'view'); });
-  if (q) actions = actions.filter(function (a) { return fuzzyMatch_(q, a.label); });
+  if (q) {
+    actions = actions.filter(function (a) { return fuzzyMatch_(q, a.label + ' ' + (a.subtitle || '')); });
+    actions.sort(function (a, b) { return commandScore_(q, b) - commandScore_(q, a); });
+  }
   let records = [];
   if (q.length >= 2) {
     records = (appState.items || []).filter(function (item) {
@@ -236,9 +277,9 @@ function filterCommands(query) {
     html += '<div class="command-category">' + escapeHtml(title) + '</div>';
     items.forEach(function (item) {
       var idx = CMD_RESULTS.length;
-      html += '<div class="command-item" data-cmd="' + escAttr(item.key) + '" data-idx="' + idx + '" onclick="executeCommand(\'' + escAttr(item.key) + '\')">' +
-        '<span>' + escapeHtml(item.label) + '</span>' +
-        '<span style="margin-left:auto;color:var(--muted);font-size:12px;">' + escapeHtml(item.shortcut || item.subtitle || '') + '</span></div>';
+      html += '<div class="command-item" data-cmd="' + escAttr(item.key) + '" data-idx="' + idx + '" role="option" aria-selected="' + (idx === 0 ? 'true' : 'false') + '" onclick="executeCommand(\'' + escAttr(item.key) + '\')">' +
+        '<span class="command-copy"><strong>' + escapeHtml(item.label) + '</strong>' + (item.subtitle ? '<small>' + escapeHtml(item.subtitle) + '</small>' : '') + '</span>' +
+        (item.shortcut ? '<kbd class="command-shortcut">' + escapeHtml(item.shortcut) + '</kbd>' : '') + '</div>';
       CMD_RESULTS.push({ key: item.key, action: item.action });
     });
   }
@@ -255,8 +296,10 @@ function filterCommands(query) {
 function highlightSelected() {
   var items = document.querySelectorAll('#commandList .command-item');
   items.forEach(function (el, i) {
-    if (i === CMD_SELECTED_IDX) el.classList.add('command-selected');
-    else el.classList.remove('command-selected');
+    var selected = i === CMD_SELECTED_IDX;
+    el.classList.toggle('command-selected', selected);
+    el.setAttribute('aria-selected', selected ? 'true' : 'false');
+    if (selected) el.scrollIntoView({ block: 'nearest' });
   });
 }
 

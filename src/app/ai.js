@@ -539,36 +539,49 @@ function openLinkPreview(url, title) {
   if (openNew) openNew.href = url;
   previewZoom = 80;
 
-  /* Reuse a warmed frame when one is ready: presentation mode warms the
-     embeddable target URL in hidden iframes (presentationWarm.frames, keyed
-     by the embeddable form). The warmed frame is ADOPTED AS #previewFrame
-     (same element, still loaded — no re-navigation, click opens instantly).
-     Keeping the id INSTEAD OF judging the old placeholder guarantees the
-     canonical #previewFrame always exists, so the close button works and no
-     later click can fall through to window.open (link swarming). */
   let target = '';
   try { target = (typeof toEmbeddableUrl === 'function' && toEmbeddableUrl(url)) || url; } catch (err) { target = url; }
-  const warmed = window.presentationWarm && presentationWarm.frames && presentationWarm.frames[target];
-  if (warmed && warmed.ready && warmed.node && warmed.frame) {
+
+  /* Presentation Mode keeps two levels of reuse:
+     1) a background warm frame that has already finished loading;
+     2) a small cache of frames previously shown in the preview.
+     In both cases the SAME iframe element is adopted, so opening does not
+     trigger a second navigation. */
+  const warm = window.presentationWarm || null;
+  let cached = null;
+  if (warm && warm.previewCache && warm.previewCache[target]) {
+    cached = warm.previewCache[target];
+    delete warm.previewCache[target];
+    if (warm.previewCacheOrder) {
+      warm.previewCacheOrder = warm.previewCacheOrder.filter(function (key) { return key !== target; });
+    }
+  }
+  const warmed = warm && warm.frames && warm.frames[target];
+  const reusable = cached || (warmed && warmed.ready ? warmed : null);
+
+  if (reusable && reusable.node && reusable.frame) {
     const stage = getEl('previewStage');
     if (stage) {
       try {
-        warmed.frame.id = 'previewFrame';
-        warmed.frame.className = 'preview-frame';
-        warmed.frame.title = 'Link preview';
-        warmed.frame.setAttribute('aria-hidden', 'true');
-        stage.replaceChild(warmed.frame, frame);
-        const holder = warmed.node;
-        if (holder && holder.parentNode) holder.parentNode.removeChild(holder);
+        reusable.frame.id = 'previewFrame';
+        reusable.frame.className = 'preview-frame';
+        reusable.frame.title = 'Link preview';
+        reusable.frame.setAttribute('aria-hidden', 'true');
+        stage.replaceChild(reusable.frame, frame);
+        if (reusable.node.parentNode) reusable.node.parentNode.removeChild(reusable.node);
+        if (warm && warm.frames && warm.frames[target]) delete warm.frames[target];
+        if (warm) warm.activePreviewTarget = target;
       } catch (err) {
         try { frame.src = target || ''; } catch (err2) {}
+        if (warm) warm.activePreviewTarget = target;
       }
     } else {
       try { frame.src = target || ''; } catch (err2) {}
+      if (warm) warm.activePreviewTarget = target;
     }
-    delete window.presentationWarm.frames[target];
   } else {
     try { frame.src = target || ''; } catch (err) {}
+    if (warm) warm.activePreviewTarget = target;
   }
   applyPreviewZoom();
   openDialog('previewModal');
@@ -579,7 +592,48 @@ function openLinkPreview(url, title) {
    a clean #previewFrame. */
 function closeLinkPreview() {
   const frame = getEl('previewFrame');
+  const warm = window.presentationWarm || null;
+  const target = warm && warm.activePreviewTarget;
+
+  /* In presentation mode, preserve the loaded iframe instead of blanking it.
+     It is moved into the same hidden warm-frame holder used by the preload
+     system and can be adopted instantly on the next open. */
+  if (frame && warm && presentationState && presentationState.active && target) {
+    try {
+      const holder = document.createElement('div');
+      holder.className = 'pres-warm-frame';
+      holder.setAttribute('data-pres-warm-frame', '1');
+      frame.id = '';
+      frame.setAttribute('aria-hidden', 'true');
+      holder.appendChild(frame);
+      document.body.appendChild(holder);
+
+      if (warm.previewCache[target] && warm.previewCache[target].node &&
+          warm.previewCache[target].node.parentNode) {
+        warm.previewCache[target].node.parentNode.removeChild(warm.previewCache[target].node);
+      }
+      warm.previewCache[target] = { node: holder, frame: frame, ready: true };
+      warm.previewCacheOrder = (warm.previewCacheOrder || []).filter(function (key) { return key !== target; });
+      warm.previewCacheOrder.push(target);
+
+      while (warm.previewCacheOrder.length > 6) {
+        const evict = warm.previewCacheOrder.shift();
+        const entry = warm.previewCache[evict];
+        delete warm.previewCache[evict];
+        if (entry && entry.node && entry.node.parentNode) {
+          entry.node.parentNode.removeChild(entry.node);
+        }
+      }
+      warm.activePreviewTarget = null;
+      closeDialog('previewModal');
+      return;
+    } catch (err) {
+      /* Fall through to the normal blanking path if caching fails. */
+    }
+  }
+
   try { if (frame) frame.src = 'about:blank'; } catch (err) {}
+  if (warm) warm.activePreviewTarget = null;
   closeDialog('previewModal');
 }
 
