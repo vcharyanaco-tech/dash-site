@@ -82,6 +82,7 @@ function buildPrintPage(opts) {
   tr:nth-child(even) td { background: #f9fafb; }
   .empty { text-align: center; color: #6b7280; padding: 28px 16px; font-size: 14px; }
   .sub-block { background: #f3f7f4; border-left: 4px solid #1f5c2e; margin-top: 10px; padding: 14px 16px; }
+  .record-print-block { margin-bottom: 18px; page-break-inside: avoid; }
   .sub-block h2, .sub-block h4 { margin: 0 0 10px; font-size: 14px; color: #1f5c2e; }
   .sub-item { padding: 8px 0; border-bottom: 1px dotted #d1d5db; }
   .sub-item:last-child { border-bottom: none; }
@@ -197,30 +198,35 @@ function printReport(scope, includeSubmissions) {
   const scopeLabel = scope === 'visible' ? 'visible records' : 'all records';
 
   const run = function (subMap) {
-    const rowsHtml = items.length ? items.map(function (item) {
-      const subs = (subMap && subMap[Number(item.row)]) || [];
-      const subsHtml = subs.length ? `
-        <tr><td colspan="6" class="sub-block">
-          <h4>Submissions (${subs.length})</h4>
-          ${subs.map(function (s) {
-            return `
-            <div class="sub-item">
-              <div class="sub-meta">${escapeHtml(s.email)} &middot; ${escapeHtml(formatTimestamp(s.createdAt))}</div>
-              <div class="preserve-whitespace">${escapeHtml(s.text || '')}</div>
-            </div>`;
-          }).join('')}
-        </td></tr>` : '';
-      return `
-        <tr>
-          <td class="num">${escapeHtml(item.id)}</td>
-          <td>${escapeHtml(item.sector)}</td>
-          <td>${escapeHtml(item.description)}</td>
-          <td>${escapeHtml(item.action)}</td>
-          <td>${escapeHtml(item.responsibility)}</td>
-          <td>${escapeHtml(item.reviewDate)}</td>
-        </tr>${subsHtml}`;
-    }).join('') : '<tr><td colspan="6" class="empty">No records to report.</td></tr>';
-
+    let bodyHtml = '';
+    if (!items.length) {
+      bodyHtml = '<div class="empty">No records to report.</div>';
+    } else if (useSubs) {
+      bodyHtml = items.map(function (item) {
+        const subs = (subMap && subMap[Number(item.row)]) || [];
+        const subsHtml = subs.length ? `
+          <div class="sub-block">
+            <h4>Submissions (${subs.length})</h4>
+            ${subs.map(function (s) {
+              return `<div class="sub-item"><div class="sub-meta">${escapeHtml(s.email)} &middot; ${escapeHtml(formatTimestamp(s.createdAt))}</div><div class="preserve-whitespace">${escapeHtml(s.text || '')}</div></div>`;
+            }).join('')}
+          </div>` : '';
+        return `<div class="record-print-block"><table class="fields-table"><tbody>
+          <tr><th style="width:18%">#</th><td>${escapeHtml(item.id)}</td></tr>
+          <tr><th>Sector</th><td>${escapeHtml(item.sector)}</td></tr>
+          <tr><th>Description</th><td class="preserve-whitespace">${escapeHtml(item.description)}</td></tr>
+          <tr><th>Action</th><td class="preserve-whitespace">${item.actionHtml || renderLinkableText(item.action || '')}</td></tr>
+          <tr><th>Last Meeting Instructions</th><td class="preserve-whitespace">${escapeHtml(item.lastMeetingInstructions || '')}</td></tr>
+          <tr><th>Responsibility</th><td>${escapeHtml(item.responsibility)}</td></tr>
+          <tr><th>Review</th><td>${escapeHtml(item.reviewDate)}</td></tr>
+        </tbody></table>${subsHtml}</div>`;
+      }).join('');
+    } else {
+      const rowsHtml = items.map(function (item) {
+        return `<tr><td class="num">${escapeHtml(item.id)}</td><td>${escapeHtml(item.sector)}</td><td>${escapeHtml(item.description)}</td><td class="preserve-whitespace">${item.actionHtml || renderLinkableText(item.action || '')}</td><td class="preserve-whitespace">${escapeHtml(item.lastMeetingInstructions || '')}</td><td>${escapeHtml(item.responsibility)}</td><td>${escapeHtml(item.reviewDate)}</td></tr>`;
+      }).join('');
+      bodyHtml = `<table><thead><tr><th>#</th><th>Sector</th><th>Description</th><th>Action</th><th>Last Meeting Instructions</th><th>Responsibility</th><th>Review</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
+    }
     const count = items.length;
     const subCount = useSubs ? countSubmissions_(subMap) : 0;
     const subtitle = (scopeLabel + ' &middot; ' + (useSubs
@@ -231,12 +237,7 @@ function printReport(scope, includeSubmissions) {
       title: (appState.settings.appName || 'India Post Dashboard') + ' - Report',
       landscape: true,
       subtitle: subtitle,
-      body: `<table>
-        <thead>
-          <tr><th>#</th><th>Sector</th><th>Description</th><th>Action</th><th>Responsibility</th><th>Review</th></tr>
-        </thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>`
+      body: bodyHtml
     }));
   };
 

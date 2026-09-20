@@ -273,6 +273,7 @@ function dashboardColumnKey_(label) {
   if (l.indexOf('review') !== -1) return 'reviewDate';
   if (l === 'responsibility') return 'responsibility';
   if (l === 'action') return 'action';
+  if (l === 'last meeting instructions' || l.indexOf('last meeting instruction') !== -1) return 'lastMeetingInstructions';
   if (l.indexOf('actions') !== -1) return 'actions';
   return '';
 }
@@ -289,7 +290,9 @@ function dashboardColumnVisible_(label) {
    Responsibility | Review Date on the bottom row. */
 function cardFieldHtml_(item, field) {
   const isHeaderRowValue = field && field.label && String(field.label).trim() !== '';
-  const isActionField = dashboardColumnKey_(field && field.label) === 'action';
+  const fieldKey = dashboardColumnKey_(field && field.label);
+  const isActionField = fieldKey === 'action';
+  const isInstructionField = fieldKey === 'lastMeetingInstructions';
   const actionStateClass = isActionField
     ? (item.reviewStatus === 'due' ? ' card-field-action-due' : ' card-field-action-ok')
     : '';
@@ -297,7 +300,7 @@ function cardFieldHtml_(item, field) {
     ? `<div class="field-value preserve-whitespace field-html">${field.html}</div>`
     : `<div class="field-value preserve-whitespace">${escapeHtml(field.value)}</div>`;
   return `
-      <div class="card-field ${isHeaderRowValue ? 'card-field-highlight' : ''}${isActionField ? ' card-field-action' : ''}${actionStateClass}">
+      <div class="card-field ${isHeaderRowValue ? 'card-field-highlight' : ''}${isActionField ? ' card-field-action' : ''}${isInstructionField ? ' card-field-last-meeting-instructions' : ''}${actionStateClass}">
         <span class="field-label ${isHeaderRowValue ? 'field-label-highlight' : ''}${isActionField ? ' field-label-action' : ''}">${escapeHtml(field.label || 'Value')}</span>
         ${valueHtml}
       </div>`;
@@ -311,12 +314,15 @@ function cardFieldHtml_(item, field) {
 function groupCardFields_(fields) {
   const topFields = [];
   const actionFields = [];
+  const instructionFields = [];
   const bottomFields = [];
   (fields || []).forEach(function (field) {
     const key = dashboardColumnKey_(field && field.label);
     if (key === 'id') return;
     if (key === 'action') {
       actionFields.push(field);
+    } else if (key === 'lastMeetingInstructions') {
+      instructionFields.push(field);
     } else if (key === 'responsibility' || key === 'reviewDate') {
       bottomFields.push(field);
     } else {
@@ -332,7 +338,7 @@ function groupCardFields_(fields) {
     const ob = topOrder[kb] !== undefined ? topOrder[kb] : 9;
     return oa - ob;
   });
-  return { top: topFields, action: actionFields, bottom: bottomFields };
+  return { top: topFields, action: actionFields, instructions: instructionFields, bottom: bottomFields };
 }
 
 /* ---------------------------------- Show/Hide updates toggle ---------------------------------- */
@@ -408,10 +414,13 @@ function buildCardHtml(item) {
   const actionRowHtml = groups.action.length
     ? groups.action.map(function (f) { return cardFieldHtml_(item, f); }).join('')
     : '';
+  const instructionsHtml = groups.instructions.length
+    ? groups.instructions.map(function (f) { return cardFieldHtml_(item, f); }).join('')
+    : '';
   const bottomRowHtml = groups.bottom.length
     ? `<div class="card-fields-row card-fields-row-bottom">${groups.bottom.map(function (f) { return cardFieldHtml_(item, f); }).join('')}</div>`
     : '';
-  const fieldsHtml = topRowHtml + actionRowHtml + bottomRowHtml;
+  const fieldsHtml = topRowHtml + actionRowHtml + instructionsHtml + bottomRowHtml;
 
   const subCount = (appState.submissionCounts || {})[item.row] || 0;
   const subFlash = !!(appState.submissionFlash || {})[item.row];
@@ -454,6 +463,7 @@ function buildCardHtml(item) {
         <button class="menu-dropdown-item" type="button" onclick="event.stopPropagation(); closeDropdowns(); printCard('${escAttr(item.row)}', false);">Without submissions</button>
       </span>
     </div>
+    ${appState.isEditor ? `<button class="icon-btn card-quick-action" type="button" title="Last meeting instructions" aria-label="Edit last meeting instructions" onclick="event.stopPropagation(); openLastMeetingInstructions('${escAttr(item.row)}')">${svgIcon('edit')}</button>` : ''}
     ${appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="toggleCardAi('${escAttr(item.row)}', this)">AI insight</button>` : ''}
     ${appState.isEditor && itemHasLink_(item) ? `<button class="btn btn-secondary btn-small" onclick="toggleCardLink('${escAttr(item.row)}', this)">Analyze link</button>` : ''}
     ${appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="editItem('${escAttr(item.row)}')">Edit</button>` : ''}
@@ -475,6 +485,45 @@ function buildCardHtml(item) {
       ${aiPanelHtmlFromCache_(item.row)}
       ${linkPanelHtmlFromCache_(item.row)}
     </article>`;
+}
+
+/* ---------------------------------- Last meeting instructions ---------------------------------- */
+
+function openLastMeetingInstructions(row) {
+  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
+  const item = (appState.items || []).find(function (i) { return Number(i.row) === Number(row); });
+  if (!item) { showToast('Record not found.', 'error'); return; }
+  getEl('lastMeetingInstructionsRow').value = item.row;
+  getEl('lastMeetingInstructionsText').value = item.lastMeetingInstructions || '';
+  getEl('lastMeetingInstructionsRecord').textContent = 'Record #' + item.id + (item.sector ? ' · ' + item.sector : '');
+  const status = getEl('lastMeetingInstructionsStatus');
+  if (status) { status.textContent = ''; status.classList.remove('success', 'error'); }
+  openDialog('lastMeetingInstructionsModal');
+  setTimeout(function () { getEl('lastMeetingInstructionsText').focus(); }, 0);
+}
+
+function closeLastMeetingInstructions() { closeDialog('lastMeetingInstructionsModal'); }
+
+function saveLastMeetingInstructions(e) {
+  e.preventDefault();
+  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
+  const row = Number(getEl('lastMeetingInstructionsRow').value || 0);
+  const item = (appState.items || []).find(function (i) { return Number(i.row) === row; });
+  if (!item) { showToast('Record not found.', 'error'); return; }
+  const updated = { row: item.row, id: item.id, recordId: item.recordId || '', sector: item.sector || '', description: item.description || '', entryDate: item.entryDate || '', action: item.action || '', lastMeetingInstructions: getEl('lastMeetingInstructionsText').value, responsibility: item.responsibility || '', reviewDate: item.reviewDate || '', flagged: !!item.flagged, links: item.links || {} };
+  const status = getEl('lastMeetingInstructionsStatus');
+  if (status) { status.textContent = 'Saving…'; status.classList.remove('success', 'error'); }
+  ApiService.updateItem(updated).then(function (data) {
+    appState.items = data.items || [];
+    appState.summary = data.summary || {};
+    appState.analytics = data.analytics || {};
+    closeLastMeetingInstructions();
+    renderDashboard(true);
+    showToast('Last meeting instructions saved', 'success');
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+    if (status) { status.textContent = err.message || 'Could not save instructions'; status.classList.add('error'); }
+  });
 }
 
 function emptyStateHtml() {

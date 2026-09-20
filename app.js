@@ -736,7 +736,8 @@ function svgIcon(name) {
     inbox: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>',
     check: '<polyline points="20 6 9 17 4 12"></polyline>',
     alert: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>',
-    info: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>'
+    info: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>',
+    edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>'
   };
   const body = paths[name] || paths.info;
   return `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
@@ -3913,6 +3914,7 @@ function dashboardColumnKey_(label) {
   if (l.indexOf('review') !== -1) return 'reviewDate';
   if (l === 'responsibility') return 'responsibility';
   if (l === 'action') return 'action';
+  if (l === 'last meeting instructions' || l.indexOf('last meeting instruction') !== -1) return 'lastMeetingInstructions';
   if (l.indexOf('actions') !== -1) return 'actions';
   return '';
 }
@@ -3929,7 +3931,9 @@ function dashboardColumnVisible_(label) {
    Responsibility | Review Date on the bottom row. */
 function cardFieldHtml_(item, field) {
   const isHeaderRowValue = field && field.label && String(field.label).trim() !== '';
-  const isActionField = dashboardColumnKey_(field && field.label) === 'action';
+  const fieldKey = dashboardColumnKey_(field && field.label);
+  const isActionField = fieldKey === 'action';
+  const isInstructionField = fieldKey === 'lastMeetingInstructions';
   const actionStateClass = isActionField
     ? (item.reviewStatus === 'due' ? ' card-field-action-due' : ' card-field-action-ok')
     : '';
@@ -3937,7 +3941,7 @@ function cardFieldHtml_(item, field) {
     ? `<div class="field-value preserve-whitespace field-html">${field.html}</div>`
     : `<div class="field-value preserve-whitespace">${escapeHtml(field.value)}</div>`;
   return `
-      <div class="card-field ${isHeaderRowValue ? 'card-field-highlight' : ''}${isActionField ? ' card-field-action' : ''}${actionStateClass}">
+      <div class="card-field ${isHeaderRowValue ? 'card-field-highlight' : ''}${isActionField ? ' card-field-action' : ''}${isInstructionField ? ' card-field-last-meeting-instructions' : ''}${actionStateClass}">
         <span class="field-label ${isHeaderRowValue ? 'field-label-highlight' : ''}${isActionField ? ' field-label-action' : ''}">${escapeHtml(field.label || 'Value')}</span>
         ${valueHtml}
       </div>`;
@@ -3951,12 +3955,15 @@ function cardFieldHtml_(item, field) {
 function groupCardFields_(fields) {
   const topFields = [];
   const actionFields = [];
+  const instructionFields = [];
   const bottomFields = [];
   (fields || []).forEach(function (field) {
     const key = dashboardColumnKey_(field && field.label);
     if (key === 'id') return;
     if (key === 'action') {
       actionFields.push(field);
+    } else if (key === 'lastMeetingInstructions') {
+      instructionFields.push(field);
     } else if (key === 'responsibility' || key === 'reviewDate') {
       bottomFields.push(field);
     } else {
@@ -3972,7 +3979,7 @@ function groupCardFields_(fields) {
     const ob = topOrder[kb] !== undefined ? topOrder[kb] : 9;
     return oa - ob;
   });
-  return { top: topFields, action: actionFields, bottom: bottomFields };
+  return { top: topFields, action: actionFields, instructions: instructionFields, bottom: bottomFields };
 }
 
 /* ---------------------------------- Show/Hide updates toggle ---------------------------------- */
@@ -4048,10 +4055,13 @@ function buildCardHtml(item) {
   const actionRowHtml = groups.action.length
     ? groups.action.map(function (f) { return cardFieldHtml_(item, f); }).join('')
     : '';
+  const instructionsHtml = groups.instructions.length
+    ? groups.instructions.map(function (f) { return cardFieldHtml_(item, f); }).join('')
+    : '';
   const bottomRowHtml = groups.bottom.length
     ? `<div class="card-fields-row card-fields-row-bottom">${groups.bottom.map(function (f) { return cardFieldHtml_(item, f); }).join('')}</div>`
     : '';
-  const fieldsHtml = topRowHtml + actionRowHtml + bottomRowHtml;
+  const fieldsHtml = topRowHtml + actionRowHtml + instructionsHtml + bottomRowHtml;
 
   const subCount = (appState.submissionCounts || {})[item.row] || 0;
   const subFlash = !!(appState.submissionFlash || {})[item.row];
@@ -4094,6 +4104,7 @@ function buildCardHtml(item) {
         <button class="menu-dropdown-item" type="button" onclick="event.stopPropagation(); closeDropdowns(); printCard('${escAttr(item.row)}', false);">Without submissions</button>
       </span>
     </div>
+    ${appState.isEditor ? `<button class="icon-btn card-quick-action" type="button" title="Last meeting instructions" aria-label="Edit last meeting instructions" onclick="event.stopPropagation(); openLastMeetingInstructions('${escAttr(item.row)}')">${svgIcon('edit')}</button>` : ''}
     ${appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="toggleCardAi('${escAttr(item.row)}', this)">AI insight</button>` : ''}
     ${appState.isEditor && itemHasLink_(item) ? `<button class="btn btn-secondary btn-small" onclick="toggleCardLink('${escAttr(item.row)}', this)">Analyze link</button>` : ''}
     ${appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="editItem('${escAttr(item.row)}')">Edit</button>` : ''}
@@ -4115,6 +4126,45 @@ function buildCardHtml(item) {
       ${aiPanelHtmlFromCache_(item.row)}
       ${linkPanelHtmlFromCache_(item.row)}
     </article>`;
+}
+
+/* ---------------------------------- Last meeting instructions ---------------------------------- */
+
+function openLastMeetingInstructions(row) {
+  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
+  const item = (appState.items || []).find(function (i) { return Number(i.row) === Number(row); });
+  if (!item) { showToast('Record not found.', 'error'); return; }
+  getEl('lastMeetingInstructionsRow').value = item.row;
+  getEl('lastMeetingInstructionsText').value = item.lastMeetingInstructions || '';
+  getEl('lastMeetingInstructionsRecord').textContent = 'Record #' + item.id + (item.sector ? ' · ' + item.sector : '');
+  const status = getEl('lastMeetingInstructionsStatus');
+  if (status) { status.textContent = ''; status.classList.remove('success', 'error'); }
+  openDialog('lastMeetingInstructionsModal');
+  setTimeout(function () { getEl('lastMeetingInstructionsText').focus(); }, 0);
+}
+
+function closeLastMeetingInstructions() { closeDialog('lastMeetingInstructionsModal'); }
+
+function saveLastMeetingInstructions(e) {
+  e.preventDefault();
+  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
+  const row = Number(getEl('lastMeetingInstructionsRow').value || 0);
+  const item = (appState.items || []).find(function (i) { return Number(i.row) === row; });
+  if (!item) { showToast('Record not found.', 'error'); return; }
+  const updated = { row: item.row, id: item.id, recordId: item.recordId || '', sector: item.sector || '', description: item.description || '', entryDate: item.entryDate || '', action: item.action || '', lastMeetingInstructions: getEl('lastMeetingInstructionsText').value, responsibility: item.responsibility || '', reviewDate: item.reviewDate || '', flagged: !!item.flagged, links: item.links || {} };
+  const status = getEl('lastMeetingInstructionsStatus');
+  if (status) { status.textContent = 'Saving…'; status.classList.remove('success', 'error'); }
+  ApiService.updateItem(updated).then(function (data) {
+    appState.items = data.items || [];
+    appState.summary = data.summary || {};
+    appState.analytics = data.analytics || {};
+    closeLastMeetingInstructions();
+    renderDashboard(true);
+    showToast('Last meeting instructions saved', 'success');
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+    if (status) { status.textContent = err.message || 'Could not save instructions'; status.classList.add('error'); }
+  });
 }
 
 function emptyStateHtml() {
@@ -4863,6 +4913,7 @@ function buildPrintPage(opts) {
   tr:nth-child(even) td { background: #f9fafb; }
   .empty { text-align: center; color: #6b7280; padding: 28px 16px; font-size: 14px; }
   .sub-block { background: #f3f7f4; border-left: 4px solid #1f5c2e; margin-top: 10px; padding: 14px 16px; }
+  .record-print-block { margin-bottom: 18px; page-break-inside: avoid; }
   .sub-block h2, .sub-block h4 { margin: 0 0 10px; font-size: 14px; color: #1f5c2e; }
   .sub-item { padding: 8px 0; border-bottom: 1px dotted #d1d5db; }
   .sub-item:last-child { border-bottom: none; }
@@ -4978,30 +5029,35 @@ function printReport(scope, includeSubmissions) {
   const scopeLabel = scope === 'visible' ? 'visible records' : 'all records';
 
   const run = function (subMap) {
-    const rowsHtml = items.length ? items.map(function (item) {
-      const subs = (subMap && subMap[Number(item.row)]) || [];
-      const subsHtml = subs.length ? `
-        <tr><td colspan="6" class="sub-block">
-          <h4>Submissions (${subs.length})</h4>
-          ${subs.map(function (s) {
-            return `
-            <div class="sub-item">
-              <div class="sub-meta">${escapeHtml(s.email)} &middot; ${escapeHtml(formatTimestamp(s.createdAt))}</div>
-              <div class="preserve-whitespace">${escapeHtml(s.text || '')}</div>
-            </div>`;
-          }).join('')}
-        </td></tr>` : '';
-      return `
-        <tr>
-          <td class="num">${escapeHtml(item.id)}</td>
-          <td>${escapeHtml(item.sector)}</td>
-          <td>${escapeHtml(item.description)}</td>
-          <td>${escapeHtml(item.action)}</td>
-          <td>${escapeHtml(item.responsibility)}</td>
-          <td>${escapeHtml(item.reviewDate)}</td>
-        </tr>${subsHtml}`;
-    }).join('') : '<tr><td colspan="6" class="empty">No records to report.</td></tr>';
-
+    let bodyHtml = '';
+    if (!items.length) {
+      bodyHtml = '<div class="empty">No records to report.</div>';
+    } else if (useSubs) {
+      bodyHtml = items.map(function (item) {
+        const subs = (subMap && subMap[Number(item.row)]) || [];
+        const subsHtml = subs.length ? `
+          <div class="sub-block">
+            <h4>Submissions (${subs.length})</h4>
+            ${subs.map(function (s) {
+              return `<div class="sub-item"><div class="sub-meta">${escapeHtml(s.email)} &middot; ${escapeHtml(formatTimestamp(s.createdAt))}</div><div class="preserve-whitespace">${escapeHtml(s.text || '')}</div></div>`;
+            }).join('')}
+          </div>` : '';
+        return `<div class="record-print-block"><table class="fields-table"><tbody>
+          <tr><th style="width:18%">#</th><td>${escapeHtml(item.id)}</td></tr>
+          <tr><th>Sector</th><td>${escapeHtml(item.sector)}</td></tr>
+          <tr><th>Description</th><td class="preserve-whitespace">${escapeHtml(item.description)}</td></tr>
+          <tr><th>Action</th><td class="preserve-whitespace">${item.actionHtml || renderLinkableText(item.action || '')}</td></tr>
+          <tr><th>Last Meeting Instructions</th><td class="preserve-whitespace">${escapeHtml(item.lastMeetingInstructions || '')}</td></tr>
+          <tr><th>Responsibility</th><td>${escapeHtml(item.responsibility)}</td></tr>
+          <tr><th>Review</th><td>${escapeHtml(item.reviewDate)}</td></tr>
+        </tbody></table>${subsHtml}</div>`;
+      }).join('');
+    } else {
+      const rowsHtml = items.map(function (item) {
+        return `<tr><td class="num">${escapeHtml(item.id)}</td><td>${escapeHtml(item.sector)}</td><td>${escapeHtml(item.description)}</td><td class="preserve-whitespace">${item.actionHtml || renderLinkableText(item.action || '')}</td><td class="preserve-whitespace">${escapeHtml(item.lastMeetingInstructions || '')}</td><td>${escapeHtml(item.responsibility)}</td><td>${escapeHtml(item.reviewDate)}</td></tr>`;
+      }).join('');
+      bodyHtml = `<table><thead><tr><th>#</th><th>Sector</th><th>Description</th><th>Action</th><th>Last Meeting Instructions</th><th>Responsibility</th><th>Review</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
+    }
     const count = items.length;
     const subCount = useSubs ? countSubmissions_(subMap) : 0;
     const subtitle = (scopeLabel + ' &middot; ' + (useSubs
@@ -5012,12 +5068,7 @@ function printReport(scope, includeSubmissions) {
       title: (appState.settings.appName || 'India Post Dashboard') + ' - Report',
       landscape: true,
       subtitle: subtitle,
-      body: `<table>
-        <thead>
-          <tr><th>#</th><th>Sector</th><th>Description</th><th>Action</th><th>Responsibility</th><th>Review</th></tr>
-        </thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>`
+      body: bodyHtml
     }));
   };
 
@@ -7862,6 +7913,7 @@ function resetEditForm() {
   getEl('editDescription').value = '';
   getEl('editEntryDate').value = '';
   getEl('editAction').value = '';
+  getEl('editLastMeetingInstructions').value = '';
   getEl('editResponsibility').value = '';
   clearMultiSelect('editResponsibilityMs');
   getEl('editReviewDate').value = '';
@@ -7906,6 +7958,7 @@ function editItem(row) {
   getEl('editDescription').value = item.description || '';
   getEl('editEntryDate').value = item.entryDate || '';
   getEl('editAction').value = item.action || '';
+  getEl('editLastMeetingInstructions').value = item.lastMeetingInstructions || '';
   getEl('editResponsibility').value = item.responsibility || '';
   populateResponsibilitySelect();
   getEl('editReviewDate').value = item.reviewDate || '';
@@ -7958,6 +8011,7 @@ function saveEditModal(e) {
     description: descEl.value,
     entryDate: getEl('editEntryDate').value.trim(),
     action: getEl('editAction').value,
+    lastMeetingInstructions: getEl('editLastMeetingInstructions').value,
     responsibility: getEl('editResponsibility').value.trim(),
     reviewDate: getEl('editReviewDate').value.trim(),
     flagged: getEl('editFlagged').checked,
@@ -8973,13 +9027,10 @@ function renderPresentationSlide_() {
    with only the two allowed record actions. */
 function presentationSlideHtml_(item) {
   const groups = groupCardFields_(item.displayFields);
-  const fieldsHtml = (groups.top.length
-    ? `<div class="card-fields-row card-fields-row-top">${groups.top.map(function (f) { return cardFieldHtml_(item, f); }).join('')}</div>`
-    : '') + (groups.action.length
-    ? groups.action.map(function (f) { return cardFieldHtml_(item, f); }).join('')
-    : '') + (groups.bottom.length
-    ? `<div class="card-fields-row card-fields-row-bottom">${groups.bottom.map(function (f) { return cardFieldHtml_(item, f); }).join('')}</div>`
-    : '');
+  /* Presentation mode is intentionally meeting-focused: only Action and
+     Last Meeting Instructions are shown. */
+  const fieldsHtml = groups.action.concat(groups.instructions || [])
+    .map(function (f) { return cardFieldHtml_(item, f); }).join('');
 
   const updatesHidden = isRowUpdatesHidden_(item.row);
   const updatesHtml = rowUpdatesHtml_(item.row);

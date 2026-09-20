@@ -177,13 +177,10 @@ function renderPresentationSlide_() {
    with only the two allowed record actions. */
 function presentationSlideHtml_(item) {
   const groups = groupCardFields_(item.displayFields);
-  const fieldsHtml = (groups.top.length
-    ? `<div class="card-fields-row card-fields-row-top">${groups.top.map(function (f) { return cardFieldHtml_(item, f); }).join('')}</div>`
-    : '') + (groups.action.length
-    ? groups.action.map(function (f) { return cardFieldHtml_(item, f); }).join('')
-    : '') + (groups.bottom.length
-    ? `<div class="card-fields-row card-fields-row-bottom">${groups.bottom.map(function (f) { return cardFieldHtml_(item, f); }).join('')}</div>`
-    : '');
+  /* Presentation mode is intentionally meeting-focused: only Action and
+     Last Meeting Instructions are shown. */
+  const fieldsHtml = groups.action.concat(groups.instructions || [])
+    .map(function (f) { return cardFieldHtml_(item, f); }).join('');
 
   const updatesHidden = isRowUpdatesHidden_(item.row);
   const updatesHtml = rowUpdatesHtml_(item.row);
