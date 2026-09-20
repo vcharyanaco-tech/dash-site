@@ -107,6 +107,13 @@ function enterPresentationMode() {
 }
 
 function exitPresentationMode() {
+  /* Return any modal parked inside the fullscreen overlay back to the
+     document before the overlay is hidden, so it stays usable after exit. */
+  try {
+    if (typeof restoreModalFromFullscreen_ === 'function') {
+      document.querySelectorAll('.modal-backdrop').forEach(restoreModalFromFullscreen_);
+    }
+  } catch (err) {}
   presentationState.active = false;
   try { localStorage.setItem('dash.presentation.resumeRow', presentationState.resumeRow || ''); } catch (err) {}
   if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function () {});

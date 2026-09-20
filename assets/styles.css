@@ -4069,19 +4069,25 @@ body.mobile-operating-mode .app-sidebar{display:none} body.mobile-operating-mode
 /* Dash Workspace 3.0 operations surfaces */
 .workspace-ops-card{width:min(1080px,94vw);max-height:88vh;overflow:auto}.workspace-ops-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}.workspace-ops-body{padding-top:4px}.workspace-trend-list{display:grid;gap:7px;margin-top:18px}.workspace-trend-row{display:grid;grid-template-columns:92px 1fr 42px;gap:10px;align-items:center;font-size:12px}.workspace-trend-bar{height:10px;background:var(--surface-2,#eef2f7);border-radius:999px;overflow:hidden}.workspace-trend-bar i{display:block;height:100%;background:var(--accent,#2563eb);border-radius:999px}.workspace-rule-row{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:12px;border:1px solid var(--border,#e5e7eb);border-radius:12px;margin:8px 0}.workspace-rule-row small{display:block;opacity:.7;margin-top:3px}.workspace-top-action{min-width:36px;min-height:36px}.notif-item-actions{display:flex;gap:5px;flex-wrap:wrap}.notif-item{position:relative}.mobile-operating-mode .workspace-top-action{min-width:44px;min-height:44px}@media(max-width:700px){.workspace-rule-row{grid-template-columns:1fr}.workspace-ops-card{width:96vw}.workspace-trend-row{grid-template-columns:72px 1fr 32px}}
 
-/* Per-record quick action for Last Meeting Instructions */
-.card-quick-action {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
+/* Last Meeting Instructions field edit affordance — sits in the top-right
+   corner of the field itself (editors only). */
+.card-field-with-edit { position: relative; padding-right: 42px; }
+.card-field-edit-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   background: var(--surface-2);
   color: var(--muted);
 }
-.card-quick-action:hover { color: var(--accent); background: var(--surface-3); }
-.card-quick-action svg { width: 16px; height: 16px; }
+.card-field-edit-btn:hover { color: var(--accent); background: var(--surface-3); }
+.card-field-edit-btn svg { width: 14px; height: 14px; }
 .card-field-last-meeting-instructions { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }

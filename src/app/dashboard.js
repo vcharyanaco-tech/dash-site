@@ -299,9 +299,13 @@ function cardFieldHtml_(item, field) {
   const valueHtml = field.html
     ? `<div class="field-value preserve-whitespace field-html">${field.html}</div>`
     : `<div class="field-value preserve-whitespace">${escapeHtml(field.value)}</div>`;
+  const editBtn = (isInstructionField && appState.isEditor)
+    ? `<button class="icon-btn card-field-edit-btn" type="button" title="Edit last meeting instructions" aria-label="Edit last meeting instructions" onclick="event.stopPropagation(); openLastMeetingInstructions('${escAttr(item.row)}')">${svgIcon('edit')}</button>`
+    : '';
   return `
-      <div class="card-field ${isHeaderRowValue ? 'card-field-highlight' : ''}${isActionField ? ' card-field-action' : ''}${isInstructionField ? ' card-field-last-meeting-instructions' : ''}${actionStateClass}">
+      <div class="card-field ${isHeaderRowValue ? 'card-field-highlight' : ''}${isActionField ? ' card-field-action' : ''}${isInstructionField ? ' card-field-last-meeting-instructions' : ''}${actionStateClass}${editBtn ? ' card-field-with-edit' : ''}">
         <span class="field-label ${isHeaderRowValue ? 'field-label-highlight' : ''}${isActionField ? ' field-label-action' : ''}">${escapeHtml(field.label || 'Value')}</span>
+        ${editBtn}
         ${valueHtml}
       </div>`;
 }
@@ -463,7 +467,6 @@ function buildCardHtml(item) {
         <button class="menu-dropdown-item" type="button" onclick="event.stopPropagation(); closeDropdowns(); printCard('${escAttr(item.row)}', false);">Without submissions</button>
       </span>
     </div>
-    ${appState.isEditor ? `<button class="icon-btn card-quick-action" type="button" title="Last meeting instructions" aria-label="Edit last meeting instructions" onclick="event.stopPropagation(); openLastMeetingInstructions('${escAttr(item.row)}')">${svgIcon('edit')}</button>` : ''}
     ${appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="toggleCardAi('${escAttr(item.row)}', this)">AI insight</button>` : ''}
     ${appState.isEditor && itemHasLink_(item) ? `<button class="btn btn-secondary btn-small" onclick="toggleCardLink('${escAttr(item.row)}', this)">Analyze link</button>` : ''}
     ${appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="editItem('${escAttr(item.row)}')">Edit</button>` : ''}

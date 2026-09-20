@@ -811,6 +811,10 @@ function topOpenDialog_() {
 function openDialog(id) {
   const modal = getEl(id);
   if (!modal) return;
+  /* In fullscreen (presentation mode) the browser's top layer hides anything
+     outside the fullscreen element, so a body-level modal would render behind
+     it. Park it inside the fullscreen element so it stays visible. */
+  parkModalForFullscreen_(modal);
   const active = document.activeElement;
   if (active && active !== document.body && active !== document.documentElement &&
       typeof active.focus === 'function' && !modal.contains(active)) {
@@ -838,6 +842,38 @@ function closeDialog(id) {
     returnEl.focus();
   }
   if (typeof flushPendingAutoRefresh === 'function') flushPendingAutoRefresh();
+}
+
+/* ---------------------------------- Fullscreen modal parking ---------------------------------- */
+/* When an element is fullscreen (presentation mode at fullscreen), content
+   outside that element is hidden by the browser top layer — a body-level
+   modal would render behind it. Park open modals inside the fullscreen
+   element and restore them when fullscreen exits. */
+
+function parkModalForFullscreen_(modal) {
+  const fs = document.fullscreenElement;
+  if (!fs || !modal) return;
+  if (modal.parentNode && modal.parentNode === fs) return;
+  modal.__modalHome = modal.parentNode || document.body;
+  fs.appendChild(modal);
+}
+
+function restoreModalFromFullscreen_(modal) {
+  const home = modal && modal.__modalHome;
+  if (!modal || !home) return;
+  delete modal.__modalHome;
+  if (home.appendChild) home.appendChild(modal);
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('fullscreenchange', function () {
+    const anyOpen = document.querySelector('.modal-backdrop:not(.hidden)');
+    if (document.fullscreenElement) {
+      if (anyOpen) document.querySelectorAll('.modal-backdrop').forEach(parkModalForFullscreen_);
+    } else {
+      document.querySelectorAll('.modal-backdrop').forEach(restoreModalFromFullscreen_);
+    }
+  });
 }
 
 /* Trap Tab focus inside the top-most open dialog (WCAG 2.1.2 / 2.4.3). */
@@ -3940,9 +3976,13 @@ function cardFieldHtml_(item, field) {
   const valueHtml = field.html
     ? `<div class="field-value preserve-whitespace field-html">${field.html}</div>`
     : `<div class="field-value preserve-whitespace">${escapeHtml(field.value)}</div>`;
+  const editBtn = (isInstructionField && appState.isEditor)
+    ? `<button class="icon-btn card-field-edit-btn" type="button" title="Edit last meeting instructions" aria-label="Edit last meeting instructions" onclick="event.stopPropagation(); openLastMeetingInstructions('${escAttr(item.row)}')">${svgIcon('edit')}</button>`
+    : '';
   return `
-      <div class="card-field ${isHeaderRowValue ? 'card-field-highlight' : ''}${isActionField ? ' card-field-action' : ''}${isInstructionField ? ' card-field-last-meeting-instructions' : ''}${actionStateClass}">
+      <div class="card-field ${isHeaderRowValue ? 'card-field-highlight' : ''}${isActionField ? ' card-field-action' : ''}${isInstructionField ? ' card-field-last-meeting-instructions' : ''}${actionStateClass}${editBtn ? ' card-field-with-edit' : ''}">
         <span class="field-label ${isHeaderRowValue ? 'field-label-highlight' : ''}${isActionField ? ' field-label-action' : ''}">${escapeHtml(field.label || 'Value')}</span>
+        ${editBtn}
         ${valueHtml}
       </div>`;
 }
@@ -4104,7 +4144,6 @@ function buildCardHtml(item) {
         <button class="menu-dropdown-item" type="button" onclick="event.stopPropagation(); closeDropdowns(); printCard('${escAttr(item.row)}', false);">Without submissions</button>
       </span>
     </div>
-    ${appState.isEditor ? `<button class="icon-btn card-quick-action" type="button" title="Last meeting instructions" aria-label="Edit last meeting instructions" onclick="event.stopPropagation(); openLastMeetingInstructions('${escAttr(item.row)}')">${svgIcon('edit')}</button>` : ''}
     ${appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="toggleCardAi('${escAttr(item.row)}', this)">AI insight</button>` : ''}
     ${appState.isEditor && itemHasLink_(item) ? `<button class="btn btn-secondary btn-small" onclick="toggleCardLink('${escAttr(item.row)}', this)">Analyze link</button>` : ''}
     ${appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="editItem('${escAttr(item.row)}')">Edit</button>` : ''}
@@ -4913,7 +4952,8 @@ function buildPrintPage(opts) {
   tr:nth-child(even) td { background: #f9fafb; }
   .empty { text-align: center; color: #6b7280; padding: 28px 16px; font-size: 14px; }
   .sub-block { background: #f3f7f4; border-left: 4px solid #1f5c2e; margin-top: 10px; padding: 14px 16px; }
-  .record-print-block { margin-bottom: 18px; page-break-inside: avoid; }
+  .record-print-block { border: 1px solid #d1d5db; border-radius: 8px; padding: 14px 16px; margin: 0 0 14px; break-inside: avoid; page-break-inside: avoid; }
+  .record-print-block .fields-table { margin: 0; }
   .sub-block h2, .sub-block h4 { margin: 0 0 10px; font-size: 14px; color: #1f5c2e; }
   .sub-item { padding: 8px 0; border-bottom: 1px dotted #d1d5db; }
   .sub-item:last-child { border-bottom: none; }
@@ -4999,9 +5039,9 @@ function printCard(row, includeSubmissions) {
     openPrintWindow(buildPrintPage({
       title: (appState.settings.appName || 'India Post Dashboard') + ' - Record #' + item.id,
       subtitle: (useSubs ? 'with submissions' : 'without submissions') + ' &middot; Record #' + item.id + (item.sector ? ' &middot; ' + item.sector : ''),
-      body: `<table class="fields-table">
+      body: `<div class="record-print-block"><table class="fields-table">
         <tbody>${fields || '<tr><td colspan="2" class="empty">No details available.</td></tr>'}</tbody>
-      </table>${subsHtml}`
+      </table>${subsHtml}</div>`
     }));
   };
 
@@ -8957,6 +8997,13 @@ function enterPresentationMode() {
 }
 
 function exitPresentationMode() {
+  /* Return any modal parked inside the fullscreen overlay back to the
+     document before the overlay is hidden, so it stays usable after exit. */
+  try {
+    if (typeof restoreModalFromFullscreen_ === 'function') {
+      document.querySelectorAll('.modal-backdrop').forEach(restoreModalFromFullscreen_);
+    }
+  } catch (err) {}
   presentationState.active = false;
   try { localStorage.setItem('dash.presentation.resumeRow', presentationState.resumeRow || ''); } catch (err) {}
   if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function () {});

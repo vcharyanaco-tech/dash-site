@@ -459,6 +459,10 @@ function topOpenDialog_() {
 function openDialog(id) {
   const modal = getEl(id);
   if (!modal) return;
+  /* In fullscreen (presentation mode) the browser's top layer hides anything
+     outside the fullscreen element, so a body-level modal would render behind
+     it. Park it inside the fullscreen element so it stays visible. */
+  parkModalForFullscreen_(modal);
   const active = document.activeElement;
   if (active && active !== document.body && active !== document.documentElement &&
       typeof active.focus === 'function' && !modal.contains(active)) {
@@ -486,6 +490,38 @@ function closeDialog(id) {
     returnEl.focus();
   }
   if (typeof flushPendingAutoRefresh === 'function') flushPendingAutoRefresh();
+}
+
+/* ---------------------------------- Fullscreen modal parking ---------------------------------- */
+/* When an element is fullscreen (presentation mode at fullscreen), content
+   outside that element is hidden by the browser top layer — a body-level
+   modal would render behind it. Park open modals inside the fullscreen
+   element and restore them when fullscreen exits. */
+
+function parkModalForFullscreen_(modal) {
+  const fs = document.fullscreenElement;
+  if (!fs || !modal) return;
+  if (modal.parentNode && modal.parentNode === fs) return;
+  modal.__modalHome = modal.parentNode || document.body;
+  fs.appendChild(modal);
+}
+
+function restoreModalFromFullscreen_(modal) {
+  const home = modal && modal.__modalHome;
+  if (!modal || !home) return;
+  delete modal.__modalHome;
+  if (home.appendChild) home.appendChild(modal);
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('fullscreenchange', function () {
+    const anyOpen = document.querySelector('.modal-backdrop:not(.hidden)');
+    if (document.fullscreenElement) {
+      if (anyOpen) document.querySelectorAll('.modal-backdrop').forEach(parkModalForFullscreen_);
+    } else {
+      document.querySelectorAll('.modal-backdrop').forEach(restoreModalFromFullscreen_);
+    }
+  });
 }
 
 /* Trap Tab focus inside the top-most open dialog (WCAG 2.1.2 / 2.4.3). */

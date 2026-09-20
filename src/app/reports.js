@@ -82,7 +82,8 @@ function buildPrintPage(opts) {
   tr:nth-child(even) td { background: #f9fafb; }
   .empty { text-align: center; color: #6b7280; padding: 28px 16px; font-size: 14px; }
   .sub-block { background: #f3f7f4; border-left: 4px solid #1f5c2e; margin-top: 10px; padding: 14px 16px; }
-  .record-print-block { margin-bottom: 18px; page-break-inside: avoid; }
+  .record-print-block { border: 1px solid #d1d5db; border-radius: 8px; padding: 14px 16px; margin: 0 0 14px; break-inside: avoid; page-break-inside: avoid; }
+  .record-print-block .fields-table { margin: 0; }
   .sub-block h2, .sub-block h4 { margin: 0 0 10px; font-size: 14px; color: #1f5c2e; }
   .sub-item { padding: 8px 0; border-bottom: 1px dotted #d1d5db; }
   .sub-item:last-child { border-bottom: none; }
@@ -168,9 +169,9 @@ function printCard(row, includeSubmissions) {
     openPrintWindow(buildPrintPage({
       title: (appState.settings.appName || 'India Post Dashboard') + ' - Record #' + item.id,
       subtitle: (useSubs ? 'with submissions' : 'without submissions') + ' &middot; Record #' + item.id + (item.sector ? ' &middot; ' + item.sector : ''),
-      body: `<table class="fields-table">
+      body: `<div class="record-print-block"><table class="fields-table">
         <tbody>${fields || '<tr><td colspan="2" class="empty">No details available.</td></tr>'}</tbody>
-      </table>${subsHtml}`
+      </table>${subsHtml}</div>`
     }));
   };
 
