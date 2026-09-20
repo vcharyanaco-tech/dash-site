@@ -164,3 +164,63 @@ bundle-size OK; app.js round-trip OK; server suite 399/399.
   (`37500c8`) is live again.
 - Note: `push deploy` for docs-only commits is normal; the failure was purely
   the legacy-DB migration crash fixed above.
+
+## v1.2.0 -- "updated instructions section" + divisional dashboards + submission attachments
+
+Shipped as commit `24d212f` (base `1b16e1a`), applied from the user's
+`dash-site-main-updated-v1.2.0.zip` (that zip WAS the previously-ambiguous
+"updated instructions section"; it also carries the two other features below).
+
+Features:
+
+1. **Last meeting instructions** (`records.last_meeting_instructions`, `TEXT NOT NULL
+   DEFAULT ''`) -- per-record guidance shown in the record detail view; editable
+   by admins/editors.
+2. **Divisional dashboards** (`users.divisional_dashboard_url`, `TEXT NOT NULL
+   DEFAULT ''`) -- per-user dashboard link for `do_`/`rms_` users; prompt modal
+   on sign-in + edit capability in Settings.
+3. **Submission attachments** (`submission_attachments` table) -- up to 1 MB
+   base64 attachment per submission, stored under `data/uploads` keyed by uuid,
+   served via `GET /api/files/:key` (meta `isSubmissionAttachment`); add/edit/delete
+   wired through client + server (`addSubmission`, `updateSubmission` gained the
+   new `attachment` arg).
+4. **Viewer gating of `toggleCardUpdates`** (viewers blocked unless presentation
+   allowViewer); `askDashboardAi` now requireLogin instead of requireEditor.
+5. **Tooling**: APP_VERSION 1.2.0, new `src/scripts/bump-version.ps1`,
+   `deploy-all.ps1` updates.
+
+Integration fixes (beyond the zip):
+
+- **Deploy-blocking regression**: zip's `schema.sql` created
+  `idx_users_dashboard_url` on a column that only arrives via the db.js
+  migration (which runs after schema.sql) -- the same crash class that broke
+  the last several deploys on restored legacy DBs. Removed the index from
+  `schema.sql`; db.js creates it right after its `ALTER TABLE ... ADD COLUMN
+  divisional_dashboard_url` (IF NOT EXISTS keeps fresh DBs correct). Prior
+  `idx_records_record_id` fix intact.
+- **AUTH_ARG_INDEX gaps**: the three new endpoints shipped validators but no
+  token-index entries. Added `getMyDivisionalDashboard: 0`,
+  `setMyDivisionalDashboard: 1`, `getDivisionalDashboardLinks: 0` -- without
+  them the cookie-injection middleware leaves the token slot empty and the
+  dispatch-client-args replay test fails.
+- **Stale app.js in the zip**: rebuilt the canonical bundle from modules
+  (zip's app.js predates the attachment/divisional client code). Rebuild
+  round-trip verified byte-identical.
+- **Tests**: updated `smoke.test.js` (addSubmission payloads gain the `null`
+  attachment slot) and `validators.test.js` (updateSubmission 4-arg shape).
+  `check-db-migrations.cjs` now asserts 16 tables / 15 migrated columns /
+  4 indexes (incl. `submission_attachments`, the two new columns,
+  `idx_users_dashboard_url`); legacy-strip phase drops `idx_users_dashboard_url`
+  before `DROP COLUMN divisional_dashboard_url` (SQLite forbids dropping an
+  indexed column).
+
+Verification: `node --check` on 20 files, secret-scan, bundle-size, app.js
+round-trip all OK; migration check 3/3 phases OK (fresh, idempotent, legacy
+upgrade); full server suite 399/399. Deployed: Render auto-deploy
+`24d212f` live, `/api/health` HTTP 200 with sqlite ok, errorCount 0, DB
+migrated (815 KB -> 831 KB). GitHub Pages/Worker auto-deploys the client
+bundle.
+
+**"Updated instructions section" (the prompt the user chased earlier) is this
+feature: the per-record `last_meeting_instructions` editor in the record detail
+view. On main and live.**
