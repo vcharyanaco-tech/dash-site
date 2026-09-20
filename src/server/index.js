@@ -922,8 +922,13 @@ server.on('error', function (err) {
   console.error('Server error: ' + err.message);
 });
 
-// Register SSE route for real-time updates
-registerSseRoute(app, API_PREFIX);
+// Register SSE route for real-time updates. Auth-gated server-side: the
+// stream is worthless to anonymous clients, and scoping needs the session's
+// email + role (Phase 13, section 4).
+registerSseRoute(app, API_PREFIX, function (req) {
+  const token = parseCookie_(req.headers.cookie || '')[SESSION_COOKIE] || '';
+  return auth.requireLogin(token);
+});
 
 setInterval(function () {
   try { require('./automation').runScheduled(); } catch (err) { console.error('Automation scheduler error: ' + err.message); }

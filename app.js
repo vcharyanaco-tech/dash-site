@@ -9948,9 +9948,13 @@ function initDashOpsFeatures(){
    for the next auto-refresh tick. Reconnects automatically on close. */
 
 var sseSource = null;
-var sseRetryMs = 2000;
-var sseMaxRetryMs = 60000;
+var sseRetryMs = 1000;
+var sseMaxRetryMs = 30000;
 var sseConnected = false;
+var sseRetryBase = 1000;
+var sseRetryFactor = 2;
+var sseRetrySteps = [1000, 2000, 4000, 8000, 16000, 30000];
+var sseRetryStepIndex = 0;
 
 function connectSse() {
   if (sseSource) return; // already connected
@@ -9961,7 +9965,14 @@ function connectSse() {
 
   sseSource.addEventListener('connected', function () {
     sseConnected = true;
-    sseRetryMs = 2000; // reset backoff on successful connect
+    sseRetryStepIndex = 0; // reset backoff on successful connect
+    sseRetryMs = sseRetrySteps[0];
+    // Any events that were emitted while we were disconnected (or during the
+    // reconnect handshake) are missed by this EventSource. Refresh data now so
+    // the dashboard is never left stale, and mark the session healthy again.
+    if (autoRefreshInFlight) return;
+    autoRefreshTick();
+    loadNotifications(true);
   });
 
   sseSource.addEventListener('dataChanged', function (e) {
@@ -9980,13 +9991,17 @@ function connectSse() {
 
   sseSource.onerror = function () {
     sseConnected = false;
-    sseSource.close();
-    sseSource = null;
-    // Exponential backoff reconnect
+    if (sseSource) { sseSource.close(); sseSource = null; }
+    // Exponential backoff with jitter: 1s → 2s → 4s → 8s → 16s → 30s (capped).
+    // Jitter spreads reconnects after mass disconnects so the server isn't
+    // hit by a synchronized reconnect thundering herd.
+    sseRetryStepIndex = Math.min(sseRetryStepIndex, sseRetrySteps.length - 1);
+    var base = sseRetrySteps[sseRetryStepIndex] || sseMaxRetryMs;
+    sseRetryMs = Math.floor(base * (0.5 + Math.random() * 0.5));
+    if (sseRetryStepIndex < sseRetrySteps.length - 1) sseRetryStepIndex += 1;
     setTimeout(function () {
       if (appState.user && appState.user.loggedIn) connectSse();
     }, sseRetryMs);
-    sseRetryMs = Math.min(sseMaxRetryMs, sseRetryMs * 2);
   };
 }
 

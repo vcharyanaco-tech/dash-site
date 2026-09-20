@@ -110,7 +110,7 @@ function appendNotification_(email, type, title, body, link, opts) {
     0, 0, String(opts.groupKey || '')
   );
   pruneNotifications_(email);
-  try { events.broadcast('notificationChanged', { id: id, type: String(type || 'system') }); } catch (e) {}
+  try { events.broadcastUser(email, 'notificationChanged', { id: id, type: String(type || 'system') }); } catch (e) {}
 }
 
 function notify_(email, type, title, body, link, opts) {
@@ -214,14 +214,14 @@ function markNotificationsRead(ids, token) {
     }
   });
   const result = getMyNotifications(token);
-  try { events.broadcast('notificationChanged', { action: 'read' }); } catch (e) {}
+  try { events.broadcastUser(user.email, 'notificationChanged', { action: 'read' }); } catch (e) {}
   return result;
 }
 
 function clearMyNotifications(token) {
   const user = auth.requireLogin(token);
   db.prepare('DELETE FROM notifications WHERE email = ?').run(user.email);
-  try { events.broadcast('notificationChanged', { action: 'clear' }); } catch (e) {}
+  try { events.broadcastUser(user.email, 'notificationChanged', { action: 'clear' }); } catch (e) {}
   return getMyNotifications(token);
 }
 
@@ -247,7 +247,7 @@ function updateNotificationState(id, state, token) {
   if(state.dismiss===true) db.prepare('UPDATE notifications SET dismissed_at=? WHERE id=?').run(Date.now(),id);
   if(state.dismiss===false) db.prepare('UPDATE notifications SET dismissed_at=0 WHERE id=?').run(id);
   if(state.snoozeUntil!==undefined) db.prepare('UPDATE notifications SET snoozed_until=? WHERE id=?').run(Math.max(0,Number(state.snoozeUntil)||0),id);
-  try { events.broadcast('notificationChanged', { id: id, action: 'state' }); } catch (e) {}
+  try { events.broadcastUser(user.email, 'notificationChanged', { id: id, action: 'state' }); } catch (e) {}
   return getMyNotifications(token);
 }
 function snoozeNotification(id, minutes, token){return updateNotificationState(id,{snoozeUntil:Date.now()+Math.max(1,Math.min(7*24*60,Number(minutes)||60))*60000},token);}
