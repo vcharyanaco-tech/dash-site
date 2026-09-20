@@ -88,16 +88,56 @@ Full suite after fixes: **398 tests / 398 pass / 0 fail** (~35 s).
   three zip-bug fixes above). Pushed to `origin/main`
   (`43d87f1..33113bf`).
 
+## Stray files tracked
+
+- `VS tools.code-workspace` and `dash-site-presentation-mode-big-pickle.md`
+  were added at the user's request as `b6ab97a` (no secrets; the markdown is
+  the presentation-mode feature spec, the workspace file points at the repo).
+
+## Render deploy failure — ROOT-CAUSED & FIXED
+
+User reported the last 5 Render deploys failed. Render API
+(`GET /v1/services/srv-d9uqprijobas73bh8ie0/deploys`) confirmed status
+`update_failed` for `b6ab97a`, `6041e64`, `33113bf`, `43d87f1` (auto), and
+`43d87f1` (manual); the last `live` deploy was `a1b6451`. (The Render dashboard
+list rendered these as "Deployed"; the API status is authoritative.)
+
+**Root cause:** `schema.sql` created `CREATE UNIQUE INDEX idx_records_record_id
+ON records(record_id)` while `db.js` only adds `records.record_id` *after*
+`db.exec(schema)`. On Render the ephemeral disk restores an **older** DB from
+the KV bridge (data-sync) whose `records` table predates Part 15 — and
+`CREATE TABLE IF NOT EXISTS` never alters an existing table — so boot threw
+`no such column: record_id`, the health check never passed, and the deploy was
+marked `update_failed` and rolled back. Local tests and
+`check-db-migrations.cjs` only ever booted a **fresh** DB, so they missed it.
+
+**Fix (`37500c8`):**
+- `src/server/schema.sql` — dropped the premature `idx_records_record_id`
+  creation (db.js owns it, after the migration).
+- `src/server/db.js` — the child-table re-anchor now `ALTER TABLE ... ADD COLUMN
+  record_id` for `tasks`/`documents`/`record_changes` when an old DB lacks it,
+  before the `UPDATE ... record_id` runs.
+- `scripts/check-db-migrations.cjs` — new **legacy upgrade** phase: strips every
+  migrated column (`record_id`, `source`, `displayed`, `read_at`, `keep`,
+  notification lifecycle cols) and reboots, reproducing the failure; also adds
+  the Part 15 columns/indexes to its expectations.
+
+**Verification:** legacy-DB boot sim now passes (records stamped, children
+re-anchored to the parent UUID); `check-db-migrations.cjs` 3/3 phases OK;
+server suite 398/398. Re-deploy `dep-danmqcm8bjmc73amk6kg` → status `live`;
+`https://dash-site-2wkg.onrender.com/api/health` → HTTP 200 with
+`dataSync.enabled:true` and the migrated DB (815104 bytes).
+
 ## Cleanup
 
 - Temporary worktree `C:\Users\vikph\AppData\Local\Temp\opencode\zip-wt`
   removed (`git worktree remove --force`), branch `import-8-12` deleted
-  (`was a24a454`). `main` == `origin/main` == `33113bf`.
+  (`was a24a454`).
 
 ## Pending Tasks
 
 - **Nothing runtime pending.** Both user-supplied zips plus the local Part 15
-  work are on the repo line to line (`main`/`origin/main` `33113bf`), and the
-  full server suite is green.
-- `VS tools.code-workspace` and `dash-site-presentation-mode-big-pickle.md`
-  remain untracked strays, left uncommitted per prior session convention.
+  work are on the repo line to line, the full server suite is green, and Render
+  (`37500c8`) is live again.
+- Note: `push deploy` for docs-only commits is normal; the failure was purely
+  the legacy-DB migration crash fixed above.
