@@ -530,10 +530,27 @@ function toEmbeddableUrl(url) {
   return url;
 }
 
+/* The preview stage must always end up with a #previewFrame. Presentation
+   Mode parks the live frame in a hidden warm holder on close (and exit
+   destroys those holders), so the stage can legitimately be frame-less on the
+   next open — in that case rebuild a default frame instead of escaping to a
+   real new tab. */
+function ensurePreviewFrame_(stage) {
+  let frame = getEl('previewFrame');
+  if (frame && frame.parentNode === stage) return frame;
+  frame = document.createElement('iframe');
+  frame.id = 'previewFrame';
+  frame.className = 'preview-frame';
+  frame.title = 'Link preview';
+  frame.setAttribute('aria-hidden', 'true');
+  stage.appendChild(frame);
+  return frame;
+}
+
 function openLinkPreview(url, title) {
-  const frame = getEl('previewFrame');
+  const stage = getEl('previewStage');
+  if (!stage) { window.open(url, '_blank'); return; }
   const openNew = getEl('previewOpenNew');
-  if (!frame) { window.open(url, '_blank'); return; }
   const titleEl = getEl('previewModalTitle');
   if (titleEl) titleEl.textContent = title || 'Preview';
   if (openNew) openNew.href = url;
@@ -560,26 +577,27 @@ function openLinkPreview(url, title) {
   const reusable = cached || (warmed && warmed.ready ? warmed : null);
 
   if (reusable && reusable.node && reusable.frame) {
-    const stage = getEl('previewStage');
-    if (stage) {
-      try {
-        reusable.frame.id = 'previewFrame';
-        reusable.frame.className = 'preview-frame';
-        reusable.frame.title = 'Link preview';
-        reusable.frame.setAttribute('aria-hidden', 'true');
-        stage.replaceChild(reusable.frame, frame);
-        if (reusable.node.parentNode) reusable.node.parentNode.removeChild(reusable.node);
-        if (warm && warm.frames && warm.frames[target]) delete warm.frames[target];
-        if (warm) warm.activePreviewTarget = target;
-      } catch (err) {
-        try { frame.src = target || ''; } catch (err2) {}
-        if (warm) warm.activePreviewTarget = target;
+    try {
+      const existing = getEl('previewFrame');
+      reusable.frame.id = 'previewFrame';
+      reusable.frame.className = 'preview-frame';
+      reusable.frame.title = 'Link preview';
+      reusable.frame.setAttribute('aria-hidden', 'true');
+      if (existing && existing !== reusable.frame && existing.parentNode === stage) {
+        stage.replaceChild(reusable.frame, existing);
+      } else {
+        stage.appendChild(reusable.frame);
       }
-    } else {
+      if (reusable.node.parentNode) reusable.node.parentNode.removeChild(reusable.node);
+      if (warm && warm.frames && warm.frames[target]) delete warm.frames[target];
+      if (warm) warm.activePreviewTarget = target;
+    } catch (err) {
+      const frame = ensurePreviewFrame_(stage);
       try { frame.src = target || ''; } catch (err2) {}
       if (warm) warm.activePreviewTarget = target;
     }
   } else {
+    const frame = ensurePreviewFrame_(stage);
     try { frame.src = target || ''; } catch (err) {}
     if (warm) warm.activePreviewTarget = target;
   }

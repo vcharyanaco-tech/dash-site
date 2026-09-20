@@ -128,6 +128,29 @@ server suite 398/398. Re-deploy `dep-danmqcm8bjmc73amk6kg` → status `live`;
 `https://dash-site-2wkg.onrender.com/api/health` → HTTP 200 with
 `dataSync.enabled:true` and the migrated DB (815104 bytes).
 
+## Link preview — only first click previewed, rest opened a new tab (FIXED)
+
+**Symptom:** in Presentation Mode the first hyperlink previewed in the modal;
+every later click opened a real browser tab.
+
+**Root cause:** the modal has a single `#previewFrame`. Presentation Mode's
+`closeLinkPreview()` parks the live frame in a hidden `.pres-warm-frame` holder
+and clears its id (`src/app/ai.js`), and `exitPresentationMode()` then deletes
+all warm holders (`src/app/presentation.js:126-128`) — so `#previewStage` is
+legitimately frame-less afterwards. The next `openLinkPreview()` did
+`if (!frame) { window.open(url, '_blank'); return; }`, so it escaped to a new
+tab instead of reopening the modal.
+
+**Fix (`src/app/ai.js`):** added `ensurePreviewFrame_(stage)`; `openLinkPreview`
+now only falls back to a new tab when `#previewStage` itself is missing,
+otherwise it rebuilds a default `#previewFrame` and still adopts warm/cached
+frames first (warm buffering unchanged). Rebuilt `app.js`
+(`node build/build-app.js`, round-trip verified, bundle size OK) and added a
+regression contract test in `src/server/tests/frontend-contract.test.js`.
+
+**Verification:** `node --check app.js` + `src/app/ai.js` OK; secret-scan OK;
+bundle-size OK; app.js round-trip OK; server suite 399/399.
+
 ## Cleanup
 
 - Temporary worktree `C:\Users\vikph\AppData\Local\Temp\opencode\zip-wt`

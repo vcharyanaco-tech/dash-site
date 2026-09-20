@@ -63,3 +63,18 @@ test('dialog focus restoration helpers are bundled', function () {
   assert.ok(appJs.indexOf('dialogReturnFocus_') !== -1, 'dialogReturnFocus_ missing');
   assert.ok(appJs.indexOf('getDialogFocusable_') !== -1, 'getDialogFocusable_ missing');
 });
+
+test('link preview rebuilds a missing #previewFrame instead of escaping to a new tab', function () {
+  // Regression: presentation-mode close parks #previewFrame in a hidden warm
+  // holder (and exit destroys it), so the stage is legitimately frame-less on
+  // the next open. openLinkPreview must rebuild the frame rather than falling
+  // into the window.open new-tab path after the first preview.
+  assert.ok(appJs.indexOf('function ensurePreviewFrame_(stage)') !== -1,
+    'ensurePreviewFrame_ missing');
+  assert.ok(appJs.indexOf("if (!stage) { window.open(url, '_blank'); return; }") !== -1,
+    'openLinkPreview must only fall back to a new tab when #previewStage is missing');
+  assert.ok(appJs.indexOf("if (!frame) { window.open(url, '_blank'); return; }") === -1,
+    'openLinkPreview still bails to a new tab when #previewFrame is absent');
+  assert.ok(appJs.indexOf('ensurePreviewFrame_(stage)') !== -1,
+    'openLinkPreview never invokes ensurePreviewFrame_');
+});
