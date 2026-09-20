@@ -694,6 +694,7 @@ function markReviewDone_(row, token) {
     try {
       require('./notifications').notifyStaffLocked_('record', 'Review marked done', 'Review for record #' + (Number(row) - CONFIG.SHEET.START_ROW + 1) + ' was marked as done.', '', admin.email, { priority: NOTIFICATION_PRIORITY.NORMAL, recordRow: Number(row) });
     } catch (err) {}
+    try { require('./automation').evaluate_('REVIEW_COMPLETED', { key: 'reviewdone:'+Number(row)+':'+new Date().toISOString().slice(0,10), email: admin.email, recordRow: Number(row), message: 'Review completed for record #' + (Number(row) - CONFIG.SHEET.START_ROW + 1) }); } catch (err) {}
 
     const data = getData();
     return {

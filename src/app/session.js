@@ -172,6 +172,8 @@ function notifActionHtml_(n) {
   }
   parts.push('<button class="btn btn-secondary btn-small" type="button" onclick="event.stopPropagation(); openNotification(\'' + escAttr(n.id) + '\', \'' + escAttr(n.type || 'system') + '\', \'' + escAttr(String(n.recordRow || 0)) + '\')">' +
     (Number(n.recordRow || 0) ? 'Open record' : 'Open') + '</button>');
+  parts.push('<button class="btn btn-ghost btn-small" type="button" onclick="event.stopPropagation(); snoozeNotificationUi(\'' + escAttr(n.id) + '\',60)">Snooze</button>');
+  parts.push('<button class="btn btn-ghost btn-small" type="button" onclick="event.stopPropagation(); dismissNotificationUi(\'' + escAttr(n.id) + '\')">Dismiss</button>');
   return parts.join('');
 }
 
@@ -754,3 +756,7 @@ function wireFieldClearing(container) {
     });
   });
 }
+
+
+function snoozeNotificationUi(id, minutes){ApiService.snoozeNotification(id,minutes).then(function(d){appState.notifications=d||appState.notifications;renderNotifications();}).catch(function(e){showToast(e.message||String(e),'error');});}
+function dismissNotificationUi(id){ApiService.dismissNotification(id).then(function(d){appState.notifications=d||appState.notifications;renderNotifications();}).catch(function(e){showToast(e.message||String(e),'error');});}

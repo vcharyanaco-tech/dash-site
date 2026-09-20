@@ -33,7 +33,7 @@ const AUTH_ARG_INDEX = Object.freeze({
   adminGetUserActivity: 0, adminDeleteUser: 1, adminResetPassword: 2,
   adminEmailAllUsers: 2, getAssignableUsers: 0, getMyNotifications: 0,
   getNotificationPrefs: 0, setNotificationPrefs: 1,
-  markNotificationsRead: 1, clearMyNotifications: 0, getTaskCounts: 0,
+  markNotificationsRead: 1, clearMyNotifications: 0, updateNotificationState: 2, snoozeNotification: 2, dismissNotification: 1, restoreNotification: 1, getNotificationDigest: 0, getTaskCounts: 0,
   createTask: 1, getTasks: 1, getMyTasks: 0, updateTask: 2, deleteTask: 1,
   getDashboardPreferences: 0, saveDashboardPreferences: 1,
   getReportData: 1, exportToSpreadsheet: 0, createPdfReport: 0,
@@ -56,7 +56,7 @@ const AUTH_ARG_INDEX = Object.freeze({
   sendWeeklyReport: 0, adminImportCsv: 1,
   setupEnterpriseAddons: 0, installEnterpriseTriggers: 0,
   validateEnterpriseConfiguration: 0, getEnterpriseHealth: 0,
-  getSystemHealth: 0,
+  getSystemHealth: 0, getAnalytics: 1, listAutomationRules: 0, saveAutomationRule: 1, deleteAutomationRule: 1, runAutomationNow: 0, getSecurityStatus: 0, rotateSession: 0,
   getEnterpriseFrontendConfig: 0,
   setRecordDisplay: 2, generateReviewNotifications: 0,
   reconcileRecordOrder: 1, exportFullBackup: 0,
@@ -118,6 +118,14 @@ try {
 
 const app = express();
 app.disable('x-powered-by');
+
+// Reject cross-site API writes unless the browser explicitly identifies a trusted origin.
+app.use(API_PREFIX, function (req, res, next) {
+  if (req.method !== 'POST') return next();
+  const origin = req.headers.origin;
+  if (origin && !TRUSTED_ORIGINS.has(String(origin))) return res.status(403).json({ error: 'Untrusted request origin.' });
+  next();
+});
 
 app.use(function (req, res, next) {
   const started = Date.now();
@@ -204,7 +212,7 @@ function readBodyJson(req) {
     const chunks = [];
     req.on('data', function (c) {
       size += c.length;
-      if (size > 64 * 1024 * 1024) {
+      if (size > Number(process.env.DASH_MAX_BODY_BYTES || 32 * 1024 * 1024)) {
         req.destroy();
         reject(new Error('Request body too large.'));
         return;
@@ -882,6 +890,10 @@ server.on('error', function (err) {
 
 // Register SSE route for real-time updates
 registerSseRoute(app, API_PREFIX);
+
+setInterval(function () {
+  try { require('./automation').runScheduled(); } catch (err) { console.error('Automation scheduler error: ' + err.message); }
+}, 60000).unref();
 
 if (require.main === module) {
   server.listen(PORT, function () {

@@ -48,6 +48,7 @@ const MODULES = [
   'submissions.js',  // Submissions modal
   'myday.js',        // My Day operational dashboard
   'presentation.js', // Presentation / slideshow mode
+  'workspace.js',    // Global search, attention, executive snapshot, Dash AI, mobile mode
   'realtime.js',     // SSE real-time, session refresh, keyboard shortcuts
   'init.js',         // About, offline, push, language toggle (loads last)
 ];

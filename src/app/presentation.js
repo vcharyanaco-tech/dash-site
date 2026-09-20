@@ -12,7 +12,8 @@ var presentationState = {
   items: [],              // snapshot of the visible record set at entry
   touchStartX: 0,
   touchStartY: 0,
-  touchTarget: null
+  touchTarget: null,
+  resumeRow: null
 };
 
 /* ---- Link warming state: deduped, concurrency-limited, abortable ----
@@ -21,14 +22,20 @@ var presentationState = {
    can be reparented straight into the modal instead of re-navigating, which
    is what actually makes a click load instantly. */
 var presentationWarm = {
-  aborted: false,
   MAX_CONCURRENCY: 4,
-  queue: [],       // pending URLs to warm (FIFO; survives calls)
-  seenUrls: {},    // dedupe across all slides for the whole session
+  MAX_RETRIES: 2,
+  RETRY_BASE_MS: 900,
+  TIMEOUT_MS: 8000,
+  queue: [],
+  status: {},                // URL -> queued|loading|ready|failed
+  retryAt: {},               // URL -> epoch ms before another attempt
+  retryCount: {},            // URL -> number of retries already used
   seenOrigins: {},
   inflight: 0,
-  controllers: [],
-  frames: {}       // embeddable target URL -> { node, ready } warm pool
+  generation: 0,             // invalidates late iframe events after exit
+  frames: {},                // embeddable URL -> { node, frame, ready }
+  previewCache: {},           // embeddable URL -> { node, frame, ready }
+  previewCacheOrder: []      // cache order for adopted preview frames
 };
 
 /* Buffer the previous/current/next/next-next slides' links in the background
@@ -38,10 +45,12 @@ function warmNearbySlides_() {
   const items = presentationState.items;
   const idx = presentationState.index;
   const targets = [];
-  if (items[idx - 1]) targets.push(items[idx - 1]);
-  if (items[idx]) targets.push(items[idx]);
-  if (items[idx + 1]) targets.push(items[idx + 1]);
-  if (items[idx + 2]) targets.push(items[idx + 2]);
+  // Priority order: current → next → previous → next+1 → next+2 → previous+1.
+  // This keeps the most likely click targets warm first without warming the
+  // entire deck at entry. The concurrency-limited pump handles the rest.
+  [idx, idx + 1, idx - 1, idx + 2, idx + 3, idx - 2].forEach(function (i) {
+    if (items[i]) targets.push(items[i]);
+  });
   warmPresentationLinks_(targets);
 }
 
@@ -51,41 +60,69 @@ function enterPresentationMode() {
     showToast('No records to present.', 'warning');
     return;
   }
-  presentationState.items = items.slice();
-  presentationState.index = 0;
-  presentationState.active = true;
-  presentationWarm.aborted = false;
-  presentationWarm.queue = [];
-  presentationWarm.seenUrls = {};
-  presentationWarm.seenOrigins = {};
-  presentationWarm.inflight = 0;
-  presentationWarm.controllers = [];
-  presentationWarm.frames = {};
-  const overlay = getEl('presentationOverlay');
-  if (overlay) {
-    overlay.classList.add('presentation-open');
-    renderPresentationSlide_();
-    wirePresentationTouch_();
-    const nextBtn = getEl('presentationNextBtn');
-    if (nextBtn) nextBtn.focus();
+
+  let savedRow = '';
+  try { savedRow = localStorage.getItem('dash.presentation.resumeRow') || ''; } catch (err) {}
+  const savedIndex = items.findIndex(function (item) { return String(item.row) === savedRow; });
+  const startPresentation_ = function (index, resumed) {
+    presentationState.items = items.slice();
+    presentationState.index = Math.max(0, index);
+    presentationState.active = true;
+    presentationState.resumeRow = String(presentationState.items[presentationState.index].row);
+    presentationWarm.generation++;
+    presentationWarm.queue = [];
+    presentationWarm.status = {};
+    presentationWarm.retryAt = {};
+    presentationWarm.retryCount = {};
+    presentationWarm.seenOrigins = {};
+    presentationWarm.inflight = 0;
+    presentationWarm.frames = {};
+    presentationWarm.previewCache = {};
+    presentationWarm.activePreviewTarget = null;
+    presentationWarm.previewCacheOrder = [];
+    const overlay = getEl('presentationOverlay');
+    if (overlay) {
+      overlay.classList.add('presentation-open');
+      renderPresentationSlide_();
+      wirePresentationTouch_();
+      const nextBtn = getEl('presentationNextBtn');
+      if (nextBtn) nextBtn.focus();
+    }
+    if (resumed) showToast('Resumed presentation from card ' + (index + 1) + '.', 'success');
+    warmNearbySlides_();
+  };
+
+  if (savedIndex >= 0) {
+    showConfirm({
+      title: 'Resume presentation?',
+      message: 'Resume from card ' + (savedIndex + 1) + ' of ' + items.length + '?',
+      okLabel: 'Resume'
+    }).then(function (ok) {
+      startPresentation_(ok ? savedIndex : 0, ok);
+    });
+    return;
   }
-  // Warm only the visible window around the current slide (prev/current/
-  // next/next-next). The whole deck must NOT be warmed at once — that bursts
-  // a request storm at every presentation entry (link swarming). Nearby links
-  // are re-warmed on every navigation instead.
-  warmNearbySlides_();
+
+  startPresentation_(0, false);
 }
 
 function exitPresentationMode() {
   presentationState.active = false;
-  presentationWarm.aborted = true;
-  presentationWarm.controllers.forEach(function (c) { try { c.abort(); } catch (err) {} });
-  presentationWarm.controllers = [];
+  try { localStorage.setItem('dash.presentation.resumeRow', presentationState.resumeRow || ''); } catch (err) {}
+  if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function () {});
+  // Iframes do not support fetch-style AbortController cancellation. A
+  // generation token makes late events harmless; removing the browsing
+  // contexts releases the actual navigation/document.
+  presentationWarm.generation++;
   presentationWarm.queue = [];
   presentationWarm.inflight = 0;
   presentationWarm.frames = {};
-  // Detach any hidden warm frames so exiting a presentation never leaks
-  // iframes (and their loaded documents) into the page.
+  presentationWarm.previewCache = {};
+  presentationWarm.activePreviewTarget = null;
+  presentationWarm.status = {};
+  presentationWarm.retryAt = {};
+  presentationWarm.retryCount = {};
+  presentationWarm.previewCacheOrder = [];
   document.querySelectorAll('.pres-warm-frame').forEach(function (node) {
     if (node.parentNode) node.parentNode.removeChild(node);
   });
@@ -115,6 +152,14 @@ function renderPresentationSlide_() {
 
   const counter = getEl('presentationCounter');
   if (counter) counter.textContent = (presentationState.index + 1) + ' / ' + items.length;
+  const progress = getEl('presentationProgress');
+  if (progress) {
+    const pct = items.length ? ((presentationState.index + 1) / items.length) * 100 : 0;
+    progress.style.width = pct + '%';
+    progress.setAttribute('aria-valuenow', String(Math.round(pct)));
+  }
+  presentationState.resumeRow = String(item.row);
+  try { localStorage.setItem('dash.presentation.resumeRow', presentationState.resumeRow); } catch (err) {}
 
   // Re-apply the slide's submission visibility state to the slide's toggle.
   const updatesHidden = isRowUpdatesHidden_(item.row);
@@ -161,7 +206,7 @@ function presentationSlideHtml_(item) {
   }
   if (appState.isAdmin) {
     if (item.reviewStatus === 'done') {
-      actions += '<span class="presentation-done-label">Completed</span>';
+      actions += `<button class="btn btn-ghost btn-small presentation-act" type="button" onclick="presentationUndoDone_(${escAttr(item.row)}, this)">Undo</button>`;
     } else {
       actions += `<button class="btn btn-primary btn-small presentation-act" type="button" onclick="presentationMarkDone_(${escAttr(item.row)}, this)">Mark as Completed</button>`;
     }
@@ -225,6 +270,25 @@ function presentationMarkDone_(row, btn) {
   });
 }
 
+function presentationUndoDone_(row) {
+  if (!appState.isAdmin) { showToast('Admin access required', 'warning'); return; }
+  showOverlay('Undoing review completion…');
+  ApiService.markReviewNotDone(row).then(function (data) {
+    hideOverlay();
+    const item = presentationState.items[presentationState.index];
+    if (item && String(item.row) === String(row)) item.reviewStatus = 'due';
+    if (data && data.items) appState.items = data.items;
+    if (data && data.summary) appState.summary = data.summary;
+    renderDashboard(true);
+    renderPresentationSlide_();
+    showToast('Review marked as not done', 'success');
+  }).catch(function (err) {
+    hideOverlay();
+    if (handleServerFailure(err)) return;
+    showToast('Failed: ' + (err.message || err), 'error');
+  });
+}
+
 /* ---- Slide navigation ---- */
 function presentationNext_() {
   if (!presentationState.active) return;
@@ -254,10 +318,14 @@ function getPresentationKeydown_() {
     if (key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
-      exitPresentationMode();
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(function () {});
+      } else {
+        exitPresentationMode();
+      }
       return;
     }
-    if (key === 'ArrowRight' || key === 'PageDown') {
+    if (key === ' ' || key === 'ArrowRight' || key === 'PageDown') {
       e.preventDefault();
       e.stopPropagation();
       presentationNext_();
@@ -267,6 +335,34 @@ function getPresentationKeydown_() {
       e.preventDefault();
       e.stopPropagation();
       presentationPrev_();
+      return;
+    }
+    if (key === 'Home') {
+      e.preventDefault(); e.stopPropagation();
+      presentationState.index = 0; renderPresentationSlide_(); warmNearbySlides_(); return;
+    }
+    if (key === 'End') {
+      e.preventDefault(); e.stopPropagation();
+      presentationState.index = presentationState.items.length - 1; renderPresentationSlide_(); warmNearbySlides_(); return;
+    }
+    if (key === 'f' || key === 'F') {
+      e.preventDefault(); e.stopPropagation(); togglePresentationFullscreen_(); return;
+    }
+    if (key === 's' || key === 'S') {
+      e.preventDefault(); e.stopPropagation();
+      const btn = getEl('presentationStage') && getEl('presentationStage').querySelector('[data-pres-updates]');
+      if (btn) presentationToggleUpdates_(presentationState.items[presentationState.index].row, btn);
+      return;
+    }
+    if (key === '?') {
+      e.preventDefault(); e.stopPropagation();
+      showToast('←/→ navigate · Space next · Home/End first/last · F fullscreen · S submissions · C complete · Esc exit', 'info');
+      return;
+    }
+    if (key === 'c' || key === 'C') {
+      e.preventDefault(); e.stopPropagation();
+      const item = presentationState.items[presentationState.index];
+      if (item && appState.isAdmin && item.reviewStatus !== 'done') presentationMarkDone_(item.row);
       return;
     }
   };
@@ -287,16 +383,31 @@ function getPresentationToggle_() {
   };
 }
 
+function togglePresentationFullscreen_() {
+  const overlay = getEl('presentationOverlay');
+  if (!overlay) return;
+  if (document.fullscreenElement) {
+    if (document.exitFullscreen) document.exitFullscreen().catch(function () {});
+    return;
+  }
+  if (overlay.requestFullscreen) {
+    overlay.requestFullscreen().catch(function () { showToast('Fullscreen is not available in this browser.', 'warning'); });
+  } else {
+    showToast('Fullscreen is not available in this browser.', 'warning');
+  }
+}
+
 function wirePresentationEvents_() {
   document.addEventListener('keydown', getPresentationKeydown_(), true);
   document.addEventListener('keydown', getPresentationToggle_(), true);
 
-  ['presentationPrevBtn', 'presentationNextBtn', 'presentationExitBtn'].forEach(function (id) {
+  ['presentationPrevBtn', 'presentationNextBtn', 'presentationExitBtn', 'presentationFullscreenBtn'].forEach(function (id) {
     const btn = getEl(id);
     if (!btn) return;
     btn.addEventListener('click', function () {
       if (id === 'presentationPrevBtn') presentationPrev_();
       else if (id === 'presentationNextBtn') presentationNext_();
+      else if (id === 'presentationFullscreenBtn') togglePresentationFullscreen_();
       else exitPresentationMode();
     });
   });
@@ -350,77 +461,124 @@ function presentationLinksHtml_(item) {
 }
 
 /* ---- Link preloading / buffering ---- */
-/* Warm links in the background while presentation mode is open so a click
-   loads instantly. Warms the URL the popup actually loads (toEmbeddableUrl,
-   which rewrites Drive links to their /preview form and Google Sheets to the
-   grid-only /htmlview) rather than the raw href. Targets queue up FIFO and
-   are processed with a bounded concurrency — URLs are never silently dropped
-   at the cap. Current slide is appended first so it always gets priority
-   over later slides. */
+/* Warm the URL the popup actually loads (toEmbeddableUrl). A small state
+   machine keeps URLs from disappearing at the concurrency cap, retries
+   transient failures twice, and uses a generation token so late iframe
+   events after exit cannot mutate the current presentation. */
 function warmPresentationLinks_(targets) {
   if (!presentationState.active) return;
+  const now = Date.now();
   const urls = [];
+
   targets.forEach(function (item) {
     const links = (item && item.linkUrls) || {};
     Object.keys(links).forEach(function (k) {
-      const url = String(links[k] || '').trim();
-      if (/^https?:\/\//i.test(url) && !presentationWarm.seenUrls[url]) {
-        presentationWarm.seenUrls[url] = true;
-        urls.push(url);
-      }
+      const raw = String(links[k] || '').trim();
+      if (!/^https?:\/\//i.test(raw)) return;
+      let target = raw;
+      try { target = (typeof toEmbeddableUrl === 'function' && toEmbeddableUrl(raw)) || raw; } catch (err) {}
+      const state = presentationWarm.status[target];
+      if (state === 'loading' || state === 'ready' || state === 'queued') return;
+      if (state === 'failed' && (presentationWarm.retryAt[target] || 0) > now) return;
+      presentationWarm.status[target] = 'queued';
+      urls.push(target);
     });
   });
-  urls.forEach(warmPresentationOrigin_);
-  urls.forEach(function (url) {
-    presentationWarm.queue.push(url);
+
+  urls.forEach(function (target) {
+    warmPresentationOrigin_(target);
+    presentationWarm.queue.push(target);
   });
   pumpPresentationWarm_();
 }
 
 function pumpPresentationWarm_() {
-  if (presentationWarm.aborted) return;
+  if (!presentationState.active) return;
   while (presentationWarm.inflight < presentationWarm.MAX_CONCURRENCY && presentationWarm.queue.length) {
     const url = presentationWarm.queue.shift();
+    if (presentationWarm.status[url] !== 'queued') continue;
+    if ((presentationWarm.retryAt[url] || 0) > Date.now()) {
+      presentationWarm.queue.push(url);
+      break;
+    }
     warmPresentationUrl_(url);
   }
 }
 
+function schedulePresentationRetry_(url, generation) {
+  if (!presentationState.active || generation !== presentationWarm.generation) return;
+  const used = presentationWarm.retryCount[url] || 0;
+  if (used >= presentationWarm.MAX_RETRIES) {
+    presentationWarm.status[url] = 'failed';
+    return;
+  }
+  presentationWarm.retryCount[url] = used + 1;
+  const delay = presentationWarm.RETRY_BASE_MS * Math.pow(2, used);
+  presentationWarm.retryAt[url] = Date.now() + delay;
+  presentationWarm.status[url] = 'failed';
+  setTimeout(function () {
+    if (!presentationState.active || generation !== presentationWarm.generation) return;
+    if ((presentationWarm.retryAt[url] || 0) > Date.now()) return;
+    if (presentationWarm.status[url] !== 'failed') return;
+    presentationWarm.status[url] = 'queued';
+    presentationWarm.queue.push(url);
+    pumpPresentationWarm_();
+  }, delay);
+}
+
 function warmPresentationUrl_(url) {
+  if (!presentationState.active) return;
+  const generation = presentationWarm.generation;
   presentationWarm.inflight++;
-  const ctrl = new AbortController();
-  presentationWarm.controllers.push(ctrl);
-  const target = (typeof toEmbeddableUrl === 'function' && toEmbeddableUrl(url)) || url;
+  presentationWarm.status[url] = 'loading';
+
   const holder = document.createElement('div');
   holder.setAttribute('data-pres-warm-frame', '1');
   holder.className = 'pres-warm-frame';
   const frame = document.createElement('iframe');
-  frame.setAttribute('data-pres-warm-url', escAttr(target));
+  frame.setAttribute('data-pres-warm-url', url);
+  frame.setAttribute('loading', 'eager');
+  frame.setAttribute('aria-hidden', 'true');
   holder.appendChild(frame);
   document.body.appendChild(holder);
-  frame.src = target;
-  const finishWarm_ = function (keepHolder) {
+
+  let finished = false;
+  let timer = null;
+
+  const finishWarm_ = function (keepHolder, ready) {
+    if (finished) return;
+    finished = true;
     clearTimeout(timer);
-    if (!keepHolder) {
+
+    if (generation !== presentationWarm.generation || !presentationState.active || !keepHolder) {
       try { if (holder.parentNode) holder.parentNode.removeChild(holder); } catch (err) {}
     }
+
     presentationWarm.inflight = Math.max(0, presentationWarm.inflight - 1);
-    pumpPresentationWarm_();
+    if (generation === presentationWarm.generation && presentationState.active) {
+      if (ready) {
+        presentationWarm.status[url] = 'ready';
+        presentationWarm.retryAt[url] = 0;
+        presentationWarm.frames[url] = { node: holder, frame: frame, ready: true };
+      } else {
+        schedulePresentationRetry_(url, generation);
+      }
+      pumpPresentationWarm_();
+    }
   };
-  // Timeout guard: blocked/X-Frame-Options/cross-origin targets may never
-  // fire load — without this the concurrency pump would stall forever holding
-  // inflight slots for dead frames.
-  const timer = setTimeout(function () {
-    try { ctrl.abort(); } catch (err) {}
-    finishWarm_(false);
-  }, 8000);
+
+  timer = setTimeout(function () {
+    finishWarm_(false, false);
+  }, presentationWarm.TIMEOUT_MS);
+
   frame.addEventListener('load', function () {
-    if (presentationWarm.aborted) { finishWarm_(false); return; }
-    presentationWarm.frames[target] = { node: holder, frame: frame, ready: true };
-    finishWarm_(true);
+    finishWarm_(true, true);
   });
   frame.addEventListener('error', function () {
-    finishWarm_(false);
+    finishWarm_(false, false);
   });
+
+  frame.src = url;
 }
 
 function warmPresentationOrigin_(url) {

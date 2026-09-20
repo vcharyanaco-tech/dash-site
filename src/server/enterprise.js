@@ -510,6 +510,29 @@ async function getAiInsights(token) {
 
 async function getAIInsights(token) { return getAiInsights(token); }
 
+
+/* General Dash AI assistant. Editor-gated and quota-limited like record Ask-AI.
+   The client supplies a bounded, already-sanitized dashboard context so the
+   model can answer operational questions without exposing arbitrary server data. */
+async function askDashboardAi(token, question, context) {
+  const user = auth.requireEditor(token);
+  const qQuota = checkAskQuota_(user.email);
+  if (!qQuota.ok) return { success: false, message: qQuota.message };
+  if (!aiEnabled_()) return { success: false, message: 'AI insights are not enabled.' };
+  question = String(question || '').trim();
+  context = String(context || '').trim();
+  if (!question) return { success: false, message: 'Enter a question first.' };
+  if (question.length > 1000) return { success: false, message: 'Question too long (max 1000 characters).' };
+  if (context.length > 12000) context = context.substring(0, 12000);
+  const prompt = 'You are Dash AI, an operational assistant for an India Post dashboard.\n' +
+    'Use only the supplied dashboard context. Do not invent records, people, dates, counts, or actions.\n' +
+    'If the context is insufficient, say so. Keep the answer concise and actionable.\n\n' +
+    'DASHBOARD CONTEXT:\n' + context + '\n\nUSER QUESTION:\n' + question;
+  const result = await generateAiText_(prompt, ENTERPRISE_AI_ASK_SYSTEM_PROMPT);
+  if (result.success === true) commitAskQuota_(user.email);
+  return result;
+}
+
 async function getCardAiInsight(token, row) {
   auth.requireEditor(token);
   if (!aiEnabled_()) {
@@ -1634,6 +1657,7 @@ module.exports = {
   getCardAiInsight,
   getLinkContentAiInsight,
   askLinkAi,
+  askDashboardAi,
   getAllAskLinkHistory,
   saveAskLinkHistory,
   setOpenRouterApiKey,

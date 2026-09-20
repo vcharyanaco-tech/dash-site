@@ -60,6 +60,11 @@ const dispatch = {
   clearMyNotifications: function (args) { return notifications.clearMyNotifications(A(args, 0)); },
   getNotificationPrefs: function (args) { return notifications.getNotificationPrefs(A(args, 0)); },
   setNotificationPrefs: function (args) { return notifications.setNotificationPrefs(A(args, 0), A(args, 1)); },
+  updateNotificationState: function (args) { return notifications.updateNotificationState(A(args, 0), A(args, 1), A(args, 2)); },
+  snoozeNotification: function (args) { return notifications.snoozeNotification(A(args, 0), A(args, 1), A(args, 2)); },
+  dismissNotification: function (args) { return notifications.dismissNotification(A(args, 0), A(args, 1)); },
+  restoreNotification: function (args) { return notifications.restoreNotification(A(args, 0), A(args, 1)); },
+  getNotificationDigest: function (args) { return notifications.getNotificationDigest(A(args, 0)); },
 
   getTaskCounts: function (args) { return tasks.getTaskCounts(A(args, 0)); },
 
@@ -106,6 +111,7 @@ const dispatch = {
   getCardAiInsight: function (args) { return enterprise.getCardAiInsight(A(args, 0), A(args, 1)); },
   getLinkContentAiInsight: function (args) { return enterprise.getLinkContentAiInsight(A(args, 0), A(args, 1)); },
   askLinkAi: function (args) { return enterprise.askLinkAi(A(args, 0), A(args, 1), A(args, 2)); },
+  askDashboardAi: function (args) { return enterprise.askDashboardAi(A(args, 0), A(args, 1), A(args, 2)); },
   getAllAskLinkHistory: function (args) { return enterprise.getAllAskLinkHistory(A(args, 0)); },
   saveAskLinkHistory: function (args) { return enterprise.saveAskLinkHistory(A(args, 0), A(args, 1), A(args, 2)); },
   processMeetingRecording: function (args) { return enterprise.processMeetingRecording(A(args, 0), A(args, 1)); },
@@ -156,6 +162,15 @@ const dispatch = {
     auth.requireAdmin(A(args, 0));
     return require('./system-health').getSystemHealth_();
   },
+
+  // Smart workspace / operations APIs
+  getAnalytics: function (args) { return require('./analytics').getAnalytics(A(args, 0), A(args, 1)); },
+  listAutomationRules: function (args) { return require('./automation').listRules(A(args, 0)); },
+  saveAutomationRule: function (args) { return require('./automation').saveRule(A(args, 0), A(args, 1)); },
+  deleteAutomationRule: function (args) { return require('./automation').deleteRule(A(args, 0), A(args, 1)); },
+  runAutomationNow: function (args) { auth.requireAdmin(A(args, 0)); return require('./automation').runScheduled(); },
+  getSecurityStatus: function (args) { return require('./security').getSecurityStatus(A(args, 0)); },
+  rotateSession: function (args) { return require('./security').rotateSession(A(args, 0)); },
 
   // Full database backup download (VACUUM'd SQLite copy). Admin only.
   exportFullBackup: function (args) { return require('./full-backup').exportFullBackup(A(args, 0)); },

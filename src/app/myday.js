@@ -79,6 +79,51 @@ function buildMyDayData_(myTasks) {
   var notifData = appState.notifications || {};
   var unreadNotifs = (notifData.recent || []).filter(function (n) { return !n.readAt; });
 
+  // Build a single ranked "Focus" queue so the first thing on My Day is
+  // always the work with the most immediate operational value. This is a
+  // presentation layer only: it does not change task/review state.
+  var focus = [];
+  reviewsOverdue.forEach(function (i) {
+    focus.push({ kind: 'review', priority: 100, title: '#' + i.id + ' — ' + (i.sector || 'Review'),
+      meta: truncate_(i.description || i.action || '', 90), label: 'Overdue review',
+      action: '<button class="btn btn-primary btn-small" type="button" onclick="event.stopPropagation(); openRecordDetail(\'' + escAttr(i.row) + '\')">Open</button>' });
+  });
+  tasksOverdue.forEach(function (t) {
+    focus.push({ kind: 'task', priority: 90, title: t.title || 'Task',
+      meta: (t.priority || 'MEDIUM') + (t.recordRow ? ' · Record #' + t.recordRow : ''),
+      label: 'Overdue · ' + formatDate(t.dueDate),
+      action: '<button class="btn btn-primary btn-small" type="button" onclick="event.stopPropagation(); completeMyDayTask(\'' + escAttr(t.id) + '\')">Complete</button>' });
+  });
+  reviewsToday.forEach(function (i) {
+    focus.push({ kind: 'review', priority: 75, title: '#' + i.id + ' — ' + (i.sector || 'Review'),
+      meta: truncate_(i.description || i.action || '', 90), label: 'Review due today',
+      action: '<button class="btn btn-primary btn-small" type="button" onclick="event.stopPropagation(); openRecordDetail(\'' + escAttr(i.row) + '\')">Open</button>' });
+  });
+  tasksToday.forEach(function (t) {
+    focus.push({ kind: 'task', priority: 65, title: t.title || 'Task',
+      meta: (t.priority || 'MEDIUM') + (t.recordRow ? ' · Record #' + t.recordRow : ''),
+      label: 'Due today',
+      action: '<button class="btn btn-primary btn-small" type="button" onclick="event.stopPropagation(); completeMyDayTask(\'' + escAttr(t.id) + '\')">Complete</button>' });
+  });
+  unreadSubmissions.forEach(function (s) {
+    if (!appState.isEditor) return;
+    focus.push({ kind: 'submission', priority: 55, title: (s.sector || 'Update') + ' — #' + s.id,
+      meta: truncate_(s.description || '', 90), label: s.count + ' unread',
+      action: '<button class="btn btn-primary btn-small" type="button" onclick="event.stopPropagation(); openSubmissionsModal(\'' + escAttr(s.row) + '\', \''
+        + escAttr(s.id) + '\')">Review</button>' });
+  });
+  focus.sort(function (a, b) { return b.priority - a.priority; });
+
+  var openTaskTotal = openTasks.length;
+  var actionableTotal = reviewsDue.length + openTaskTotal + unreadSubmissions.length + unreadNotifs.length;
+  var taskDoneToday = myTasks.filter(function (t) {
+    return t.status === 'DONE' && t.completedAt &&
+      new Date(t.completedAt).getTime() >= todayStart &&
+      new Date(t.completedAt).getTime() < todayEnd;
+  }).length;
+  var taskProgressDenom = openTaskTotal + taskDoneToday;
+  var taskProgress = taskProgressDenom ? Math.round((taskDoneToday / taskProgressDenom) * 100) : 100;
+
   return {
     reviewsOverdue: reviewsOverdue,
     reviewsToday: reviewsToday,
@@ -86,6 +131,8 @@ function buildMyDayData_(myTasks) {
     tasksToday: tasksToday,
     unreadSubmissions: unreadSubmissions,
     unreadNotifs: unreadNotifs,
+    focus: focus.slice(0, 8),
+    stats: { openTasks: openTaskTotal, taskDoneToday: taskDoneToday, taskProgress: taskProgress, actionable: actionableTotal },
     summary: {
       reviewsDue: reviewsDue.length,
       tasksOverdue: tasksOverdue.length,
@@ -100,39 +147,96 @@ function buildMyDayData_(myTasks) {
 
 function renderMyDayContent_(panel, data) {
   var s = data.summary;
+  var st = data.stats || {};
   var totalItems = s.reviewsDue + s.tasksOverdue + s.tasksToday + s.submissions + s.notifications;
+  var now = new Date();
+  var hour = now.getHours();
+  var greeting = hour < 12 ? 'Good morning' : (hour < 17 ? 'Good afternoon' : 'Good evening');
+  var dateLabel = now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  var focus = data.focus || [];
 
   var html =
-    // Header
-    '<div class="section-header">' +
-      '<div>' +
-        '<h2 class="text-heading" id="myDayTitle">My Day</h2>' +
-        '<p class="section-copy">What you need to do right now.</p>' +
+    '<div class="myday-hero">' +
+      '<div class="myday-hero-copy">' +
+        '<div class="myday-eyebrow">' + escapeHtml(dateLabel) + '</div>' +
+        '<h2 class="text-heading" id="myDayTitle">' + escapeHtml(greeting) + '</h2>' +
+        '<p class="section-copy">Here is what needs your attention today.</p>' +
+      '</div>' +
+      '<div class="myday-hero-actions">' +
+        '<button class="btn btn-secondary" type="button" onclick="renderMyDay()" title="Refresh My Day">' + svgIcon('refresh') + ' Refresh</button>' +
+        '<button class="btn btn-primary" type="button" onclick="enterPresentationMode()" title="Start presentation mode">' + svgIcon('play') + ' Present</button>' +
       '</div>' +
     '</div>' +
 
-    // TODAY summary strip
-    '<div class="kpi-grid">' +
-      myDayKpiCard_(svgIcon('flag'), 'Reviews due', s.reviewsDue, 'Awaiting review', 'tone-warning') +
-      myDayKpiCard_(svgIcon('alert'), 'Tasks overdue', s.tasksOverdue, 'Past due date', 'tone-danger') +
-      myDayKpiCard_(svgIcon('check'), 'Tasks due today', s.tasksToday, 'Due by end of day', 'tone-success') +
+    '<div class="myday-overview">' +
+      '<div class="myday-focus-card">' +
+        '<div class="myday-card-head"><div><div class="myday-card-kicker">FOCUS NEXT</div><div class="myday-card-title">' +
+          (focus.length ? escapeHtml(focus[0].title) : 'You are all caught up') +
+        '</div></div>' +
+        '<span class="myday-focus-badge">' + (focus.length ? 'Priority' : 'Clear') + '</span></div>' +
+        '<div class="myday-focus-meta">' +
+          (focus.length ? escapeHtml(focus[0].meta || focus[0].label) : 'No urgent reviews, tasks, or updates are waiting.') +
+        '</div>' +
+        '<div class="myday-focus-footer">' +
+          (focus.length ? '<span>' + escapeHtml(focus[0].label) + '</span>' + focus[0].action : '<button class="btn btn-secondary btn-small" type="button" onclick="openTab(\'dashboard\')">View dashboard</button>') +
+        '</div>' +
+      '</div>' +
+      '<div class="myday-progress-card">' +
+        '<div class="myday-card-kicker">TODAY\'S WORKLOAD</div>' +
+        '<div class="myday-progress-row"><strong>' + Number(st.taskDoneToday || 0) + '</strong><span>tasks completed today</span><strong class="myday-progress-percent">' + Number(st.taskProgress || 0) + '%</strong></div>' +
+        '<div class="myday-progress-track"><span style="width:' + Math.max(0, Math.min(100, Number(st.taskProgress || 0))) + '%"></span></div>' +
+        '<div class="myday-progress-foot"><span>' + Number(st.openTasks || 0) + ' open tasks</span><span>' + Number(st.actionable || 0) + ' items needing attention</span></div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="section-header myday-section-head">' +
+      '<div><h3 class="text-heading">Today at a glance</h3><p class="section-copy">Live counts from your dashboard, tasks and notifications.</p></div>' +
+      '<div class="myday-quick-actions">' +
+        '<button class="btn btn-secondary btn-small" type="button" onclick="openTab(\'tasks\')">Tasks</button>' +
+        '<button class="btn btn-secondary btn-small" type="button" onclick="openTab(\'dashboard\')">Dashboard</button>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="kpi-grid myday-kpis">' +
+      myDayKpiCard_(svgIcon('flag'), 'Reviews due', s.reviewsDue, s.reviewsDue ? 'Needs attention' : 'Nothing pending', 'tone-warning') +
+      myDayKpiCard_(svgIcon('alert'), 'Tasks overdue', s.tasksOverdue, s.tasksOverdue ? 'Past due date' : 'No overdue tasks', 'tone-danger') +
+      myDayKpiCard_(svgIcon('check'), 'Tasks today', s.tasksToday, 'Due by end of day', 'tone-success') +
       myDayKpiCard_(svgIcon('inbox'), 'New submissions', s.submissions, 'Updates to review', 'tone-secondary') +
       myDayKpiCard_(svgIcon('info'), 'Notifications', s.notifications, 'Unread alerts', 'tone-info') +
     '</div>';
 
+  if (focus.length) {
+    html += '<div class="myday-focus-list">' +
+      '<div class="section-header myday-section-head"><div><h3 class="text-heading">Priority queue</h3><p class="section-copy">Ordered by urgency so you can work from the top down.</p></div></div>' +
+      '<div class="myday-group">' +
+        '<div class="myday-group-list">' +
+          focus.map(function (f, idx) {
+            return myDayItemHtml_(
+              '<span class="myday-rank">' + (idx + 1) + '</span>' + escapeHtml(f.title),
+              escapeHtml(f.meta || ''),
+              f.label,
+              f.action
+            );
+          }).join('') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
   if (totalItems === 0) {
-    html += '<div class="empty-state">' +
+    html += '<div class="empty-state myday-all-clear">' +
       '<div class="empty-state-icon">' + svgIcon('check') + '</div>' +
       '<div class="empty-state-title">All clear</div>' +
       '<div class="empty-state-subtitle">Nothing urgent needs your attention right now.</div>' +
-      '</div>';
+    '</div>';
     panel.innerHTML = html;
     return;
   }
 
-  html += '<div class="myday-priority">';
+  html += '<div class="myday-details">' +
+    '<div class="section-header myday-section-head"><div><h3 class="text-heading">By category</h3><p class="section-copy">Open the item directly from here.</p></div></div>' +
+    '<div class="myday-priority">';
 
-  // 1. Overdue reviews
   if (data.reviewsOverdue.length) {
     html += myDayGroupHtml_('Overdue reviews', 'tone-danger', data.reviewsOverdue.map(function (i) {
       return myDayItemHtml_(
@@ -143,8 +247,6 @@ function renderMyDayContent_(panel, data) {
       );
     }));
   }
-
-  // 2. Overdue tasks
   if (data.tasksOverdue.length) {
     html += myDayGroupHtml_('Overdue tasks', 'tone-danger', data.tasksOverdue.map(function (t) {
       return myDayItemHtml_(
@@ -155,8 +257,6 @@ function renderMyDayContent_(panel, data) {
       );
     }));
   }
-
-  // 3. Reviews due today
   if (data.reviewsToday.length) {
     html += myDayGroupHtml_('Due today — reviews', 'tone-warning', data.reviewsToday.map(function (i) {
       return myDayItemHtml_(
@@ -167,8 +267,6 @@ function renderMyDayContent_(panel, data) {
       );
     }));
   }
-
-  // 4. Tasks due today
   if (data.tasksToday.length) {
     html += myDayGroupHtml_('Due today — tasks', 'tone-warning', data.tasksToday.map(function (t) {
       return myDayItemHtml_(
@@ -179,20 +277,16 @@ function renderMyDayContent_(panel, data) {
       );
     }));
   }
-
-  // 5. Submissions to review (admin/editor only)
   if (data.unreadSubmissions.length && appState.isEditor) {
     html += myDayGroupHtml_('Updates to review', 'tone-secondary', data.unreadSubmissions.map(function (s) {
       return myDayItemHtml_(
-        escapeHtml(s.sector || '') + ' — ' + '#' + escapeHtml(String(s.id)),
+        escapeHtml(s.sector || '') + ' — #' + escapeHtml(String(s.id)),
         truncate_(s.description || '', 60),
         s.count + ' unread submission' + (s.count === 1 ? '' : 's'),
         '<button class="btn btn-primary btn-small" type="button" onclick="event.stopPropagation(); openSubmissionsModal(\'' + escAttr(s.row) + '\', \'' + escAttr(s.id) + '\')">Review</button>'
       );
     }));
   }
-
-  // 6. Unread notifications
   if (data.unreadNotifs.length) {
     html += myDayGroupHtml_('Unread notifications', 'tone-info', data.unreadNotifs.slice(0, 10).map(function (n) {
       return myDayItemHtml_(
@@ -204,7 +298,7 @@ function renderMyDayContent_(panel, data) {
     }));
   }
 
-  html += '</div>';
+  html += '</div></div>';
   panel.innerHTML = html;
 }
 

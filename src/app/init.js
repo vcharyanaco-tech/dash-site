@@ -44,6 +44,10 @@ function wireGlobalEvents() {
   const searchInput = getEl('searchInput');
   if (searchInput) {
     searchInput.addEventListener('input', debounce(function () {
+      if (typeof handleWorkspaceSearchInput_ === 'function') {
+        handleWorkspaceSearchInput_(searchInput.value);
+        return;
+      }
       appState.searchQuery = searchInput.value.trim();
       updateFilterChips();
       renderDashboard();
@@ -219,6 +223,9 @@ function wireGlobalEvents() {
 }
 
 wireGlobalEvents();
+if (typeof initWorkspaceFeatures === 'function') initWorkspaceFeatures();
+if (typeof initDashOpsFeatures === 'function') initDashOpsFeatures();
+if (typeof installWorkspaceAnalyticsHook === 'function') installWorkspaceAnalyticsHook();
 wireEmbeddedLinkPreview();
 wirePreviewPinch();
 window.addEventListener('load', initApp);

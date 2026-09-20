@@ -26,6 +26,10 @@ function connectSse() {
     autoRefreshTick();
   });
 
+  sseSource.addEventListener('notificationChanged', function (e) {
+    try { JSON.parse(e.data || '{}'); loadNotifications(true); if (typeof renderAttentionCenter_ === 'function') renderAttentionCenter_(); } catch (err) {}
+  });
+
   sseSource.addEventListener('userLoggedIn', function () {
     // Another user logged in — not critical, just refresh if idle
     if (!autoRefreshInFlight) autoRefreshTick();
