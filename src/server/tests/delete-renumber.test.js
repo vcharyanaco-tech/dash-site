@@ -58,6 +58,11 @@ function seed() {
   const insChange = db.prepare("INSERT INTO record_changes (record_row, record_id, changed_by, changed_at, diff) VALUES (?, ?, 'u@x.com', ?, '{}')");
   insChange.run(TARGET_ROW + 1, 'r' + (TARGET_ROW + 1), now);
 
+  const insInstr = db.prepare("INSERT INTO instruction_entries (id, card_row, card_id, email, text, created_at, updated_at) VALUES (?, ?, ?, 'u@x.com', ?, ?, ?)");
+  insInstr.run('i-below', TARGET_ROW - 1, 'r' + (TARGET_ROW - 1), 'keep below instr', now, now);
+  insInstr.run('i-gone', TARGET_ROW, 'r' + TARGET_ROW, 'delete me instr', now, now);
+  insInstr.run('i-shift', TARGET_ROW + 1, 'r' + (TARGET_ROW + 1), 'shift down instr', now, now);
+
   const insAsk = db.prepare("INSERT INTO ask_ai_history (record_row, history, updated_at) VALUES (?, '[{\"q\":1}]', ?)");
   insAsk.run(TARGET_ROW + 3, now);
 }
@@ -98,6 +103,14 @@ test('deleting record #17 remaps submissions and child rows to the renumbered re
   assert.strictEqual(changeRow.record_row, TARGET_ROW, 'change history shifted down with its record');
   const askRow = db.prepare('SELECT record_row FROM ask_ai_history').get();
   assert.strictEqual(askRow.record_row, TARGET_ROW + 2, 'ask-AI history shifted down with its record');
+
+  // Instruction entries follow their records too: the deleted record's entry
+  // is gone, the one above is cascade-deleted with it, the one below survives
+  // and the one above the deletion shifts down with its record.
+  const instrRows = db.prepare('SELECT card_row FROM instruction_entries ORDER BY card_row ASC').all().map(function (e) { return e.card_row; });
+  assert.deepStrictEqual(instrRows, [TARGET_ROW - 1, TARGET_ROW], 'instruction entry below survived, deleted-record entry cascade-deleted');
+  const instrShifted = db.prepare('SELECT text FROM instruction_entries WHERE card_row = ?').get(TARGET_ROW);
+  assert.strictEqual(instrShifted.text, 'shift down instr', 'instruction entry followed the renumbered record');
 
   // The submission overview returned to the client is already remapped, so the
   // card badges/update lines point at the right records.

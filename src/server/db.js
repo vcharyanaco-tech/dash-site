@@ -142,6 +142,76 @@ if (!lastMeetingInstructionCols.some(function (c) { return String(c.name) === 'l
   db.exec("ALTER TABLE records ADD COLUMN last_meeting_instructions TEXT NOT NULL DEFAULT ''");
 }
 
+/* ---- Migration: shift admin-authored, on-card updates into instructions ----
+   The Last Meeting Instructions field replaces the old practice of admins
+   authoring card "updates". One-time, guarded migration: for every record,
+   each update written by an ADMIN-role user that was displayed on the card
+   (displayed = 1) is converted into a dated instruction entry
+   (created_at preserved), then the submission row and any of its attachments
+   (local files + rows) are deleted. Viewer updates are untouched. Records
+   whose instructions column had text are preserved as the oldest entry so no
+   existing guidance is lost. Runs on boot against the KV-restored production
+   snapshot; the settings flag makes it exactly once, so redeploys no-op. */
+const adminUpdatesShiftedKey = 'MIGRATION_ADMIN_UPDATES_SHIFTED';
+if (!db.prepare('SELECT 1 FROM settings WHERE key = ?').get(adminUpdatesShiftedKey)) {
+  const adminEmails = {};
+  db.prepare("SELECT email FROM users WHERE role = 'ADMIN'").all().forEach(function (u) {
+    String(u.email || '').split(',').forEach(function (e) {
+      const t = String(e || '').trim().toLowerCase();
+      if (t) adminEmails[t] = true;
+    });
+  });
+  const flagged = db.prepare('SELECT id, card_row, card_id, email, text, created_at FROM submissions WHERE displayed = 1').all()
+    .filter(function (s) { return !!adminEmails[String(s.email || '').trim().toLowerCase()]; });
+  if (flagged.length) {
+    const byRow = {};
+    flagged.forEach(function (s) {
+      const n = Number(s.card_row);
+      (byRow[n] = byRow[n] || []).push(s);
+    });
+    const insEntry = db.prepare('INSERT INTO instruction_entries (id, card_row, card_id, email, text, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    const delSub = db.prepare('DELETE FROM submissions WHERE id = ?');
+    const delSubAtt = db.prepare('DELETE FROM submission_attachments WHERE submission_id = ?');
+    let shifted = 0;
+    Object.keys(byRow).forEach(function (key) {
+      const n = Number(key);
+      const items = byRow[n].slice().sort(function (a, b) { return Number(a.created_at) - Number(b.created_at); });
+      // Existing column text is kept as the oldest entry so current guidance
+      // survives the switch-over.
+      const rec = db.prepare('SELECT last_meeting_instructions FROM records WHERE row = ?').get(n);
+      if (rec && String(rec.last_meeting_instructions || '').trim()) {
+        const prev = String(rec.last_meeting_instructions).trim();
+        insEntry.run(uuid_(), n, '', '',
+          prev, items.length ? Number(items[0].created_at) - 1 : Date.now(), Date.now());
+      }
+      items.forEach(function (s) {
+        insEntry.run(uuid_(), n, String(s.card_id || ''), String(s.email || ''),
+          String(s.text || ''), Number(s.created_at) || Date.now(), Number(s.updated_at) || Date.now());
+        // Delete the submission's attachment files + rows (user opted to
+        // remove them completely once shifted).
+        db.prepare('SELECT file_key FROM submission_attachments WHERE submission_id = ?').all(String(s.id)).forEach(function (a) {
+          try { fs.unlinkSync(path.join(UPLOAD_DIR, String(a.file_key || ''))); } catch (err) {}
+        });
+        delSubAtt.run(String(s.id));
+        delSub.run(String(s.id));
+        shifted++;
+      });
+    });
+    // Mirror the aggregated entry text onto records.last_meeting_instructions
+    // (newest first) so cards, slides and print show the moved instructions.
+    const entryRows = db.prepare('SELECT card_row, text FROM instruction_entries ORDER BY created_at DESC').all();
+    const byEntryRow = {};
+    entryRows.forEach(function (e) { (byEntryRow[e.card_row] = byEntryRow[e.card_row] || []).push(e); });
+    const updRec = db.prepare('UPDATE records SET last_meeting_instructions = ?, updated_at = ? WHERE row = ?');
+    Object.keys(byEntryRow).forEach(function (key) {
+      const joined = byEntryRow[key].map(function (e) { return String(e.text || '').trim(); }).filter(Boolean).join('\n\n');
+      updRec.run(joined, Date.now(), Number(key));
+    });
+    if (shifted) console.log('[db] shifted ' + shifted + ' admin update(s) into last_meeting_instructions and deleted their submissions');
+  }
+  db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)').run(adminUpdatesShiftedKey, String(Date.now()));
+}
+
 /* ---- Migration: username index ---- */
 db.exec("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username != ''");
 

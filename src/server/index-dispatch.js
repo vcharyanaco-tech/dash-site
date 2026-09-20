@@ -17,6 +17,7 @@ const notifications = require('./notifications');
 const records = require('./records');
 const reports = require('./reports');
 const submissions = require('./submissions');
+const instructionEntries = require('./instruction-entries');
 const tasks = require('./tasks');
 const helpers = require('./helpers');
 
@@ -100,6 +101,11 @@ const dispatch = {
   deleteSubmission: function (args) { return submissions.deleteSubmission(A(args, 0), A(args, 1)); },
   markAllSubmissionsRead: function (args) { return submissions.markAllSubmissionsRead(A(args, 0)); },
   toggleSubmissionDisplay: function (args) { return submissions.toggleSubmissionDisplay(A(args, 0), A(args, 1)); },
+
+  getInstructionEntries: function (args) { return instructionEntries.getInstructionEntries(A(args, 0), A(args, 1)); },
+  addInstructionEntry: function (args) { return instructionEntries.addInstructionEntry(A(args, 0), A(args, 1), A(args, 2), A(args, 3), A(args, 4)); },
+  updateInstructionEntry: function (args) { return instructionEntries.updateInstructionEntry(A(args, 0), A(args, 1), A(args, 2), A(args, 3)); },
+  deleteInstructionEntry: function (args) { return instructionEntries.deleteInstructionEntry(A(args, 0), A(args, 1)); },
 
   getAuditEntries: function (args) { return audit.getAuditEntries(A(args, 0), A(args, 1)); },
   adminDeleteAuditRows: function (args) { return audit.adminDeleteAuditRows(A(args, 0), A(args, 1)); },

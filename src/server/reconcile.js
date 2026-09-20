@@ -76,6 +76,7 @@ function canonicalInput_(override) {
 // record id — it is always anchored by row position alone.
 const CHILDREN = [
   { table: 'submissions', rowCol: 'card_row', idCol: 'card_id', label: 'submissions' },
+  { table: 'instruction_entries', rowCol: 'card_row', idCol: 'card_id', label: 'instructionEntries' },
   { table: 'tasks', rowCol: 'record_row', idCol: 'record_id', label: 'tasks' },
   { table: 'documents', rowCol: 'record_row', idCol: 'record_id', label: 'documents' },
   { table: 'record_changes', rowCol: 'record_row', idCol: 'record_id', label: 'recordChanges' },

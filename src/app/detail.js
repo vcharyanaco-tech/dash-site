@@ -69,6 +69,9 @@ function openRecordDetail(row) {
 
   /* ---- actions ---- */
   let actionsHtml = '';
+  if (!appState.isEditor) {
+    actionsHtml += `<button class="btn btn-secondary" type="button" onclick="closeRecordDetail(); openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}');">Submit update</button>`;
+  }
   if (appState.isEditor) {
     actionsHtml += `<button class="btn btn-primary" type="button" onclick="closeRecordDetail(); editItem('${escAttr(item.row)}');">Edit</button>`;
   }
@@ -76,9 +79,7 @@ function openRecordDetail(row) {
     actionsHtml += `<button class="btn btn-secondary" data-updates-toggle="${escAttr(item.row)}" type="button" onclick="toggleCardUpdates('${escAttr(item.row)}', this)">${detailUpdatesHidden ? 'Show updates' : 'Hide updates'}</button>`;
   }
   if (appState.isEditor) {
-    actionsHtml += `<button class="btn btn-secondary" type="button" onclick="closeRecordDetail(); openEditModal(${escAttr(item.row)});">Edit</button>`;
     actionsHtml += `<button class="btn btn-secondary" type="button" onclick="closeRecordDetail(); openTaskModal(${escAttr(item.row)});">Create task</button>`;
-    actionsHtml += `<button class="btn btn-secondary" type="button" onclick="closeRecordDetail(); openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}');">Submit update</button>`;
     actionsHtml += `<label class="btn btn-secondary" style="cursor:pointer">Attach document<input type="file" style="display:none" onchange="handleDocUpload(${escAttr(item.row)}, this)"></label>`;
   }
   if (appState.isAdmin) {

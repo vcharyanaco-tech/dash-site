@@ -138,7 +138,6 @@ function resetEditForm() {
   getEl('editDescription').value = '';
   getEl('editEntryDate').value = '';
   getEl('editAction').value = '';
-  getEl('editLastMeetingInstructions').value = '';
   getEl('editResponsibility').value = '';
   clearMultiSelect('editResponsibilityMs');
   getEl('editReviewDate').value = '';
@@ -183,7 +182,6 @@ function editItem(row) {
   getEl('editDescription').value = item.description || '';
   getEl('editEntryDate').value = item.entryDate || '';
   getEl('editAction').value = item.action || '';
-  getEl('editLastMeetingInstructions').value = item.lastMeetingInstructions || '';
   getEl('editResponsibility').value = item.responsibility || '';
   populateResponsibilitySelect();
   getEl('editReviewDate').value = item.reviewDate || '';
@@ -236,7 +234,6 @@ function saveEditModal(e) {
     description: descEl.value,
     entryDate: getEl('editEntryDate').value.trim(),
     action: getEl('editAction').value,
-    lastMeetingInstructions: getEl('editLastMeetingInstructions').value,
     responsibility: getEl('editResponsibility').value.trim(),
     reviewDate: getEl('editReviewDate').value.trim(),
     flagged: getEl('editFlagged').checked,

@@ -677,6 +677,7 @@ function dataRenumber_() {
   // intermediate collisions occur.
   var refs = [
     { table: 'submissions', col: 'card_row' },
+    { table: 'instruction_entries', col: 'card_row' },
     { table: 'tasks', col: 'record_row' },
     { table: 'documents', col: 'record_row' },
     { table: 'record_changes', col: 'record_row' },
@@ -705,6 +706,7 @@ function deleteRecord_(rowOrId, token) {
     // uuid-anchored child is never orphaned by a row-resolving bug.
     const rNum = row;
     db.prepare('DELETE FROM submissions WHERE card_row = ?').run(rNum);
+    db.prepare('DELETE FROM instruction_entries WHERE card_row = ?').run(rNum);
     db.prepare('DELETE FROM tasks WHERE record_row = ?').run(rNum);
     db.prepare('DELETE FROM documents WHERE record_row = ?').run(rNum);
     db.prepare('DELETE FROM record_changes WHERE record_row = ?').run(rNum);

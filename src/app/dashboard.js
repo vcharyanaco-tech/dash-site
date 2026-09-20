@@ -456,7 +456,7 @@ function buildCardHtml(item) {
 
   const actionsHtml = `
     <div class="submit-update-wrap">
-      <button class="btn btn-secondary btn-small" onclick="openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}')">Submit update</button>
+      ${!appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}')">Submit update</button>` : ''}
       ${subCount > 0 ? `<span class="submission-badge${subFlash ? ' flash' : ''}">${subCount}</span>` : ''}
     </div>
     ${appState.isEditor && updatesCount > 0 ? `<button class="btn btn-secondary btn-small toggle-updates-btn" data-updates-toggle="${escAttr(item.row)}" onclick="toggleCardUpdates('${escAttr(item.row)}', this)">${updatesHidden ? 'Show updates' : 'Hide updates'}</button>` : ''}
@@ -491,41 +491,206 @@ function buildCardHtml(item) {
 }
 
 /* ---------------------------------- Last meeting instructions ---------------------------------- */
+/* Full "submit update"-style field: dated text entries (timestamp + office,
+   optional attachments) shown in a modal list. Managed by admins/editors
+   only; records.last_meeting_instructions mirrors the joined entry text. */
 
 function openLastMeetingInstructions(row) {
   if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
   const item = (appState.items || []).find(function (i) { return Number(i.row) === Number(row); });
   if (!item) { showToast('Record not found.', 'error'); return; }
+  appState.lastMeetingRow = item.row;
+  appState.lastMeetingCardId = item.id;
+  appState.lastMeetingEditingId = '';
   getEl('lastMeetingInstructionsRow').value = item.row;
-  getEl('lastMeetingInstructionsText').value = item.lastMeetingInstructions || '';
+  getEl('lastMeetingInstructionsText').value = '';
+  const fileInput = getEl('lastMeetingAttachment');
+  if (fileInput) fileInput.value = '';
+  const fileName = getEl('lastMeetingAttachmentName');
+  if (fileName) fileName.textContent = '';
+  resetLastMeetingCompose();
   getEl('lastMeetingInstructionsRecord').textContent = 'Record #' + item.id + (item.sector ? ' · ' + item.sector : '');
   const status = getEl('lastMeetingInstructionsStatus');
   if (status) { status.textContent = ''; status.classList.remove('success', 'error'); }
   openDialog('lastMeetingInstructionsModal');
+  loadLastMeetingEntries();
   setTimeout(function () { getEl('lastMeetingInstructionsText').focus(); }, 0);
 }
 
 function closeLastMeetingInstructions() { closeDialog('lastMeetingInstructionsModal'); }
 
-function saveLastMeetingInstructions(e) {
-  e.preventDefault();
-  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
-  const row = Number(getEl('lastMeetingInstructionsRow').value || 0);
-  const item = (appState.items || []).find(function (i) { return Number(i.row) === row; });
-  if (!item) { showToast('Record not found.', 'error'); return; }
-  const updated = { row: item.row, id: item.id, recordId: item.recordId || '', sector: item.sector || '', description: item.description || '', entryDate: item.entryDate || '', action: item.action || '', lastMeetingInstructions: getEl('lastMeetingInstructionsText').value, responsibility: item.responsibility || '', reviewDate: item.reviewDate || '', flagged: !!item.flagged, links: item.links || {} };
-  const status = getEl('lastMeetingInstructionsStatus');
-  if (status) { status.textContent = 'Saving…'; status.classList.remove('success', 'error'); }
-  ApiService.updateItem(updated).then(function (data) {
-    appState.items = data.items || [];
-    appState.summary = data.summary || {};
-    appState.analytics = data.analytics || {};
-    closeLastMeetingInstructions();
-    renderDashboard(true);
-    showToast('Last meeting instructions saved', 'success');
+function resetLastMeetingCompose() {
+  getEl('submitLastMeetingBtn').textContent = 'Add entry';
+  getEl('cancelLastMeetingBtn').classList.add('hidden');
+}
+
+function loadLastMeetingEntries() {
+  ApiService.getInstructionEntries(Number(appState.lastMeetingRow)).then(function (list) {
+    appState.lastMeetingEntries = list || [];
+    renderLastMeetingEntries();
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
-    if (status) { status.textContent = err.message || 'Could not save instructions'; status.classList.add('error'); }
+    showToast('Could not load instructions: ' + (err.message || err), 'error');
+  });
+}
+
+function renderLastMeetingEntries() {
+  const list = appState.lastMeetingEntries || [];
+  getEl('lastMeetingCount').textContent = list.length + ' instruction entr' + (list.length === 1 ? 'y' : 'ies');
+  getEl('lastMeetingEntriesList').innerHTML = list.length
+    ? list.map(renderLastMeetingEntryCard).join('')
+    : '<div class="empty-state"><div class="empty-state-icon">' + svgIcon('inbox') + '</div><div class="empty-state-title">No instructions yet</div><div class="empty-state-subtitle">Add instructions from the last meeting for this record.</div></div>';
+}
+
+function renderLastMeetingEntryCard(s) {
+  const attachmentsHtml = (s.attachments || []).map(function (a) {
+    return '<div class="submission-attachment">📎 <a href="/api/files/' + encodeURIComponent(a.fileKey) + '?download=1" target="_blank" rel="noopener">' + escapeHtml(a.fileName) + '</a> <span class="form-status">(' + formatFileSize(a.size) + ')</span></div>';
+  }).join('');
+  const author = s.office ? s.office : (s.email ? s.email : 'Pre-existing');
+  const editBtn = appState.isEditor
+    ? `<button class="btn btn-secondary btn-small" type="button" onclick="editLastMeetingEntry('${escAttr(s.id)}')">Edit</button>`
+    : '';
+  const deleteBtn = appState.isEditor
+    ? `<button class="btn btn-danger btn-small" type="button" onclick="deleteLastMeetingEntry('${escAttr(s.id)}')">Delete</button>`
+    : '';
+  return `
+    <div class="submission-card">
+      <div class="submission-meta">
+        <span>${escapeHtml(author)}</span>
+        <span>${escapeHtml(s.createdAt || '')}</span>
+      </div>
+      <div class="submission-text preserve-whitespace">${renderSubmissionText(s.text || '')}</div>
+      ${attachmentsHtml ? '<div class="submission-attachments">' + attachmentsHtml + '</div>' : ''}
+      <div class="submission-actions">${editBtn}${deleteBtn}</div>
+    </div>`;
+}
+
+function editLastMeetingEntry(id) {
+  const s = (appState.lastMeetingEntries || []).find(function (x) { return String(x.id) === String(id); });
+  if (!s) return;
+  appState.lastMeetingEditingId = s.id;
+  getEl('lastMeetingInstructionsText').value = s.text;
+  const fileInput = getEl('lastMeetingAttachment');
+  if (fileInput) fileInput.value = '';
+  const fileName = getEl('lastMeetingAttachmentName');
+  if (fileName) fileName.textContent = '';
+  getEl('submitLastMeetingBtn').textContent = 'Save changes';
+  getEl('cancelLastMeetingBtn').classList.remove('hidden');
+  getEl('lastMeetingInstructionsStatus').textContent = 'Editing entry';
+}
+
+function cancelLastMeetingEdit() {
+  appState.lastMeetingEditingId = '';
+  getEl('lastMeetingInstructionsText').value = '';
+  const fileInput = getEl('lastMeetingAttachment');
+  if (fileInput) fileInput.value = '';
+  const fileName = getEl('lastMeetingAttachmentName');
+  if (fileName) fileName.textContent = '';
+  getEl('lastMeetingInstructionsStatus').textContent = '';
+  resetLastMeetingCompose();
+}
+
+function insertLastMeetingLink() {
+  const text = prompt('Link text:', 'Open link');
+  if (text === null) return;
+  const url = prompt('URL (https://…):', 'https://');
+  if (url === null) return;
+  const trimmed = String(url).trim();
+  if (!/^https?:\/\//i.test(trimmed)) { showToast('Please enter a valid http:// or https:// URL.', 'warning'); return; }
+  const ta = getEl('lastMeetingInstructionsText');
+  const link = '[' + String(text || trimmed).replace(/\]/g, '') + '](' + trimmed.replace(/[()]/g, '') + ')';
+  const start = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+  const end = ta.selectionEnd == null ? ta.value.length : ta.selectionEnd;
+  ta.value = ta.value.slice(0, start) + link + ta.value.slice(end);
+  ta.focus();
+  ta.selectionStart = ta.selectionEnd = start + link.length;
+}
+
+function handleLastMeetingAttachmentChange(input) {
+  const file = input && input.files && input.files[0];
+  const label = getEl('lastMeetingAttachmentName');
+  if (!file) { if (label) label.textContent = ''; return; }
+  if (file.size > 1024 * 1024) { input.value = ''; if (label) label.textContent = ''; getEl('lastMeetingInstructionsStatus').textContent = 'Attachment exceeds the 1 MB limit.'; return; }
+  if (label) label.textContent = file.name + ' (' + formatFileSize(file.size) + ')';
+}
+
+function submitLastMeetingEntry() {
+  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
+  const text = getEl('lastMeetingInstructionsText').value;
+  const fileInput = getEl('lastMeetingAttachment');
+  const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+  if (file && file.size > 1024 * 1024) { getEl('lastMeetingInstructionsStatus').textContent = 'Attachment exceeds the 1 MB limit.'; return; }
+  if (!text || !text.trim()) {
+    getEl('lastMeetingInstructionsStatus').textContent = 'Write the instructions before saving.';
+    return;
+  }
+  const editingId = appState.lastMeetingEditingId;
+  function buildAttachment(cb) {
+    if (!file) { cb(null); return; }
+    const reader = new FileReader();
+    reader.onload = function () { const result = String(reader.result || ''); cb({ fileName: file.name, mimeType: file.type || 'application/octet-stream', base64: result.split(',')[1] || '' }); };
+    reader.onerror = function () { getEl('lastMeetingInstructionsStatus').textContent = 'Could not read attachment.'; };
+    reader.readAsDataURL(file);
+  }
+  buildAttachment(function (attachment) {
+    if (editingId) {
+      showOverlay('Saving entry…');
+      ApiService.updateInstructionEntry(editingId, text, attachment).then(function (list) {
+        hideOverlay();
+        appState.lastMeetingEntries = list || [];
+        appState.lastMeetingEditingId = '';
+        getEl('lastMeetingInstructionsText').value = '';
+        resetLastMeetingCompose();
+        getEl('lastMeetingInstructionsStatus').textContent = '';
+        renderLastMeetingEntries();
+        showToast('Entry updated', 'success');
+        refreshData();
+      }).catch(function (err) {
+        hideOverlay();
+        if (handleServerFailure(err)) return;
+        getEl('lastMeetingInstructionsStatus').textContent = err.message || 'Could not save entry';
+      });
+    } else {
+      showOverlay('Adding entry…');
+      ApiService.addInstructionEntry(Number(appState.lastMeetingRow), appState.lastMeetingCardId, text, attachment).then(function (list) {
+        hideOverlay();
+        appState.lastMeetingEntries = list || [];
+        getEl('lastMeetingInstructionsText').value = '';
+        resetLastMeetingCompose();
+        getEl('lastMeetingInstructionsStatus').textContent = '';
+        renderLastMeetingEntries();
+        showToast('Entry added', 'success');
+        refreshData();
+      }).catch(function (err) {
+        hideOverlay();
+        if (handleServerFailure(err)) return;
+        getEl('lastMeetingInstructionsStatus').textContent = err.message || 'Could not add entry';
+      });
+    }
+  });
+}
+
+function deleteLastMeetingEntry(id) {
+  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
+  showConfirm({
+    title: 'Delete instruction entry',
+    message: 'Delete this instruction entry permanently?',
+    okLabel: 'Delete',
+    danger: true
+  }).then(function (ok) {
+    if (!ok) return;
+    showOverlay('Deleting entry…');
+    ApiService.deleteInstructionEntry(id).then(function (list) {
+      hideOverlay();
+      appState.lastMeetingEntries = list || [];
+      renderLastMeetingEntries();
+      showToast('Entry deleted', 'success');
+      refreshData();
+    }).catch(function (err) {
+      hideOverlay();
+      if (handleServerFailure(err)) return;
+      showToast('Could not delete entry: ' + (err.message || err), 'error');
+    });
   });
 }
 
@@ -642,7 +807,7 @@ function buildTableRowHtml(item) {
       : '';
   const actions = `
     <div class="row-actions">
-      <button class="btn btn-secondary btn-small" onclick="event.stopPropagation(); openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}')">Update${subCount ? ' (' + subCount + ')' : ''}</button>
+      ${!appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="event.stopPropagation(); openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}')">Update${subCount ? ' (' + subCount + ')' : ''}</button>` : ''}
       ${appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="event.stopPropagation(); toggleRowAi('${escAttr(item.row)}', this)">AI insight</button>` : ''}
       ${appState.isEditor && itemHasLink_(item) ? `<button class="btn btn-secondary btn-small" onclick="event.stopPropagation(); toggleRowLink('${escAttr(item.row)}', this)">Analyze link</button>` : ''}
       ${appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="event.stopPropagation(); editItem('${escAttr(item.row)}')">Edit</button>` : ''}

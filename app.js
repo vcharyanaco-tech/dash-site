@@ -509,6 +509,10 @@ getMyNotifications: function () { return apiCall_('getMyNotifications'); },
   deleteSubmission: function (submissionId) { return apiCall_('deleteSubmission', submissionId); },
   toggleSubmissionDisplay: function (submissionId) { return apiCall_('toggleSubmissionDisplay', submissionId); },
   markAllSubmissionsRead: function () { return apiCall_('markAllSubmissionsRead'); },
+  getInstructionEntries: function (cardRow) { return apiCall_('getInstructionEntries', cardRow); },
+  addInstructionEntry: function (cardRow, cardId, text, attachment) { return apiCall_('addInstructionEntry', cardRow, cardId, text, attachment || null); },
+  updateInstructionEntry: function (entryId, text, attachment) { return apiCall_('updateInstructionEntry', entryId, text, attachment || null); },
+  deleteInstructionEntry: function (entryId) { return apiCall_('deleteInstructionEntry', entryId); },
   getAuditEntries: function (limit) { return apiCall_('getAuditEntries', limit || 80); },
   adminDeleteAuditRows: function (rowNumbers) { return apiCall_('adminDeleteAuditRows', rowNumbers); },
   adminClearAudit: function () { return apiCall_('adminClearAudit'); },
@@ -4133,7 +4137,7 @@ function buildCardHtml(item) {
 
   const actionsHtml = `
     <div class="submit-update-wrap">
-      <button class="btn btn-secondary btn-small" onclick="openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}')">Submit update</button>
+      ${!appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}')">Submit update</button>` : ''}
       ${subCount > 0 ? `<span class="submission-badge${subFlash ? ' flash' : ''}">${subCount}</span>` : ''}
     </div>
     ${appState.isEditor && updatesCount > 0 ? `<button class="btn btn-secondary btn-small toggle-updates-btn" data-updates-toggle="${escAttr(item.row)}" onclick="toggleCardUpdates('${escAttr(item.row)}', this)">${updatesHidden ? 'Show updates' : 'Hide updates'}</button>` : ''}
@@ -4168,41 +4172,206 @@ function buildCardHtml(item) {
 }
 
 /* ---------------------------------- Last meeting instructions ---------------------------------- */
+/* Full "submit update"-style field: dated text entries (timestamp + office,
+   optional attachments) shown in a modal list. Managed by admins/editors
+   only; records.last_meeting_instructions mirrors the joined entry text. */
 
 function openLastMeetingInstructions(row) {
   if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
   const item = (appState.items || []).find(function (i) { return Number(i.row) === Number(row); });
   if (!item) { showToast('Record not found.', 'error'); return; }
+  appState.lastMeetingRow = item.row;
+  appState.lastMeetingCardId = item.id;
+  appState.lastMeetingEditingId = '';
   getEl('lastMeetingInstructionsRow').value = item.row;
-  getEl('lastMeetingInstructionsText').value = item.lastMeetingInstructions || '';
+  getEl('lastMeetingInstructionsText').value = '';
+  const fileInput = getEl('lastMeetingAttachment');
+  if (fileInput) fileInput.value = '';
+  const fileName = getEl('lastMeetingAttachmentName');
+  if (fileName) fileName.textContent = '';
+  resetLastMeetingCompose();
   getEl('lastMeetingInstructionsRecord').textContent = 'Record #' + item.id + (item.sector ? ' · ' + item.sector : '');
   const status = getEl('lastMeetingInstructionsStatus');
   if (status) { status.textContent = ''; status.classList.remove('success', 'error'); }
   openDialog('lastMeetingInstructionsModal');
+  loadLastMeetingEntries();
   setTimeout(function () { getEl('lastMeetingInstructionsText').focus(); }, 0);
 }
 
 function closeLastMeetingInstructions() { closeDialog('lastMeetingInstructionsModal'); }
 
-function saveLastMeetingInstructions(e) {
-  e.preventDefault();
-  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
-  const row = Number(getEl('lastMeetingInstructionsRow').value || 0);
-  const item = (appState.items || []).find(function (i) { return Number(i.row) === row; });
-  if (!item) { showToast('Record not found.', 'error'); return; }
-  const updated = { row: item.row, id: item.id, recordId: item.recordId || '', sector: item.sector || '', description: item.description || '', entryDate: item.entryDate || '', action: item.action || '', lastMeetingInstructions: getEl('lastMeetingInstructionsText').value, responsibility: item.responsibility || '', reviewDate: item.reviewDate || '', flagged: !!item.flagged, links: item.links || {} };
-  const status = getEl('lastMeetingInstructionsStatus');
-  if (status) { status.textContent = 'Saving…'; status.classList.remove('success', 'error'); }
-  ApiService.updateItem(updated).then(function (data) {
-    appState.items = data.items || [];
-    appState.summary = data.summary || {};
-    appState.analytics = data.analytics || {};
-    closeLastMeetingInstructions();
-    renderDashboard(true);
-    showToast('Last meeting instructions saved', 'success');
+function resetLastMeetingCompose() {
+  getEl('submitLastMeetingBtn').textContent = 'Add entry';
+  getEl('cancelLastMeetingBtn').classList.add('hidden');
+}
+
+function loadLastMeetingEntries() {
+  ApiService.getInstructionEntries(Number(appState.lastMeetingRow)).then(function (list) {
+    appState.lastMeetingEntries = list || [];
+    renderLastMeetingEntries();
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
-    if (status) { status.textContent = err.message || 'Could not save instructions'; status.classList.add('error'); }
+    showToast('Could not load instructions: ' + (err.message || err), 'error');
+  });
+}
+
+function renderLastMeetingEntries() {
+  const list = appState.lastMeetingEntries || [];
+  getEl('lastMeetingCount').textContent = list.length + ' instruction entr' + (list.length === 1 ? 'y' : 'ies');
+  getEl('lastMeetingEntriesList').innerHTML = list.length
+    ? list.map(renderLastMeetingEntryCard).join('')
+    : '<div class="empty-state"><div class="empty-state-icon">' + svgIcon('inbox') + '</div><div class="empty-state-title">No instructions yet</div><div class="empty-state-subtitle">Add instructions from the last meeting for this record.</div></div>';
+}
+
+function renderLastMeetingEntryCard(s) {
+  const attachmentsHtml = (s.attachments || []).map(function (a) {
+    return '<div class="submission-attachment">📎 <a href="/api/files/' + encodeURIComponent(a.fileKey) + '?download=1" target="_blank" rel="noopener">' + escapeHtml(a.fileName) + '</a> <span class="form-status">(' + formatFileSize(a.size) + ')</span></div>';
+  }).join('');
+  const author = s.office ? s.office : (s.email ? s.email : 'Pre-existing');
+  const editBtn = appState.isEditor
+    ? `<button class="btn btn-secondary btn-small" type="button" onclick="editLastMeetingEntry('${escAttr(s.id)}')">Edit</button>`
+    : '';
+  const deleteBtn = appState.isEditor
+    ? `<button class="btn btn-danger btn-small" type="button" onclick="deleteLastMeetingEntry('${escAttr(s.id)}')">Delete</button>`
+    : '';
+  return `
+    <div class="submission-card">
+      <div class="submission-meta">
+        <span>${escapeHtml(author)}</span>
+        <span>${escapeHtml(s.createdAt || '')}</span>
+      </div>
+      <div class="submission-text preserve-whitespace">${renderSubmissionText(s.text || '')}</div>
+      ${attachmentsHtml ? '<div class="submission-attachments">' + attachmentsHtml + '</div>' : ''}
+      <div class="submission-actions">${editBtn}${deleteBtn}</div>
+    </div>`;
+}
+
+function editLastMeetingEntry(id) {
+  const s = (appState.lastMeetingEntries || []).find(function (x) { return String(x.id) === String(id); });
+  if (!s) return;
+  appState.lastMeetingEditingId = s.id;
+  getEl('lastMeetingInstructionsText').value = s.text;
+  const fileInput = getEl('lastMeetingAttachment');
+  if (fileInput) fileInput.value = '';
+  const fileName = getEl('lastMeetingAttachmentName');
+  if (fileName) fileName.textContent = '';
+  getEl('submitLastMeetingBtn').textContent = 'Save changes';
+  getEl('cancelLastMeetingBtn').classList.remove('hidden');
+  getEl('lastMeetingInstructionsStatus').textContent = 'Editing entry';
+}
+
+function cancelLastMeetingEdit() {
+  appState.lastMeetingEditingId = '';
+  getEl('lastMeetingInstructionsText').value = '';
+  const fileInput = getEl('lastMeetingAttachment');
+  if (fileInput) fileInput.value = '';
+  const fileName = getEl('lastMeetingAttachmentName');
+  if (fileName) fileName.textContent = '';
+  getEl('lastMeetingInstructionsStatus').textContent = '';
+  resetLastMeetingCompose();
+}
+
+function insertLastMeetingLink() {
+  const text = prompt('Link text:', 'Open link');
+  if (text === null) return;
+  const url = prompt('URL (https://…):', 'https://');
+  if (url === null) return;
+  const trimmed = String(url).trim();
+  if (!/^https?:\/\//i.test(trimmed)) { showToast('Please enter a valid http:// or https:// URL.', 'warning'); return; }
+  const ta = getEl('lastMeetingInstructionsText');
+  const link = '[' + String(text || trimmed).replace(/\]/g, '') + '](' + trimmed.replace(/[()]/g, '') + ')';
+  const start = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+  const end = ta.selectionEnd == null ? ta.value.length : ta.selectionEnd;
+  ta.value = ta.value.slice(0, start) + link + ta.value.slice(end);
+  ta.focus();
+  ta.selectionStart = ta.selectionEnd = start + link.length;
+}
+
+function handleLastMeetingAttachmentChange(input) {
+  const file = input && input.files && input.files[0];
+  const label = getEl('lastMeetingAttachmentName');
+  if (!file) { if (label) label.textContent = ''; return; }
+  if (file.size > 1024 * 1024) { input.value = ''; if (label) label.textContent = ''; getEl('lastMeetingInstructionsStatus').textContent = 'Attachment exceeds the 1 MB limit.'; return; }
+  if (label) label.textContent = file.name + ' (' + formatFileSize(file.size) + ')';
+}
+
+function submitLastMeetingEntry() {
+  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
+  const text = getEl('lastMeetingInstructionsText').value;
+  const fileInput = getEl('lastMeetingAttachment');
+  const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+  if (file && file.size > 1024 * 1024) { getEl('lastMeetingInstructionsStatus').textContent = 'Attachment exceeds the 1 MB limit.'; return; }
+  if (!text || !text.trim()) {
+    getEl('lastMeetingInstructionsStatus').textContent = 'Write the instructions before saving.';
+    return;
+  }
+  const editingId = appState.lastMeetingEditingId;
+  function buildAttachment(cb) {
+    if (!file) { cb(null); return; }
+    const reader = new FileReader();
+    reader.onload = function () { const result = String(reader.result || ''); cb({ fileName: file.name, mimeType: file.type || 'application/octet-stream', base64: result.split(',')[1] || '' }); };
+    reader.onerror = function () { getEl('lastMeetingInstructionsStatus').textContent = 'Could not read attachment.'; };
+    reader.readAsDataURL(file);
+  }
+  buildAttachment(function (attachment) {
+    if (editingId) {
+      showOverlay('Saving entry…');
+      ApiService.updateInstructionEntry(editingId, text, attachment).then(function (list) {
+        hideOverlay();
+        appState.lastMeetingEntries = list || [];
+        appState.lastMeetingEditingId = '';
+        getEl('lastMeetingInstructionsText').value = '';
+        resetLastMeetingCompose();
+        getEl('lastMeetingInstructionsStatus').textContent = '';
+        renderLastMeetingEntries();
+        showToast('Entry updated', 'success');
+        refreshData();
+      }).catch(function (err) {
+        hideOverlay();
+        if (handleServerFailure(err)) return;
+        getEl('lastMeetingInstructionsStatus').textContent = err.message || 'Could not save entry';
+      });
+    } else {
+      showOverlay('Adding entry…');
+      ApiService.addInstructionEntry(Number(appState.lastMeetingRow), appState.lastMeetingCardId, text, attachment).then(function (list) {
+        hideOverlay();
+        appState.lastMeetingEntries = list || [];
+        getEl('lastMeetingInstructionsText').value = '';
+        resetLastMeetingCompose();
+        getEl('lastMeetingInstructionsStatus').textContent = '';
+        renderLastMeetingEntries();
+        showToast('Entry added', 'success');
+        refreshData();
+      }).catch(function (err) {
+        hideOverlay();
+        if (handleServerFailure(err)) return;
+        getEl('lastMeetingInstructionsStatus').textContent = err.message || 'Could not add entry';
+      });
+    }
+  });
+}
+
+function deleteLastMeetingEntry(id) {
+  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
+  showConfirm({
+    title: 'Delete instruction entry',
+    message: 'Delete this instruction entry permanently?',
+    okLabel: 'Delete',
+    danger: true
+  }).then(function (ok) {
+    if (!ok) return;
+    showOverlay('Deleting entry…');
+    ApiService.deleteInstructionEntry(id).then(function (list) {
+      hideOverlay();
+      appState.lastMeetingEntries = list || [];
+      renderLastMeetingEntries();
+      showToast('Entry deleted', 'success');
+      refreshData();
+    }).catch(function (err) {
+      hideOverlay();
+      if (handleServerFailure(err)) return;
+      showToast('Could not delete entry: ' + (err.message || err), 'error');
+    });
   });
 }
 
@@ -4319,7 +4488,7 @@ function buildTableRowHtml(item) {
       : '';
   const actions = `
     <div class="row-actions">
-      <button class="btn btn-secondary btn-small" onclick="event.stopPropagation(); openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}')">Update${subCount ? ' (' + subCount + ')' : ''}</button>
+      ${!appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="event.stopPropagation(); openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}')">Update${subCount ? ' (' + subCount + ')' : ''}</button>` : ''}
       ${appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="event.stopPropagation(); toggleRowAi('${escAttr(item.row)}', this)">AI insight</button>` : ''}
       ${appState.isEditor && itemHasLink_(item) ? `<button class="btn btn-secondary btn-small" onclick="event.stopPropagation(); toggleRowLink('${escAttr(item.row)}', this)">Analyze link</button>` : ''}
       ${appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="event.stopPropagation(); editItem('${escAttr(item.row)}')">Edit</button>` : ''}
@@ -4941,6 +5110,9 @@ function buildPrintPage(opts) {
   }
   .print-toolbar button.active { background: #1f5c2e; color: #fff; }
   .print-toolbar .print-btn { background: #1f5c2e; color: #fff; margin-left: auto; }
+  .print-toolbar label.print-toggle { color: #1f5c2e; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .print-links-block { break-inside: avoid; page-break-inside: avoid; }
+  body.no-links .print-links-block { display: none !important; }
   @media print { .print-toolbar { display: none; } }
   .report-header { border-bottom: 3px solid #1f5c2e; padding-bottom: 14px; margin-bottom: 20px; }
   .report-header h1 { margin: 0; font-size: 26px; color: #1f5c2e; letter-spacing: 0.2px; }
@@ -4968,6 +5140,7 @@ function buildPrintPage(opts) {
     <span class="toolbar-title">Print layout</span>
     <button type="button" id="btnOrientV" class="${initialOrient === 'portrait' ? 'active' : ''}" onclick="setOrient('portrait')">Vertical</button>
     <button type="button" id="btnOrientH" class="${initialOrient === 'landscape' ? 'active' : ''}" onclick="setOrient('landscape')">Horizontal</button>
+    <label class="print-toggle" title="Include the hyperlink data table on each record"><input type="checkbox" id="toggleLinks" checked onchange="toggleLinks(this.checked)"> Include hyperlink data</label>
     <button type="button" class="print-btn" onclick="doPrint()">Print</button>
   </div>
   <style id="pageRule">@page { size: ${opts.landscape ? 'A4 landscape' : 'A4 portrait'}; margin: 16mm; }</style>
@@ -4984,6 +5157,9 @@ function buildPrintPage(opts) {
       document.getElementById('btnOrientV').classList.toggle('active', o === 'portrait');
       document.getElementById('btnOrientH').classList.toggle('active', o === 'landscape');
     }
+    function toggleLinks(on) {
+      document.body.classList.toggle('no-links', !on);
+    }
     function doPrint() {
       window.focus();
       setTimeout(function () { window.print(); }, 60);
@@ -4991,6 +5167,43 @@ function buildPrintPage(opts) {
   <\/script>
 </body>
 </html>`;
+}
+
+/* Hyperlink data table for print: a compact Field / Link text / URL table
+   drawn from item.links (per-field array form) with a fallback to the legacy
+   linkUrls/linkTexts shape. Returns '' when the record has no links. */
+function printLinksHtml_(item) {
+  const labelFor = function (key) {
+    const map = { action: 'Action', description: 'Description', sector: 'Sector', entryDate: 'Entry Date', responsibility: 'Responsibility', reviewDate: 'Review Date', lastMeetingInstructions: 'Last meeting instructions' };
+    return map[key] || String(key || '').replace(/([A-Z])/g, ' $1').replace(/^./, function (c) { return c.toUpperCase(); });
+  };
+  const rows = [];
+  const links = (item && item.links) || {};
+  Object.keys(links).forEach(function (key) {
+    const list = links[key];
+    if (Array.isArray(list)) {
+      list.forEach(function (l) {
+        if (l && l.url) rows.push({ label: labelFor(key), text: (l.text || l.url), url: l.url });
+      });
+    } else if (list && list.url) {
+      rows.push({ label: labelFor(key), text: (list.text || list.url), url: list.url });
+    }
+  });
+  if (!rows.length) {
+    const urls = (item && item.linkUrls) || {};
+    const texts = (item && item.linkTexts) || {};
+    Object.keys(urls).forEach(function (key) {
+      rows.push({ label: labelFor(key), text: ((texts && texts[key]) || urls[key]), url: urls[key] });
+    });
+  }
+  if (!rows.length) return '';
+  return `<div class="print-links-block"><h2 style="margin:20px 0 10px;font-size:16px;color:#1f5c2e;">Hyperlinks</h2><div class="sub-block">
+    <table style="margin:0"><thead><tr><th style="width:22%">Field</th><th style="width:58%">Link text</th><th>URL</th></tr></thead><tbody>
+      ${rows.map(function (r) {
+        return '<tr><td>' + escapeHtml(r.label) + '</td><td>' + escapeHtml(r.text) + '</td><td><a href="' + escapeHtml(r.url) + '" target="_blank" rel="noopener">' + escapeHtml(r.url) + '</a></td></tr>';
+      }).join('')}
+    </tbody></table>
+  </div></div>`;
 }
 
 function groupSubmissionsByCard_(list) {
@@ -5041,7 +5254,7 @@ function printCard(row, includeSubmissions) {
       subtitle: (useSubs ? 'with submissions' : 'without submissions') + ' &middot; Record #' + item.id + (item.sector ? ' &middot; ' + item.sector : ''),
       body: `<div class="record-print-block"><table class="fields-table">
         <tbody>${fields || '<tr><td colspan="2" class="empty">No details available.</td></tr>'}</tbody>
-      </table>${subsHtml}</div>`
+      </table>${printLinksHtml_(item)}${subsHtml}</div>`
     }));
   };
 
@@ -5090,7 +5303,7 @@ function printReport(scope, includeSubmissions) {
           <tr><th>Last Meeting Instructions</th><td class="preserve-whitespace">${escapeHtml(item.lastMeetingInstructions || '')}</td></tr>
           <tr><th>Responsibility</th><td>${escapeHtml(item.responsibility)}</td></tr>
           <tr><th>Review</th><td>${escapeHtml(item.reviewDate)}</td></tr>
-        </tbody></table>${subsHtml}</div>`;
+        </tbody></table>${printLinksHtml_(item)}${subsHtml}</div>`;
       }).join('');
     } else {
       const rowsHtml = items.map(function (item) {
@@ -6187,6 +6400,9 @@ function openRecordDetail(row) {
 
   /* ---- actions ---- */
   let actionsHtml = '';
+  if (!appState.isEditor) {
+    actionsHtml += `<button class="btn btn-secondary" type="button" onclick="closeRecordDetail(); openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}');">Submit update</button>`;
+  }
   if (appState.isEditor) {
     actionsHtml += `<button class="btn btn-primary" type="button" onclick="closeRecordDetail(); editItem('${escAttr(item.row)}');">Edit</button>`;
   }
@@ -6194,9 +6410,7 @@ function openRecordDetail(row) {
     actionsHtml += `<button class="btn btn-secondary" data-updates-toggle="${escAttr(item.row)}" type="button" onclick="toggleCardUpdates('${escAttr(item.row)}', this)">${detailUpdatesHidden ? 'Show updates' : 'Hide updates'}</button>`;
   }
   if (appState.isEditor) {
-    actionsHtml += `<button class="btn btn-secondary" type="button" onclick="closeRecordDetail(); openEditModal(${escAttr(item.row)});">Edit</button>`;
     actionsHtml += `<button class="btn btn-secondary" type="button" onclick="closeRecordDetail(); openTaskModal(${escAttr(item.row)});">Create task</button>`;
-    actionsHtml += `<button class="btn btn-secondary" type="button" onclick="closeRecordDetail(); openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}');">Submit update</button>`;
     actionsHtml += `<label class="btn btn-secondary" style="cursor:pointer">Attach document<input type="file" style="display:none" onchange="handleDocUpload(${escAttr(item.row)}, this)"></label>`;
   }
   if (appState.isAdmin) {
@@ -7953,7 +8167,6 @@ function resetEditForm() {
   getEl('editDescription').value = '';
   getEl('editEntryDate').value = '';
   getEl('editAction').value = '';
-  getEl('editLastMeetingInstructions').value = '';
   getEl('editResponsibility').value = '';
   clearMultiSelect('editResponsibilityMs');
   getEl('editReviewDate').value = '';
@@ -7998,7 +8211,6 @@ function editItem(row) {
   getEl('editDescription').value = item.description || '';
   getEl('editEntryDate').value = item.entryDate || '';
   getEl('editAction').value = item.action || '';
-  getEl('editLastMeetingInstructions').value = item.lastMeetingInstructions || '';
   getEl('editResponsibility').value = item.responsibility || '';
   populateResponsibilitySelect();
   getEl('editReviewDate').value = item.reviewDate || '';
@@ -8051,7 +8263,6 @@ function saveEditModal(e) {
     description: descEl.value,
     entryDate: getEl('editEntryDate').value.trim(),
     action: getEl('editAction').value,
-    lastMeetingInstructions: getEl('editLastMeetingInstructions').value,
     responsibility: getEl('editResponsibility').value.trim(),
     reviewDate: getEl('editReviewDate').value.trim(),
     flagged: getEl('editFlagged').checked,

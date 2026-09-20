@@ -189,7 +189,8 @@ function resolveDocumentFile(fileKey) {
   const key = String(fileKey || '');
   const row = db.prepare('SELECT * FROM documents WHERE file_key = ?').get(key);
   const submissionRow = row ? null : db.prepare('SELECT * FROM submission_attachments WHERE file_key = ?').get(key);
-  const sourceRow = row || submissionRow;
+  const instructionRow = row || submissionRow ? null : db.prepare('SELECT * FROM instruction_attachments WHERE file_key = ?').get(key);
+  const sourceRow = row || submissionRow || instructionRow;
   if (!sourceRow) return null;
   auth.requireLogin(arguments.length > 1 ? arguments[1] : '');
   if (!/^[a-f0-9]{32}$/i.test(String(sourceRow.file_key || ''))) return null;
@@ -202,7 +203,9 @@ function resolveDocumentFile(fileKey) {
       id: String(sourceRow.id || ''), recordRow: 0, recordId: '', fileName: String(sourceRow.file_name || ''),
       driveFileId: String(sourceRow.file_key || ''), mimeType: String(sourceRow.mime_type || ''),
       size: Number(sourceRow.size) || 0, uploadedBy: String(sourceRow.uploaded_by || '').toLowerCase(),
-      uploadedAt: Number(sourceRow.uploaded_at || 0), keep: 0, isSubmissionAttachment: true
+      uploadedAt: Number(sourceRow.uploaded_at || 0), keep: 0,
+      isSubmissionAttachment: !!submissionRow,
+      isInstructionAttachment: !!instructionRow
     }
   };
 }

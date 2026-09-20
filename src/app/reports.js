@@ -71,6 +71,9 @@ function buildPrintPage(opts) {
   }
   .print-toolbar button.active { background: #1f5c2e; color: #fff; }
   .print-toolbar .print-btn { background: #1f5c2e; color: #fff; margin-left: auto; }
+  .print-toolbar label.print-toggle { color: #1f5c2e; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .print-links-block { break-inside: avoid; page-break-inside: avoid; }
+  body.no-links .print-links-block { display: none !important; }
   @media print { .print-toolbar { display: none; } }
   .report-header { border-bottom: 3px solid #1f5c2e; padding-bottom: 14px; margin-bottom: 20px; }
   .report-header h1 { margin: 0; font-size: 26px; color: #1f5c2e; letter-spacing: 0.2px; }
@@ -98,6 +101,7 @@ function buildPrintPage(opts) {
     <span class="toolbar-title">Print layout</span>
     <button type="button" id="btnOrientV" class="${initialOrient === 'portrait' ? 'active' : ''}" onclick="setOrient('portrait')">Vertical</button>
     <button type="button" id="btnOrientH" class="${initialOrient === 'landscape' ? 'active' : ''}" onclick="setOrient('landscape')">Horizontal</button>
+    <label class="print-toggle" title="Include the hyperlink data table on each record"><input type="checkbox" id="toggleLinks" checked onchange="toggleLinks(this.checked)"> Include hyperlink data</label>
     <button type="button" class="print-btn" onclick="doPrint()">Print</button>
   </div>
   <style id="pageRule">@page { size: ${opts.landscape ? 'A4 landscape' : 'A4 portrait'}; margin: 16mm; }</style>
@@ -114,6 +118,9 @@ function buildPrintPage(opts) {
       document.getElementById('btnOrientV').classList.toggle('active', o === 'portrait');
       document.getElementById('btnOrientH').classList.toggle('active', o === 'landscape');
     }
+    function toggleLinks(on) {
+      document.body.classList.toggle('no-links', !on);
+    }
     function doPrint() {
       window.focus();
       setTimeout(function () { window.print(); }, 60);
@@ -121,6 +128,43 @@ function buildPrintPage(opts) {
   <\/script>
 </body>
 </html>`;
+}
+
+/* Hyperlink data table for print: a compact Field / Link text / URL table
+   drawn from item.links (per-field array form) with a fallback to the legacy
+   linkUrls/linkTexts shape. Returns '' when the record has no links. */
+function printLinksHtml_(item) {
+  const labelFor = function (key) {
+    const map = { action: 'Action', description: 'Description', sector: 'Sector', entryDate: 'Entry Date', responsibility: 'Responsibility', reviewDate: 'Review Date', lastMeetingInstructions: 'Last meeting instructions' };
+    return map[key] || String(key || '').replace(/([A-Z])/g, ' $1').replace(/^./, function (c) { return c.toUpperCase(); });
+  };
+  const rows = [];
+  const links = (item && item.links) || {};
+  Object.keys(links).forEach(function (key) {
+    const list = links[key];
+    if (Array.isArray(list)) {
+      list.forEach(function (l) {
+        if (l && l.url) rows.push({ label: labelFor(key), text: (l.text || l.url), url: l.url });
+      });
+    } else if (list && list.url) {
+      rows.push({ label: labelFor(key), text: (list.text || list.url), url: list.url });
+    }
+  });
+  if (!rows.length) {
+    const urls = (item && item.linkUrls) || {};
+    const texts = (item && item.linkTexts) || {};
+    Object.keys(urls).forEach(function (key) {
+      rows.push({ label: labelFor(key), text: ((texts && texts[key]) || urls[key]), url: urls[key] });
+    });
+  }
+  if (!rows.length) return '';
+  return `<div class="print-links-block"><h2 style="margin:20px 0 10px;font-size:16px;color:#1f5c2e;">Hyperlinks</h2><div class="sub-block">
+    <table style="margin:0"><thead><tr><th style="width:22%">Field</th><th style="width:58%">Link text</th><th>URL</th></tr></thead><tbody>
+      ${rows.map(function (r) {
+        return '<tr><td>' + escapeHtml(r.label) + '</td><td>' + escapeHtml(r.text) + '</td><td><a href="' + escapeHtml(r.url) + '" target="_blank" rel="noopener">' + escapeHtml(r.url) + '</a></td></tr>';
+      }).join('')}
+    </tbody></table>
+  </div></div>`;
 }
 
 function groupSubmissionsByCard_(list) {
@@ -171,7 +215,7 @@ function printCard(row, includeSubmissions) {
       subtitle: (useSubs ? 'with submissions' : 'without submissions') + ' &middot; Record #' + item.id + (item.sector ? ' &middot; ' + item.sector : ''),
       body: `<div class="record-print-block"><table class="fields-table">
         <tbody>${fields || '<tr><td colspan="2" class="empty">No details available.</td></tr>'}</tbody>
-      </table>${subsHtml}</div>`
+      </table>${printLinksHtml_(item)}${subsHtml}</div>`
     }));
   };
 
@@ -220,7 +264,7 @@ function printReport(scope, includeSubmissions) {
           <tr><th>Last Meeting Instructions</th><td class="preserve-whitespace">${escapeHtml(item.lastMeetingInstructions || '')}</td></tr>
           <tr><th>Responsibility</th><td>${escapeHtml(item.responsibility)}</td></tr>
           <tr><th>Review</th><td>${escapeHtml(item.reviewDate)}</td></tr>
-        </tbody></table>${subsHtml}</div>`;
+        </tbody></table>${printLinksHtml_(item)}${subsHtml}</div>`;
       }).join('');
     } else {
       const rowsHtml = items.map(function (item) {

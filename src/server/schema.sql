@@ -93,6 +93,35 @@ CREATE TABLE IF NOT EXISTS submission_attachments (
 );
 CREATE INDEX IF NOT EXISTS idx_submission_attachments_submission ON submission_attachments(submission_id);
 
+-- Last-meeting-instruction entries. One record may carry several dated
+-- instruction entries authored by an admin/editor (the "submit update"-style
+-- field). records.last_meeting_instructions mirrors the joined entry text so
+-- cards, presentation slides and print keep working off the plain column.
+CREATE TABLE IF NOT EXISTS instruction_entries (
+  id TEXT PRIMARY KEY,
+  card_row INTEGER NOT NULL DEFAULT 0,
+  card_id TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  text TEXT NOT NULL DEFAULT '',
+  created_at INTEGER,
+  updated_at INTEGER
+);
+
+-- Files attached directly to instruction entries. Kept separate so entry
+-- attachments follow the entry rather than the parent record.
+CREATE TABLE IF NOT EXISTS instruction_attachments (
+  id TEXT PRIMARY KEY,
+  entry_id TEXT NOT NULL,
+  file_name TEXT NOT NULL DEFAULT '',
+  file_key TEXT NOT NULL DEFAULT '',
+  mime_type TEXT NOT NULL DEFAULT '',
+  size INTEGER NOT NULL DEFAULT 0,
+  uploaded_by TEXT NOT NULL DEFAULT '',
+  uploaded_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_instruction_entries_card_row ON instruction_entries(card_row);
+CREATE INDEX IF NOT EXISTS idx_instruction_attachments_entry ON instruction_attachments(entry_id);
+
 -- Tasks (mirrors the hidden 'Tasks' sheet).
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY,

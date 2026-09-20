@@ -42,7 +42,8 @@ const AUTH_ARG_INDEX = Object.freeze({
   deleteDocument: 1, setDocumentKeep: 2, getSubmissions: 0,
   addSubmission: 4, updateSubmission: 3, lockSubmission: 1,
   unlockSubmission: 1, deleteSubmission: 1, markAllSubmissionsRead: 0,
-  toggleSubmissionDisplay: 1, adminDeleteAuditRows: 1, adminClearAudit: 0,
+  toggleSubmissionDisplay: 1,
+  getInstructionEntries: 1, addInstructionEntry: 4, updateInstructionEntry: 3, deleteInstructionEntry: 1, adminDeleteAuditRows: 1, adminClearAudit: 0,
   getAuditEntries: 1, getRecordHistory: 1,
   exportReviewCalendarIcs: 0, sendWhatsAppReviewReminders: 0,
   getAiInsights: 0, getCardAiInsight: 0, getLinkContentAiInsight: 0,
@@ -284,6 +285,7 @@ app.post(API_PREFIX, async function (req, res) {
     // Broadcast real-time SSE events for data-mutating functions
     const dataFns = ['addItem', 'updateItem', 'deleteItem', 'markReviewDone', 'markReviewNotDone',
       'addSubmission', 'updateSubmission', 'deleteSubmission', 'toggleSubmissionDisplay',
+      'addInstructionEntry', 'updateInstructionEntry', 'deleteInstructionEntry',
       'createTask', 'updateTask', 'deleteTask', 'setRecordDisplay', 'login'];
     if (dataFns.indexOf(fn) !== -1 && result && result.success !== false) {
       broadcast(fn === 'login' ? 'userLoggedIn' : 'dataChanged', { fn: fn });
@@ -428,6 +430,25 @@ const VALIDATORS = {
   },
   addSubmission: function (args) {
     if (args.length < 5) return 'addSubmission requires (cardRow, cardId, text, attachment, token)';
+    return null;
+  },
+  addInstructionEntry: function (args) {
+    if (args.length < 5) return 'addInstructionEntry requires (cardRow, cardId, text, attachment, token)';
+    return null;
+  },
+  updateInstructionEntry: function (args) {
+    if (args.length < 4) return 'updateInstructionEntry requires (entryId, text, attachment, token)';
+    if (!args[0] && args[0] !== 0) return 'entryId is required';
+    if (typeof args[1] !== 'string' || !args[1].trim()) return 'text is required';
+    return null;
+  },
+  deleteInstructionEntry: function (args) {
+    if (args.length < 2) return 'deleteInstructionEntry requires (entryId, token)';
+    if (!args[0] && args[0] !== 0) return 'entryId is required';
+    return null;
+  },
+  getInstructionEntries: function (args) {
+    if (args.length < 2) return 'getInstructionEntries requires (cardRow, token)';
     return null;
   },
   reconcileRecordOrder: function (args) {
