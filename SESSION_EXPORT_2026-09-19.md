@@ -245,6 +245,45 @@ Re-checked after the earlier pending report: Web Push is fully implemented
 `enablePush`/`disablePush` in `init.js`; notification preferences + center in
 `app.html`/`session.js`). No work required.
 
+## Part 16 — Cloudflare Worker / Infrastructure — REVIEWED + HARDENED
+
+Reviewed `src/worker/worker.js` against every Part 16 focus area
+(CORS, security headers, rate limits, cold starts, memory behavior,
+failure handling, origin timeouts, retry behavior). Routing model already
+matches the preferred Cloudflare → static / Cloudflare → API → Node → SQLite
+shape, and enterprise/business logic is kept at the Worker only where
+edge-only secrets require it (AI insights, WhatsApp, SMTP relay, KV backup
+bridge). No infinite retry loops existed or were introduced.
+
+Findings + fixes:
+
+- **Memory behavior (fixed).** Proxied backend responses were buffered with
+  `resp.arrayBuffer()`, double-holding large uploads/downloads on the 128 MB
+  isolate heap. Non-SSE forwards now stream `resp.body` straight through
+  (SSE already did).
+- **Rate limits (comment/code mismatch fixed).** `/api/health` was documented
+  as exempt from the per-path caps but `rateLimitKey_` still returned
+  `get-api` for it; keep-alive/live-check probes could be throttled by a busy
+  IP. It is now explicitly exempt (general `all` flood cap still applies).
+- **Security headers (hardened).** `applySecurityHeaders` now also sets
+  `Referrer-Policy` and adds `Strict-Transport-Security: max-age=31536000` (no
+  `includeSubDomains`, so cleartext aliases don't break). CORS remains
+  allow-list-only.
+- **Edge caching × CORS (fixed).** Static assets are the only cacheable
+  responses and carry an origin-dependent `Access-Control-Allow-Origin`; they
+  now send `Vary: Origin` so a cached copy is never reused for a different
+  Origin with the wrong CORS exposure.
+- **Failure handling (net added).** Top-level `try/catch` around routing
+  returns a single JSON 500 for API/macros/static paths and a text 500
+  otherwise — never a retry loop.
+- Confirmed, unchanged: 180 s `AbortSignal.timeout` on bounded origin fetches
+  (SSE intentionally unbounded), 502/503/504 → one clean `503 maintenance`
+  response with `Retry-After: 15` (frontend retries), scheduled jobs retry at
+  most once per day and are deduped server-side.
+
+Verified: `node --check` pass; `wrangler deploy --dry-run` bundles 28.75 KiB
+(8.00 KiB gzip) with both KV bindings.
+
 ## Verification
 
 - `node build/build-app.js` → "Reassembled app.js (21 modules, 9958 lines)";
@@ -258,6 +297,8 @@ Re-checked after the earlier pending report: Web Push is fully implemented
 - Part 4 rebuild → 21 modules / 9982 lines; suite still 372/372 pass, exit 0.
 - Part 18 additions → **391 tests / 391 pass / 0 fail**, exit 0.
 - Part 9 push/notification preferences confirmed present end-to-end.
+- Part 16: `node --check src/worker/worker.js` exit 0; `wrangler deploy
+  --dry-run` bundles 28.75 KiB / 8.00 KiB gz.
 
 ## Commits
 
@@ -273,12 +314,16 @@ Re-checked after the earlier pending report: Web Push is fully implemented
   (Overview / Work / Insights / Admin)`.
 - (this unit) `test: Part 18 security + frontend-contract coverage
   (invalid/expired sessions, throttling, object-level authz, traversal)`.
+- (this unit) `feat: Part 16 Worker hardening (stream proxied bodies, exempt
+  /api/health from per-path rate caps, HSTS + Referrer-Policy consistency,
+  Vary: Origin on cached assets, top-level failure net)`.
 - Session export (docs) pushed with each unit.
 
 ## Pending Tasks
 
-- **Part 16 — Worker review:** cold-start/memory/origin-timeout/retry review
-  has no recorded completion.
+- **Nothing runtime pending.** With Part 16 complete there are no open items;
+  a fresh-first, corroborating `SESSION_EXPORT_*.md` will be created in the
+  next session.
 - **Phase-4 Kanban** remains opt-in only; requires an explicit user ask.
 - Notification panel/center `<li>` rows left mouse-only on purpose (focusing the
   whole row would nest interactive controls); inner action buttons are

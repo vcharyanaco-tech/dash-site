@@ -69,6 +69,10 @@ const RATE_LIMITS = {
 const rateBuckets = new Map(); // ip -> { key: [timestamps] }
 
 function rateLimitKey_(path, method) {
+  // /api/health is exempt from the per-path caps: the keep-alive cron and the
+  // scheduled live-check ping it constantly, so a busy IP must never starve
+  // its own health probes. Only the general 'all' flood cap still applies.
+  if (path === '/api/health') return null;
   if (method === 'POST' && (path === '/api' || path.startsWith('/api/'))) return 'post-api';
   if (method === 'GET' && (path === '/api' || path.startsWith('/api/'))) return 'get-api';
   return null; // static bundle / health: only the general 'all' cap applies
@@ -128,6 +132,10 @@ function applySecurityHeaders(response, request) {
   headers.set('X-Frame-Options', 'SAMEORIGIN');
   headers.set('Content-Security-Policy', "frame-ancestors 'self'");
   headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('Referrer-Policy', 'no-referrer-when-downgrade');
+  // Enforce HTTPS for a year (no includeSubDomains: dashboardharyana.site may
+  // still be reached on a cleartext alias and we don't force subdomains).
+  headers.set('Strict-Transport-Security', 'max-age=31536000');
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
@@ -156,7 +164,21 @@ export default {
     const limited = checkRateLimit_(request);
     if (limited) return applySecurityHeaders(limited, request);
 
-    return applySecurityHeaders(await this.route_(request, env, ctx, url, path), request);
+    try {
+      return applySecurityHeaders(await this.route_(request, env, ctx, url, path), request);
+    } catch (err) {
+      // Failure handling: forwardToServer, the enterprise routes and the
+      // backup/KV handlers all convert their own failures into clean 5xx
+      // JSON. This is the last-resort net for anything that slips through —
+      // it must never loop (single response, no retry).
+      const inner = (err && err.message) || String(err);
+      if (path === '/api' || path.startsWith('/api/') || path.startsWith('/macros/') || path.startsWith('/static/')) {
+        console.error('proxy failure on ' + path + ': ' + inner);
+        return jsonResponse({ error: 'internal', message: 'Proxy error: ' + inner }, 500);
+      }
+      console.error('proxy failure on ' + path + ': ' + inner);
+      return new Response('Internal proxy error.', { status: 500, headers: COMMON_HEADERS });
+    }
   },
 
   async route_(request, env, ctx, url, path) {
@@ -308,6 +330,7 @@ async function fetchFromPages(path, search) {
         ...COMMON_HEADERS,
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'public, max-age=300',
+        'Vary': 'Origin',
       },
     });
   }
@@ -328,6 +351,10 @@ async function fetchFromPages(path, search) {
     'Cache-Control': filePath.match(/\.(html|js|css)(\?|$)/)
       ? 'no-store'
       : 'public, max-age=3600',
+    // The ACAO header above is origin-dependent; make sure a cached copy
+    // (assets are the only cacheable responses) is never reused for a
+    // different Origin with the wrong CORS exposure.
+    'Vary': 'Origin',
   };
 
   return new Response(body, { status: resp.status, headers });
@@ -622,8 +649,11 @@ async function forwardToServer(request, url, serverOrigin) {
 
   const newHeaders = new Headers(resp.headers);
   Object.entries(COMMON_HEADERS).forEach(([k, v]) => newHeaders.set(k, v));
-  const respBody = await resp.arrayBuffer();
-  return new Response(respBody, { status: resp.status, headers: newHeaders });
+  // Stream the origin body straight through. Buffering with arrayBuffer()
+  // would double-hold large uploads/downloads in worker memory (128 MB free
+  // plan limit) and add latency before the first byte; pass-through keeps
+  // bounded JSON and document/file streaming off the isolate heap.
+  return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: newHeaders });
 }
 
 /** Clean 503 while the backend is restarting. The dashboard frontend sees the
