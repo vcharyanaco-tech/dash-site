@@ -3433,7 +3433,10 @@ function initApp() {
   loadApp();
 }
 
+let divisionalPromptDismissed = false;
+
 function maybePromptForDivisionalDashboard() {
+  if (divisionalPromptDismissed) return;
   ApiService.getMyDivisionalDashboard().then(function (data) {
     if (!data || !data.eligible || data.url) return;
     const modal = getEl('divisionalDashboardModal');
@@ -3446,6 +3449,11 @@ function maybePromptForDivisionalDashboard() {
     openDialog('divisionalDashboardModal');
     setTimeout(function () { input.focus(); }, 50);
   }).catch(function (err) { if (handleServerFailure(err)) return; });
+}
+
+function dismissMyDivisionalDashboardPrompt() {
+  divisionalPromptDismissed = true;
+  closeDialog('divisionalDashboardModal');
 }
 
 function saveMyDivisionalDashboard() {
@@ -3484,6 +3492,7 @@ function loadApp() {
     appState.isEditor = data.user.role === 'ADMIN' || data.user.role === 'EDITOR';
     appState.mustChange = !!data.mustChange;
     appState.permissions = (data.user && data.user.permissions) || {};
+    divisionalPromptDismissed = false;
     applyAppData(data);
 
     populateFilters();
