@@ -284,6 +284,55 @@ Findings + fixes:
 Verified: `node --check` pass; `wrangler deploy --dry-run` bundles 28.75 KiB
 (8.00 KiB gzip) with both KV bindings.
 
+## Presentation mode — link swarming + dead close button — FIXED
+
+User-reported: clicking links in presentation mode caused "link swarming"
+and the preview close button stopped working. Root-caused to three defects:
+
+1. **Duplicate `warmPresentationUrl_` (presentation.js).** The file defined the
+   function twice: the intended hidden-iframe warmer (added in `8f67068`) and
+   a stale `fetch(..., {mode:'no-cors'})` version left over from `530ac44`.
+   The later declaration won, so the iframe warm pool (`presentationWarm.frames`)
+   was never populated and instead a bare `no-cors` fetch fired for every link.
+2. **Whole-deck warming (`warmRestOfDeck_`).** `enterPresentationMode` queued
+   EVERY remaining slide's links, bursting a request storm against every
+   external target at presentation entry — the visible "swarming". Violated the
+   presentation spec ("do not cause a large burst of requests"; warm at most
+   prev/current/next/next-next).
+3. **Broken warmed-close + lost `#previewFrame` (ai.js).** The warmed open path
+   did `stage.replaceChild(warmed.frame, frame)`, replacing the canonical
+   `#previewFrame` (id lost: the warmed frame had no `id`), and
+   `closeLinkPreview()` returned early WITHOUT `closeDialog` when
+   `previewWarmReuse` was set → the X button appeared dead. And because
+   init.js's Escape handler used bare `closeDialog('previewModal')` (not
+   `closeLinkPreview`), the missing frame was never restored → the next
+   `openLinkPreview` hit `if (!frame) { window.open(url, '_blank'); }` → a
+   swarm of blank tabs/popups.
+
+**Fixes:**
+- `presentation.js`: deleted the dead fetch-based warmer (iframe warmer is now
+  the one true implementation); removed whole-deck warming and the
+  `warmRestOfDeck_` call — only the prev/current/next/next-next window is
+  warmed and re-warmed per navigation; warmed iframe `data-pres-warm-url`
+  uses the embeddable `target` (drops the unguarded `top_embedUrl`); the 8 s
+  warm timeout now cleans up (removes the holder, frees the inflight slot,
+  re-pumps) so blocked/X-Frame-Options targets can't stall the concurrency
+  pump; `exitPresentationMode` now detaches all `.pres-warm-frame` nodes and
+  clears `presentationWarm.frames` (no leaked iframes across presentations);
+  `enterPresentationMode` starts a fresh pool.
+- `ai.js`: `openLinkPreview` now ADOPTS the warmed frame AS `#previewFrame`
+  (sets id/className/title in place, removes the empty holder, deletes the
+  pool entry), preserving the invariant that a canonical `#previewFrame`
+  always exists — so the close button panel always works and no later click
+  can fall through to `window.open`. `closeLinkPreview` always blanks the
+  frame and calls `closeDialog` (X, backdrop, and Escape all behave the same).
+- `init.js`: Escape now routes previewModal through `closeLinkPreview()` (the
+  bare `closeDialog` shortcut was replaced) so frame state is always restored.
+
+Verification: `node build/build-app.js` → 21 modules / 9975 lines; round-trip
+diff OK; `node --check` on app.js/presentation.js/ai.js/init.js; bundle sizes
+OK (app.js 95.4 KB gz); server suite 391/391 pass.
+
 ## Verification
 
 - `node build/build-app.js` → "Reassembled app.js (21 modules, 9958 lines)";
@@ -299,6 +348,9 @@ Verified: `node --check` pass; `wrangler deploy --dry-run` bundles 28.75 KiB
 - Part 9 push/notification preferences confirmed present end-to-end.
 - Part 16: `node --check src/worker/worker.js` exit 0; `wrangler deploy
   --dry-run` bundles 28.75 KiB / 8.00 KiB gz.
+- Presentation fix: rebuilt app.js (21 modules / 9975 lines) + round-trip diff
+  OK; `node --check` app.js/presentation.js/ai.js/init.js; bundle sizes within
+  budget; server suite 391/391.
 
 ## Commits
 
@@ -317,6 +369,9 @@ Verified: `node --check` pass; `wrangler deploy --dry-run` bundles 28.75 KiB
 - (this unit) `feat: Part 16 Worker hardening (stream proxied bodies, exempt
   /api/health from per-path rate caps, HSTS + Referrer-Policy consistency,
   Vary: Origin on cached assets, top-level failure net)`.
+- (this unit) `fix: presentation link swarming + dead preview close button —
+  de-duplicate warmPresentationUrl_, warm only the nearby slide window,
+  adopt warmed frames AS #previewFrame, close via closeLinkPreview everywhere`.
 - Session export (docs) pushed with each unit.
 
 ## Pending Tasks

@@ -84,10 +84,15 @@ function wireGlobalEvents() {
         cancelConfirmDialog();
         return;
       }
-      ['editModal', 'aboutModal', 'submissionsModal', 'recordDetailModal', 'editUserModal', 'taskModal', 'columnModal', 'commandPalette', 'previewModal', 'linkModal', 'syncPreviewModal', 'offlineCenterModal', 'notifCenterModal'].forEach(function (id) {
+      ['editModal', 'aboutModal', 'submissionsModal', 'recordDetailModal', 'editUserModal', 'taskModal', 'columnModal', 'commandPalette', 'linkModal', 'syncPreviewModal', 'offlineCenterModal', 'notifCenterModal'].forEach(function (id) {
         const el = getEl(id);
         if (el && !el.classList.contains('hidden')) closeDialog(id);
       });
+      // Preview modal must close through closeLinkPreview(), not bare
+      // closeDialog(): it also blanks/restores #previewFrame so the next
+      // open never falls through to window.open (link swarming).
+      const pm = getEl('previewModal');
+      if (pm && !pm.classList.contains('hidden')) closeLinkPreview();
       const meetingModal = getEl('meetingNotesModal');
       if (meetingModal && !meetingModal.classList.contains('hidden')) closeMeetingNotes();
       document.body.classList.remove('sidebar-open');

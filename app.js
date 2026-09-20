@@ -2611,59 +2611,48 @@ function openLinkPreview(url, title) {
   if (titleEl) titleEl.textContent = title || 'Preview';
   if (openNew) openNew.href = url;
   previewZoom = 80;
-  applyPreviewZoom();
 
   /* Reuse a warmed frame when one is ready: presentation mode warms the
      embeddable target URL in hidden iframes (presentationWarm.frames, keyed
-     by the embeddable form). Reparent that already-loaded frame into the
-     modal instead of re-navigating — the load already happened in the
-     background, so the click opens instantly (no 5–6s refresh). */
+     by the embeddable form). The warmed frame is ADOPTED AS #previewFrame
+     (same element, still loaded — no re-navigation, click opens instantly).
+     Keeping the id INSTEAD OF judging the old placeholder guarantees the
+     canonical #previewFrame always exists, so the close button works and no
+     later click can fall through to window.open (link swarming). */
   let target = '';
   try { target = (typeof toEmbeddableUrl === 'function' && toEmbeddableUrl(url)) || url; } catch (err) { target = url; }
   const warmed = window.presentationWarm && presentationWarm.frames && presentationWarm.frames[target];
   if (warmed && warmed.ready && warmed.node && warmed.frame) {
     const stage = getEl('previewStage');
     if (stage) {
-      previewWarmReuse = { node: warmed.node, frame: warmed.frame, target: target };
-      delete presentationWarm.frames[target];
-      try { stage.replaceChild(warmed.frame, frame); } catch (err) {
-        if (frame) frame.src = target || '';
+      try {
+        warmed.frame.id = 'previewFrame';
+        warmed.frame.className = 'preview-frame';
+        warmed.frame.title = 'Link preview';
+        warmed.frame.setAttribute('aria-hidden', 'true');
+        stage.replaceChild(warmed.frame, frame);
+        const holder = warmed.node;
+        if (holder && holder.parentNode) holder.parentNode.removeChild(holder);
+      } catch (err) {
+        try { frame.src = target || ''; } catch (err2) {}
       }
-      openDialog('previewModal');
-      return;
+    } else {
+      try { frame.src = target || ''; } catch (err2) {}
     }
+    delete window.presentationWarm.frames[target];
+  } else {
+    try { frame.src = target || ''; } catch (err) {}
   }
-  if (frame) frame.src = target || '';
+  applyPreviewZoom();
   openDialog('previewModal');
 }
 
-/* If the opened preview came from a warmed frame, return it to the hidden
-   pool instead of dropping it to about:blank, so the next open of the same
-   URL reuses the already-loaded document again. */
+/* Closes the preview. Runs for the X button, the backdrop, and Escape — it
+   always closes the dialog AND blanks the frame so the next open starts from
+   a clean #previewFrame. */
 function closeLinkPreview() {
-  if (previewWarmReuse) {
-    const holder = previewWarmReuse.node;
-    const fr = previewWarmReuse.frame;
-    const t = previewWarmReuse.target;
-    previewWarmReuse = null;
-    const stage = getEl('previewStage');
-    if (stage && holder && fr && fr.parentNode) {
-      const settled = stage.querySelector('#previewFrame');
-      const fresh = document.createElement('iframe');
-      fresh.id = 'previewFrame';
-      fresh.className = 'preview-frame';
-      fresh.title = 'Link preview';
-      fresh.setAttribute('aria-hidden', 'true');
-      if (settled && settled.parentNode) settled.parentNode.replaceChild(fresh, settled);
-      try { holder.appendChild(fr); } catch (err) {}
-      if (window.presentationWarm && presentationWarm.frames && !presentationWarm.frames[t]) {
-        presentationWarm.frames[t] = { node: holder, frame: fr, ready: true };
-      }
-    }
-    return;
-  }
   const frame = getEl('previewFrame');
-  if (frame) frame.src = 'about:blank';
+  try { if (frame) frame.src = 'about:blank'; } catch (err) {}
   closeDialog('previewModal');
 }
 
@@ -8323,6 +8312,9 @@ var presentationWarm = {
   frames: {}       // embeddable target URL -> { node, ready } warm pool
 };
 
+/* Buffer the previous/current/next/next-next slides' links in the background
+   so a click loads instantly. Deduping (seenUrls) keeps the warm set bounded;
+   the FIFO queue + concurrency pump keeps it polite. */
 function warmNearbySlides_() {
   const items = presentationState.items;
   const idx = presentationState.index;
@@ -8349,6 +8341,7 @@ function enterPresentationMode() {
   presentationWarm.seenOrigins = {};
   presentationWarm.inflight = 0;
   presentationWarm.controllers = [];
+  presentationWarm.frames = {};
   const overlay = getEl('presentationOverlay');
   if (overlay) {
     overlay.classList.add('presentation-open');
@@ -8357,18 +8350,11 @@ function enterPresentationMode() {
     const nextBtn = getEl('presentationNextBtn');
     if (nextBtn) nextBtn.focus();
   }
+  // Warm only the visible window around the current slide (prev/current/
+  // next/next-next). The whole deck must NOT be warmed at once — that bursts
+  // a request storm at every presentation entry (link swarming). Nearby links
+  // are re-warmed on every navigation instead.
   warmNearbySlides_();
-  warmRestOfDeck_();
-}
-
-/* Buffer every remaining slide's links in the background so later slides
-   load instantly too. Deduping (seenUrls) makes the whole deck's links a
-   bounded warm set; the FIFO queue + concurrency pump keeps it polite. */
-function warmRestOfDeck_() {
-  const items = presentationState.items;
-  const idx = presentationState.index;
-  const targets = items.filter(function (_, i) { return i > idx + 2; });
-  warmPresentationLinks_(targets);
 }
 
 function exitPresentationMode() {
@@ -8378,6 +8364,12 @@ function exitPresentationMode() {
   presentationWarm.controllers = [];
   presentationWarm.queue = [];
   presentationWarm.inflight = 0;
+  presentationWarm.frames = {};
+  // Detach any hidden warm frames so exiting a presentation never leaks
+  // iframes (and their loaded documents) into the page.
+  document.querySelectorAll('.pres-warm-frame').forEach(function (node) {
+    if (node.parentNode) node.parentNode.removeChild(node);
+  });
   removePresentationPreconnects_();
   const overlay = getEl('presentationOverlay');
   if (overlay) overlay.classList.remove('presentation-open');
@@ -8679,26 +8671,36 @@ function warmPresentationUrl_(url) {
   const ctrl = new AbortController();
   presentationWarm.controllers.push(ctrl);
   const target = (typeof toEmbeddableUrl === 'function' && toEmbeddableUrl(url)) || url;
-  const timer = setTimeout(function () { try { ctrl.abort(); } catch (err) {} }, 8000);
   const holder = document.createElement('div');
   holder.setAttribute('data-pres-warm-frame', '1');
   holder.className = 'pres-warm-frame';
   const frame = document.createElement('iframe');
-  frame.setAttribute('data-pres-warm-url', escAttr(top_embedUrl) || escAttr(target));
+  frame.setAttribute('data-pres-warm-url', escAttr(target));
   holder.appendChild(frame);
   document.body.appendChild(holder);
   frame.src = target;
-  frame.addEventListener('load', function () {
+  const finishWarm_ = function (keepHolder) {
     clearTimeout(timer);
-    presentationWarm.frames[target] = { node: holder, frame: frame, ready: true };
-    presentationWarm.inflight--;
+    if (!keepHolder) {
+      try { if (holder.parentNode) holder.parentNode.removeChild(holder); } catch (err) {}
+    }
+    presentationWarm.inflight = Math.max(0, presentationWarm.inflight - 1);
     pumpPresentationWarm_();
+  };
+  // Timeout guard: blocked/X-Frame-Options/cross-origin targets may never
+  // fire load — without this the concurrency pump would stall forever holding
+  // inflight slots for dead frames.
+  const timer = setTimeout(function () {
+    try { ctrl.abort(); } catch (err) {}
+    finishWarm_(false);
+  }, 8000);
+  frame.addEventListener('load', function () {
+    if (presentationWarm.aborted) { finishWarm_(false); return; }
+    presentationWarm.frames[target] = { node: holder, frame: frame, ready: true };
+    finishWarm_(true);
   });
   frame.addEventListener('error', function () {
-    clearTimeout(timer);
-    try { holder.parentNode && holder.parentNode.removeChild(holder); } catch (err) {}
-    presentationWarm.inflight--;
-    pumpPresentationWarm_();
+    finishWarm_(false);
   });
 }
 
@@ -8719,20 +8721,6 @@ function warmPresentationOrigin_(url) {
 function removePresentationPreconnects_() {
   document.querySelectorAll('link[data-pres-warm]').forEach(function (l) { l.parentNode && l.parentNode.removeChild(l); });
   presentationWarm.seenOrigins = {};
-}
-
-function warmPresentationUrl_(url) {
-  if (presentationWarm.inflight >= presentationWarm.MAX_CONCURRENCY) return;
-  presentationWarm.inflight++;
-  const ctrl = new AbortController();
-  presentationWarm.controllers.push(ctrl);
-  const timer = setTimeout(function () { try { ctrl.abort(); } catch (err) {} }, 8000);
-  fetch(url, { mode: 'no-cors', cache: 'default', signal: ctrl.signal })
-    .catch(function () { /* opaque/no-cors may still fail on redirects — fine */ })
-    .then(function () {
-      clearTimeout(timer);
-      presentationWarm.inflight--;
-    });
 }
 
 wirePresentationEvents_();/* ---------------------------------- SSE real-time connection ---------------------------------- */
@@ -9052,10 +9040,15 @@ function wireGlobalEvents() {
         cancelConfirmDialog();
         return;
       }
-      ['editModal', 'aboutModal', 'submissionsModal', 'recordDetailModal', 'editUserModal', 'taskModal', 'columnModal', 'commandPalette', 'previewModal', 'linkModal', 'syncPreviewModal', 'offlineCenterModal', 'notifCenterModal'].forEach(function (id) {
+      ['editModal', 'aboutModal', 'submissionsModal', 'recordDetailModal', 'editUserModal', 'taskModal', 'columnModal', 'commandPalette', 'linkModal', 'syncPreviewModal', 'offlineCenterModal', 'notifCenterModal'].forEach(function (id) {
         const el = getEl(id);
         if (el && !el.classList.contains('hidden')) closeDialog(id);
       });
+      // Preview modal must close through closeLinkPreview(), not bare
+      // closeDialog(): it also blanks/restores #previewFrame so the next
+      // open never falls through to window.open (link swarming).
+      const pm = getEl('previewModal');
+      if (pm && !pm.classList.contains('hidden')) closeLinkPreview();
       const meetingModal = getEl('meetingNotesModal');
       if (meetingModal && !meetingModal.classList.contains('hidden')) closeMeetingNotes();
       document.body.classList.remove('sidebar-open');
