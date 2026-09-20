@@ -11,6 +11,13 @@
 CREATE TABLE IF NOT EXISTS records (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   row INTEGER NOT NULL UNIQUE,
+  -- Stable record identity (Part 15). Survives the physical-row renumbering
+  -- that happens when sheet rows are deleted/pruned below a record, so child
+  -- tables (tasks, documents, record_changes) can stay anchored to the record
+  -- through rows even if a future renumber sweep misses one of them. The
+  -- physical `row` column is kept as the legacy_sheet_row for the client's
+  -- row-keyed display contract and the spreadsheet linkage.
+  record_id TEXT NOT NULL DEFAULT '',
   sector TEXT NOT NULL DEFAULT '',
   description TEXT NOT NULL DEFAULT '',
   entry_date TEXT NOT NULL DEFAULT '',
@@ -182,6 +189,7 @@ CREATE TABLE IF NOT EXISTS ask_ai_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_records_row ON records(row);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_records_record_id ON records(record_id) WHERE record_id != '';
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_submissions_card_row ON submissions(card_row);
 CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee);

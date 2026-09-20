@@ -10,6 +10,7 @@
 const { db, seedDefaultSettings, getAppSettings } = require('./db');
 const auth = require('./auth');
 const { CONFIG, ADMIN_USERS } = require('./config');
+const { uuid_ } = require('./helpers');
 
 seedDefaultSettings();
 auth.ensureBootstrapAdmin();
@@ -49,13 +50,14 @@ if (count === 0) {
     }
   ];
   const stmt = db.prepare(
-    'INSERT INTO records (row, sector, description, entry_date, action, responsibility, review_date, links, review_bg, created_at, updated_at) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO records (row, record_id, sector, description, entry_date, action, responsibility, review_date, links, review_bg, created_at, updated_at) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
   demo.forEach(function (d) {
     const row = nextRow();
     stmt.run(
       row,
+      uuid_(),
       d.sector,
       d.description,
       d.entryDate,

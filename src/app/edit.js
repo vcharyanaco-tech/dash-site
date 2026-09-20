@@ -229,6 +229,7 @@ function saveEditModal(e) {
   const item = {
     row: Number(getEl('editRow').value || 0),
     id: getEl('editId').value,
+    recordId: (appState.items.find(function (i) { return String(i.row) === String(Number(getEl('editRow').value || 0)); }) || {}).recordId || '',
     sector: sectorEl.value.trim(),
     description: descEl.value,
     entryDate: getEl('editEntryDate').value.trim(),

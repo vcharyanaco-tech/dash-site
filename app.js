@@ -6106,12 +6106,14 @@ function loadRecordDocuments(row) {
 function handleDocUpload(row, input) {
   const file = input.files && input.files[0];
   if (!file) return;
+  const item = appState.items.find(function (i) { return String(i.row) === String(row); });
+  const recordId = (item && item.recordId) || '';
   const reader = new FileReader();
   reader.onload = function (e) {
     const bytes = e.target.result;
     const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(bytes)));
     showOverlay('Uploading document…');
-    ApiService.uploadDocument(row, '', file.name, base64, file.type || 'application/octet-stream').then(function () {
+    ApiService.uploadDocument(row, recordId, file.name, base64, file.type || 'application/octet-stream').then(function () {
       hideOverlay();
       showToast('Document uploaded.', 'success');
       loadRecordDocuments(row);
@@ -6458,13 +6460,16 @@ function saveTask() {
     return;
   }
   
+  const taskRow = getEl('taskRecordRow').value ? Number(getEl('taskRecordRow').value) : 0;
+  const linkedItem = appState.items.find(function (i) { return Number(i.row) === Number(taskRow); });
   const params = {
     title: title,
     description: getEl('taskDescription').value.trim(),
     assignee: assignee,
     priority: getEl('taskPriority').value,
     dueDate: dmyToIso(getEl('taskDueDate').value),
-    recordRow: getEl('taskRecordRow').value ? Number(getEl('taskRecordRow').value) : 0
+    recordRow: taskRow,
+    recordId: (linkedItem && linkedItem.recordId) || ''
   };
   
   // Check if we're editing or creating
@@ -7745,6 +7750,7 @@ function saveEditModal(e) {
   const item = {
     row: Number(getEl('editRow').value || 0),
     id: getEl('editId').value,
+    recordId: (appState.items.find(function (i) { return String(i.row) === String(Number(getEl('editRow').value || 0)); }) || {}).recordId || '',
     sector: sectorEl.value.trim(),
     description: descEl.value,
     entryDate: getEl('editEntryDate').value.trim(),

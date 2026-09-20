@@ -12,7 +12,7 @@ const { db, getAppSettings, cacheGetTTL, cachePut } = require('./db');
 const { CONFIG, ROLES, COL, ACTIONS, NOTIFICATION_TYPES, NOTIFICATION_PRIORITY } = require('./config');
 const {
   now_, today_, formatDate_, parseDisplayDate_, daysUntilDate_,
-  escHtml_, looksLikeUrl_, linkifyText_, absUrl_,
+  escHtml_, looksLikeUrl_, linkifyText_, absUrl_, uuid_,
   normalizeItemForSheet_, buildSummaryFromItems, buildAnalytics_,
   runWithLock_
 } = require('./helpers');
@@ -201,12 +201,34 @@ function fieldHtml_(value, linkValue) {
 }
 
 /* ============================================================
+ * Record identity (Part 15)
+ * ============================================================ */
+
+// Resolve a record from either its stable record_id UUID or its physical
+// spreadsheet row / display contract. Record ids win: they are stable across
+// the row renumbering that happens when sheet rows are pruned or deleted.
+// Numeric inputs are treated as physical rows (the client's row-keyed contract),
+// never as the derived display id, which would be ambiguous after a renumber.
+function resolveRecord_(rowOrId) {
+  if (rowOrId === undefined || rowOrId === null || rowOrId === '') return null;
+  const s = String(rowOrId).trim();
+  const byId = db.prepare('SELECT * FROM records WHERE record_id = ? AND record_id != ?').get(s, '');
+  if (byId) return byId;
+  const n = Number(s);
+  if (isFinite(n) && n >= 1) {
+    return db.prepare('SELECT * FROM records WHERE row = ?').get(n);
+  }
+  return null;
+}
+
+/* ============================================================
  * Row -> item (port of DashboardService.buildDashboardItems_)
  * ============================================================ */
 
 function rowToRowSpec_(row) {
   return {
     rowNumber: Number(row.row),
+    recordId: row.record_id || '',
     idRaw: row.row - CONFIG.SHEET.START_ROW + 1,
     sector: row.sector || '',
     description: row.description || '',
@@ -274,6 +296,7 @@ function buildItemFromRowSpec_(rowSpec) {
   return {
     row: rowSpec.rowNumber,
     id: rowSpec.idRaw,
+    recordId: rowSpec.recordId,
     sector: rowSpec.sector,
     description: rowSpec.description,
     entryDate: formatDate_(rowSpec.entryDate),
@@ -522,10 +545,11 @@ function addRecord_(item, token) {
     const id = row - CONFIG.SHEET.START_ROW + 1;
 
     db.prepare(
-      'INSERT INTO records (row, sector, description, entry_date, action, responsibility, review_date, links, review_bg, source, created_at, updated_at) ' +
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO records (row, record_id, sector, description, entry_date, action, responsibility, review_date, links, review_bg, source, created_at, updated_at) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(
       row,
+      uuid_(),
       String(normalized.sector || ''),
       String(normalized.description || ''),
       String(normalized.entryDate || ''),
@@ -562,9 +586,11 @@ function updateRecord_(item, token) {
 
   return runWithLock_(function () {
     const normalized = normalizeItemForSheet_(item);
-    const row = Number(item.row);
-    const existing = db.prepare('SELECT * FROM records WHERE row = ?').get(row);
-    if (!existing) throw new Error('Record not found.');
+    // Prefer the stable record_id; fall back to the legacy row-keyed call.
+    const resolved = resolveRecord_(item.recordId != null && item.recordId !== '' ? item.recordId : item.row);
+    if (!resolved) throw new Error('Record not found.');
+    const row = Number(resolved.row);
+    const existing = resolved;
 
     // Compute diff before writing
     const FIELD_MAP = { sector: 'sector', description: 'description', entry_date: 'entryDate', action: 'action', responsibility: 'responsibility', review_date: 'reviewDate' };
@@ -596,7 +622,7 @@ function updateRecord_(item, token) {
 
     // Persist diff for change history
     if (Object.keys(diff).length > 0) {
-      const recordId = String(row - CONFIG.SHEET.START_ROW + 1);
+      const recordId = String(resolved.record_id || row - CONFIG.SHEET.START_ROW + 1);
       try {
         db.prepare('INSERT INTO record_changes (record_row, record_id, changed_by, changed_at, diff) VALUES (?, ?, ?, ?, ?)')
           .run(row, recordId, editor.email || '', Date.now(), JSON.stringify(diff));
@@ -655,44 +681,57 @@ function dataRenumber_() {
   });
 }
 
-function deleteRecord_(row, token) {
+function deleteRecord_(rowOrId, token) {
   const editor = auth.requireEditor(token);
 
   return runWithLock_(function () {
-    const existing = db.prepare('SELECT * FROM records WHERE row = ?').get(Number(row));
-    const deletedId = existing ? (Number(row) - CONFIG.SHEET.START_ROW + 1) : '';
-    db.prepare('DELETE FROM records WHERE row = ?').run(Number(row));
+    const existing = resolveRecord_(rowOrId);
+    if (!existing) throw new Error('Record not found.');
+    const row = Number(existing.row);
+    const deletedId = row - CONFIG.SHEET.START_ROW + 1;
+    const recordId = String(existing.record_id || '');
+    db.prepare('DELETE FROM records WHERE row = ?').run(row);
 
-    // Cascade-delete child rows that reference the deleted row so they never
-    // get remapped onto the wrong record during renumbering.
-    const rNum = Number(row);
+    // Cascade-delete child rows that reference the deleted record so they never
+    // get remapped onto the wrong record during renumbering. Children are keyed
+    // by row today; also drop any that hold the record's stable UUID so a
+    // uuid-anchored child is never orphaned by a row-resolving bug.
+    const rNum = row;
     db.prepare('DELETE FROM submissions WHERE card_row = ?').run(rNum);
     db.prepare('DELETE FROM tasks WHERE record_row = ?').run(rNum);
     db.prepare('DELETE FROM documents WHERE record_row = ?').run(rNum);
     db.prepare('DELETE FROM record_changes WHERE record_row = ?').run(rNum);
     db.prepare('DELETE FROM ask_ai_history WHERE record_row = ?').run(rNum);
+    if (recordId) {
+      db.prepare('DELETE FROM tasks WHERE record_id = ? AND record_id != ?').run(recordId, '');
+      db.prepare('DELETE FROM documents WHERE record_id = ? AND record_id != ?').run(recordId, '');
+      db.prepare('DELETE FROM record_changes WHERE record_id = ? AND record_id != ?').run(recordId, '');
+    }
 
     dataRenumber_();
     bumpDataGeneration_();
 
     try {
-      require('./notifications').notifyStaffLocked_('record', 'Item deleted', 'Record #' + deletedId + ' was removed from the dashboard.', '', editor.email, { priority: NOTIFICATION_PRIORITY.NORMAL, recordRow: Number(row) });
+      require('./notifications').notifyStaffLocked_('record', 'Item deleted', 'Record #' + deletedId + ' was removed from the dashboard.', '', editor.email, { priority: NOTIFICATION_PRIORITY.NORMAL, recordRow: rNum });
     } catch (err) {}
 
     return getData();
   });
 }
 
-function markReviewDone_(row, token) {
+function markReviewDone_(rowOrId, token) {
   const admin = auth.requireAdmin(token);
 
   return runWithLock_(function () {
-    db.prepare('UPDATE records SET review_bg = ? WHERE row = ?').run(CONFIG.COLORS.REVIEW_DONE, Number(row));
+    const resolved = resolveRecord_(rowOrId);
+    if (!resolved) throw new Error('Record not found.');
+    const row = Number(resolved.row);
+    db.prepare('UPDATE records SET review_bg = ? WHERE row = ?').run(CONFIG.COLORS.REVIEW_DONE, row);
     require('./audit').logAudit_(ACTIONS.REVIEW_DONE, String(row), 'Marked review as done', admin.email);
     bumpDataGeneration_();
 
     try {
-      require('./notifications').notifyStaffLocked_('record', 'Review marked done', 'Review for record #' + (Number(row) - CONFIG.SHEET.START_ROW + 1) + ' was marked as done.', '', admin.email, { priority: NOTIFICATION_PRIORITY.NORMAL, recordRow: Number(row) });
+      require('./notifications').notifyStaffLocked_('record', 'Review marked done', 'Review for record #' + (row - CONFIG.SHEET.START_ROW + 1) + ' was marked as done.', '', admin.email, { priority: NOTIFICATION_PRIORITY.NORMAL, recordRow: row });
     } catch (err) {}
 
     const data = getData();
@@ -703,16 +742,19 @@ function markReviewDone_(row, token) {
   });
 }
 
-function markReviewNotDone_(row, token) {
+function markReviewNotDone_(rowOrId, token) {
   const admin = auth.requireAdmin(token);
 
   return runWithLock_(function () {
-    db.prepare('UPDATE records SET review_bg = ? WHERE row = ?').run(CONFIG.COLORS.NORMAL, Number(row));
+    const resolved = resolveRecord_(rowOrId);
+    if (!resolved) throw new Error('Record not found.');
+    const row = Number(resolved.row);
+    db.prepare('UPDATE records SET review_bg = ? WHERE row = ?').run(CONFIG.COLORS.NORMAL, row);
     require('./audit').logAudit_(ACTIONS.REVIEW_NOT_DONE, String(row), 'Marked review as not done', admin.email);
     bumpDataGeneration_();
 
     try {
-      require('./notifications').notifyStaffLocked_('record', 'Review reopened', 'Review for record #' + (Number(row) - CONFIG.SHEET.START_ROW + 1) + ' was marked as not done (review due again).', '', admin.email, { priority: NOTIFICATION_PRIORITY.NORMAL, recordRow: Number(row) });
+      require('./notifications').notifyStaffLocked_('record', 'Review reopened', 'Review for record #' + (row - CONFIG.SHEET.START_ROW + 1) + ' was marked as not done (review due again).', '', admin.email, { priority: NOTIFICATION_PRIORITY.NORMAL, recordRow: row });
     } catch (err) {}
 
     const data = getData();
@@ -727,13 +769,14 @@ function markReviewNotDone_(row, token) {
  * Display toggle (admin + editor)
  * ============================================================ */
 
-function setRecordDisplay_(row, displayed, token) {
+function setRecordDisplay_(rowOrId, displayed, token) {
   const editor = auth.requireEditor(token);
 
   return runWithLock_(function () {
-    const n = Number(row);
-    const existing = db.prepare('SELECT * FROM records WHERE row = ?').get(n);
-    if (!existing) throw new Error('Record not found.');
+    const resolved = resolveRecord_(rowOrId);
+    if (!resolved) throw new Error('Record not found.');
+    const n = Number(resolved.row);
+    const existing = resolved;
 
     const next = displayed ? 1 : 0;
     const current = Number(existing.displayed !== undefined ? existing.displayed : 1);
@@ -927,6 +970,7 @@ module.exports = {
   responsibilityMatchesUser_,
   getReviewReminders_,
   buildItems,
+  resolveRecord_,
   invalidateDataCache: bumpDataGeneration_,
   RecordService,
   updateItem,

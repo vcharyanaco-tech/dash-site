@@ -31,7 +31,7 @@ const fs = require('fs');
 const path = require('path');
 const { db, getAppSettings } = require('./db');
 const { CONFIG } = require('./config');
-const { parseCsv_, today_ } = require('./helpers');
+const { parseCsv_, today_, uuid_ } = require('./helpers');
 const settings = require('./settings');
 
 const SOURCE_SPREADSHEET_ID =
@@ -359,8 +359,8 @@ async function buildPullPlan_() {
 // a preview-then-apply sync).
 async function applyPullPlan_(plan) {
   const insert = db.prepare(
-    'INSERT OR IGNORE INTO records (row, sector, description, entry_date, action, responsibility, review_date, links, review_bg, source, created_at, updated_at) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT OR IGNORE INTO records (row, record_id, sector, description, entry_date, action, responsibility, review_date, links, review_bg, source, created_at, updated_at) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
   const update = db.prepare(
     'UPDATE records SET sector = ?, description = ?, entry_date = ?, action = ?, responsibility = ?, review_date = ?, links = ?, review_bg = ?, updated_at = ? WHERE row = ?'
@@ -378,7 +378,7 @@ async function applyPullPlan_(plan) {
     }
     const p = entry.proposed;
     if (!entry.existing) {
-      insert.run(entry.row, p.sector, p.description, p.entryDate, p.action, p.responsibility, p.reviewDate,
+      insert.run(entry.row, uuid_(), p.sector, p.description, p.entryDate, p.action, p.responsibility, p.reviewDate,
         JSON.stringify(entry.links), CONFIG.COLORS.NORMAL, 'sheet', Date.now(), Date.now());
       inserted++;
     } else {

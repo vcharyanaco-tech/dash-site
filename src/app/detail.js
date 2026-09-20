@@ -239,12 +239,14 @@ function loadRecordDocuments(row) {
 function handleDocUpload(row, input) {
   const file = input.files && input.files[0];
   if (!file) return;
+  const item = appState.items.find(function (i) { return String(i.row) === String(row); });
+  const recordId = (item && item.recordId) || '';
   const reader = new FileReader();
   reader.onload = function (e) {
     const bytes = e.target.result;
     const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(bytes)));
     showOverlay('Uploading document…');
-    ApiService.uploadDocument(row, '', file.name, base64, file.type || 'application/octet-stream').then(function () {
+    ApiService.uploadDocument(row, recordId, file.name, base64, file.type || 'application/octet-stream').then(function () {
       hideOverlay();
       showToast('Document uploaded.', 'success');
       loadRecordDocuments(row);

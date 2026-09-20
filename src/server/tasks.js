@@ -9,6 +9,7 @@
 const { db } = require('./db');
 const { NOTIFICATION_TYPES, TASK_STATUS, TASK_PRIORITY } = require('./config');
 const { uuid_, now_, formatDate_, runWithLock_ } = require('./helpers');
+const { resolveRecord_ } = require('./records');
 const auth = require('./auth');
 
 /* Helper: check if an assignee value is the 'All Divisional Heads' group */
@@ -87,6 +88,12 @@ function createTask(params, token) {
   }
 
   return runWithLock_(function () {
+    // Anchor the task to the record's stable UUID (or resolve the legacy
+    // row-keyed call to the current physical row) so it follows the record
+    // through renumbering instead of drifting back to a stale sheet position.
+    const resolved = resolveRecord_(params.recordId != null && params.recordId !== '' ? params.recordId : recordRow);
+    const rowNum = resolved ? Number(resolved.row) : recordRow;
+    const anchoredId = resolved ? String(resolved.record_id || '') : String(params.recordId || '');
     const id = uuid_();
     const now = Date.now();
     db.prepare(
@@ -94,8 +101,8 @@ function createTask(params, token) {
       'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(
       id,
-      recordRow,
-      String(params.recordId || ''),
+      rowNum,
+      anchoredId,
       title,
       String(params.description || ''),
       assignee,
@@ -132,8 +139,8 @@ function createTask(params, token) {
 
     return {
       id: id,
-      recordRow: recordRow,
-      recordId: String(params.recordId || ''),
+      recordRow: rowNum,
+      recordId: anchoredId,
       title: title,
       description: String(params.description || ''),
       assignee: assignee,

@@ -15,6 +15,7 @@ const crypto = require('crypto');
 const { db } = require('./db');
 const { NOTIFICATION_TYPES, NOTIFICATION_PRIORITY } = require('./config');
 const { uuid_, now_, runWithLock_ } = require('./helpers');
+const { resolveRecord_ } = require('./records');
 const auth = require('./auth');
 
 const UPLOADS_DIR = path.join(__dirname, '..', '..', 'data', 'uploads');
@@ -65,8 +66,21 @@ function getAllDocuments(token) {
   return rows.map(docRecordFromRow_);
 }
 
-function getRecordDocuments_(recordRow) {
-  const rows = db.prepare('SELECT * FROM documents WHERE record_row = ? ORDER BY uploaded_at DESC').all(Number(recordRow) || 0);
+// Resolve a record from either its stable record_id UUID or its physical row.
+// Row-number arguments are resolved to the physical row before querying so a
+// uuid- or row-keyed call always lands on the same record. If the record cannot
+// be resolved (e.g. a legacy document whose parent row has since been pruned)
+// the raw numeric row value is kept so row-keyed lookups stay backward
+// compatible; unrecoverable inputs still fall back to 0.
+function resolveRow_(rowOrId) {
+  const resolved = resolveRecord_(rowOrId);
+  if (resolved) return Number(resolved.row);
+  const n = Number(rowOrId);
+  return isFinite(n) && n >= 1 ? n : 0;
+}
+
+function getRecordDocuments_(rowOrId) {
+  const rows = db.prepare('SELECT * FROM documents WHERE record_row = ? ORDER BY uploaded_at DESC').all(resolveRow_(rowOrId));
   return rows.map(docRecordFromRow_);
 }
 
@@ -100,7 +114,7 @@ function deleteDocument_(docId) {
 
 function getRecordDocuments(recordRow, token) {
   auth.requireLogin(token);
-  return getRecordDocuments_(Number(recordRow) || 0);
+  return getRecordDocuments_(recordRow);
 }
 
 function uploadDocument(recordRow, recordId, fileName, base64, mimeType, token) {
@@ -116,7 +130,7 @@ function uploadDocument(recordRow, recordId, fileName, base64, mimeType, token) 
   if (!bytes.length) throw new Error('Empty file content.');
   if (bytes.length > MAX_UPLOAD_BYTES) throw new Error('File exceeds the ' + Math.round(MAX_UPLOAD_BYTES / 1024 / 1024) + ' MB limit.');
 
-  const record = db.prepare('SELECT id FROM records WHERE row = ?').get(Number(recordRow) || 0);
+  const record = resolveRecord_(recordId || recordRow);
   if (!record) throw new Error('Record not found.');
 
   return runWithLock_(function () {
@@ -125,8 +139,10 @@ function uploadDocument(recordRow, recordId, fileName, base64, mimeType, token) 
     const target = path.join(UPLOADS_DIR, fileKey);
     fs.writeFileSync(target, bytes);
 
-    const rowNum = Number(recordRow) || 0;
-    const doc = addDocument_(rowNum, String(recordId || ''), safeName, fileKey, declaredMime, bytes.length, user.email);
+    const rowNum = Number(record.row) || 0;
+    // Anchor the document to the record's stable UUID (never the legacy
+    // numeric row-derived id) so it follows the record through renumbering.
+    const doc = addDocument_(rowNum, String(record.record_id || ''), safeName, fileKey, declaredMime, bytes.length, user.email);
 
     try {
       require('./notifications').notifyStaffLocked_(NOTIFICATION_TYPES.RECORD, 'Document added', 'Document "' + safeName + '" was added to record #' + rowNum + ' by ' + user.email + '.', '', user.email, { priority: NOTIFICATION_PRIORITY.NORMAL, recordRow: rowNum });

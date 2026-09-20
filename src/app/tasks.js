@@ -299,13 +299,16 @@ function saveTask() {
     return;
   }
   
+  const taskRow = getEl('taskRecordRow').value ? Number(getEl('taskRecordRow').value) : 0;
+  const linkedItem = appState.items.find(function (i) { return Number(i.row) === Number(taskRow); });
   const params = {
     title: title,
     description: getEl('taskDescription').value.trim(),
     assignee: assignee,
     priority: getEl('taskPriority').value,
     dueDate: dmyToIso(getEl('taskDueDate').value),
-    recordRow: getEl('taskRecordRow').value ? Number(getEl('taskRecordRow').value) : 0
+    recordRow: taskRow,
+    recordId: (linkedItem && linkedItem.recordId) || ''
   };
   
   // Check if we're editing or creating

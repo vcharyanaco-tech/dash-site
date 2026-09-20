@@ -30,6 +30,7 @@ const fs = require('fs');
 const path = require('path');
 const { db } = require('./db');
 const { CONFIG } = require('./config');
+const { uuid_ } = require('./helpers');
 
 const EXPORT_DIR = process.env.DASH_IMPORT_DIR || path.join(__dirname, '..', '..', 'data', 'export');
 
@@ -148,8 +149,8 @@ function importRecords() {
 
   const startRow = CONFIG.SHEET.START_ROW;
   const stmt = db.prepare(
-    'INSERT OR IGNORE INTO records (row, sector, description, entry_date, action, responsibility, review_date, links, review_bg, created_at, updated_at) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT OR IGNORE INTO records (row, record_id, sector, description, entry_date, action, responsibility, review_date, links, review_bg, created_at, updated_at) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
   let n = 0;
   data.forEach(function (cols, i) {
@@ -168,6 +169,7 @@ function importRecords() {
     }
     stmt.run(
       row,
+      uuid_(),
       String(cols[1] || '').trim(),
       String(cols[2] || '').trim(),
       String(cols[3] || '').trim(),

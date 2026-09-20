@@ -73,6 +73,36 @@ if (!recordColumns.some(function (c) { return String(c.name) === 'source'; })) {
   db.exec("ALTER TABLE records ADD COLUMN source TEXT NOT NULL DEFAULT 'sheet'");
 }
 
+/* ---- Migration: records.record_id (stable record identity, Part 15) ----
+   Older DBs lack the column. Add it, then stamp every existing record with a
+   per-row UUID; child tables (tasks, documents, record_changes) that still
+   hold the old numeric row-derived id are re-anchored to the matching record's
+   UUID so children follow their parent through any future renumbering even if
+   a row sweep misses a table. Idempotent: on re-boot every record already has
+   a UUID and re-anchoring writes the same value back. */
+const recordIdCols = db.prepare('PRAGMA table_info(records)').all();
+if (!recordIdCols.some(function (c) { return String(c.name) === 'record_id'; })) {
+  db.exec("ALTER TABLE records ADD COLUMN record_id TEXT NOT NULL DEFAULT ''");
+}
+const unkeyedRecords = db.prepare("SELECT row FROM records WHERE record_id = ''").all();
+if (unkeyedRecords.length) {
+  const stamp = db.prepare("UPDATE records SET record_id = ? WHERE row = ?");
+  unkeyedRecords.forEach(function (r) { stamp.run(uuid_(), Number(r.row)); });
+}
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_records_record_id ON records(record_id) WHERE record_id != ''");
+[
+  { table: 'tasks', rowCol: 'record_row' },
+  { table: 'documents', rowCol: 'record_row' },
+  { table: 'record_changes', rowCol: 'record_row' }
+].forEach(function (child) {
+  db.exec(
+    'UPDATE ' + child.table +
+    ' SET record_id = COALESCE((SELECT r.record_id FROM records r WHERE r.row = ' +
+    child.table + '.' + child.rowCol + '), record_id)' +
+    ' WHERE ' + child.rowCol + ' > 0'
+  );
+});
+
 /* ---- Migration: documents.keep (retention exemption) ----
    Attachments flagged with keep=1 are never pruned by the retention sweep
    (DASH_RETENTION_DAYS). Older DBs lack the column; nothing is kept by
