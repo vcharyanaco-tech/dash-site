@@ -309,7 +309,7 @@ function unlockSubmission(submissionId, token) {
 }
 
 function deleteSubmission(submissionId, token) {
-  const admin = auth.requireAdmin(token);
+  const editor = auth.requireEditor(token);
 
   return runWithLock_(function () {
     const rec = findSubmissionRecord_(submissionId);
@@ -318,9 +318,9 @@ function deleteSubmission(submissionId, token) {
     deleteSubmissionAttachments_(rec.id);
     db.prepare('DELETE FROM submissions WHERE id = ?').run(rec.id);
 
-    try { require('./audit').logAudit_(ACTIONS.SUBMISSION_DELETE, rec.cardRow, { id: submissionId, text: rec.text }, admin.email); } catch (err) {}
+    try { require('./audit').logAudit_(ACTIONS.SUBMISSION_DELETE, rec.cardRow, { id: submissionId, text: rec.text }, editor.email); } catch (err) {}
     try { require('./data-sync').requestBackup(); } catch (err) {}
-    return submissionsForCard_(rec.cardRow, admin);
+    return submissionsForCard_(rec.cardRow, editor);
   });
 }
 

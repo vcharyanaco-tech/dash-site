@@ -126,7 +126,7 @@ the app itself with email/password login and token-based sessions.
 - `addSubmission` / `updateSubmission` — validate length
   (`MAX_TEXT_LENGTH = 5000`), append/update rows inside `runWithLock_`.
 - `lockSubmission` / `unlockSubmission` — editor+; admin locks are admin-only.
-- `deleteSubmission` — admin only; deletes the row.
+- `deleteSubmission` — admin/editor only; deletes the row.
 - `toggleSubmissionDisplay` — admin only; shows/hides the submission on the card.
 - `getSubmissionOverview_()` — per-card counts, a 24-hour `flash` map, and the
   list of displayed submissions. Cached for the request.

@@ -269,6 +269,24 @@ test('admin: adminGetUsers allowed', async function () {
 });
 
 // ------------------------------------------------------------------
+// deleteSubmission: editor required (viewer rejected)
+// ------------------------------------------------------------------
+
+test('viewer rejected: deleteSubmission', async function () {
+  await assert.rejects(
+    post('deleteSubmission', ['not-a-real-id', viewerToken]),
+    /editor permission required|permission required/i
+  );
+});
+
+test('editor: deleteSubmission allowed', async function () {
+  const added = await post('addSubmission', [4, 'card-1', 'Authz editor delete test', null, editorToken]);
+  assert.ok(added[0].id);
+  const del = await post('deleteSubmission', [added[0].id, editorToken]);
+  assert.ok(!del.some(function (s) { return s.id === added[0].id; }));
+});
+
+// ------------------------------------------------------------------
 // audit: admin-only ops (adminDeleteAuditRows, adminClearAudit)
 // ------------------------------------------------------------------
 

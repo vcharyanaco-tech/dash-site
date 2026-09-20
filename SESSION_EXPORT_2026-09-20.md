@@ -318,3 +318,14 @@ Fix:
 - detail.js: same split — toggle when the dialog has displayed update blocks (`detailUpdatesCount > 0`), otherwise "View updates (N)" opening the submissions modal.
 
 Verification: app.js rebuilt (22 modules, 11209 lines), `split-app.js` byte-exact, 406/406 tests, secret-scan + bundle-size OK. Committed + pushed after Render redeploy verified.
+
+## feat: editors (admin+editor) can delete any update/submission (after d74584d)
+
+Request: each update in the submissions modal should have a Delete option for admins AND editors (was admin-only).
+
+- `src/server/submissions.js` `deleteSubmission`: auth gate relaxed `auth.requireAdmin` -> `auth.requireEditor` (audit + return list now use the editor context).
+- `src/app/submissions.js`: Delete button in `renderSubmissionCard` and the `deleteSubmission()` client guard changed `isAdmin` -> `isEditor` (viewers still see no delete).
+- `src/docs/Architecture.md`: deleteSubmission documented as admin/editor only.
+- `authz.test.js`: +2 tests — viewer rejected (Editor permission required), editor add+delete round-trip succeeds.
+
+Verification: app.js rebuilt (22 modules), split byte-exact, 408/408 tests, secret-scan + bundle-size OK. Committed + pushed after Render redeploy verified.

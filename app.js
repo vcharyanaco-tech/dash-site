@@ -8538,7 +8538,7 @@ function renderSubmissionCard(s) {
   } else if (s.canLock) {
     lockBtn = `<button class="btn btn-secondary btn-small" type="button" onclick="lockSubmission('${escAttr(s.id)}')">Lock</button>`;
   }
-  const deleteBtn = appState.isAdmin
+  const deleteBtn = appState.isEditor
     ? `<button class="btn btn-danger btn-small" type="button" onclick="deleteSubmission('${escAttr(s.id)}')">Delete</button>`
     : '';
   const displayBtn = appState.isAdmin
@@ -8706,7 +8706,7 @@ function unlockSubmission(id) {
 }
 
 function deleteSubmission(id) {
-  if (!appState.isAdmin) { showToast('Admin access required', 'warning'); return; }
+  if (!appState.isEditor) { showToast('Editor access required', 'warning'); return; }
   showConfirm({
     title: 'Delete submission',
     message: 'Delete this submission permanently?',
