@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS records (
   description TEXT NOT NULL DEFAULT '',
   entry_date TEXT NOT NULL DEFAULT '',
   action TEXT NOT NULL DEFAULT '',
+  last_meeting_instructions TEXT NOT NULL DEFAULT '',
   responsibility TEXT NOT NULL DEFAULT '',
   review_date TEXT NOT NULL DEFAULT '',
   -- JSON: { sector:{url,text}, description:{url,text}, action:{url,text} }
@@ -57,7 +58,8 @@ CREATE TABLE IF NOT EXISTS users (
   office TEXT NOT NULL DEFAULT '',
   preferences TEXT NOT NULL DEFAULT '',
   reset_requested TEXT NOT NULL DEFAULT '',
-  username TEXT NOT NULL DEFAULT ''
+  username TEXT NOT NULL DEFAULT '',
+  divisional_dashboard_url TEXT NOT NULL DEFAULT ''
 );
 
 -- Submissions (mirrors the hidden 'Submissions' sheet).
@@ -76,6 +78,20 @@ CREATE TABLE IF NOT EXISTS submissions (
   -- submission-badge on the card flashes while any update is unread.
   read_at INTEGER NOT NULL DEFAULT 0
 );
+
+-- Files attached directly to submissions. Kept separate from record documents
+-- so submission attachments follow the update rather than the parent record.
+CREATE TABLE IF NOT EXISTS submission_attachments (
+  id TEXT PRIMARY KEY,
+  submission_id TEXT NOT NULL,
+  file_name TEXT NOT NULL DEFAULT '',
+  file_key TEXT NOT NULL DEFAULT '',
+  mime_type TEXT NOT NULL DEFAULT '',
+  size INTEGER NOT NULL DEFAULT 0,
+  uploaded_by TEXT NOT NULL DEFAULT '',
+  uploaded_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_submission_attachments_submission ON submission_attachments(submission_id);
 
 -- Tasks (mirrors the hidden 'Tasks' sheet).
 CREATE TABLE IF NOT EXISTS tasks (
@@ -200,6 +216,9 @@ CREATE INDEX IF NOT EXISTS idx_notifications_email ON notifications(email);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit(timestamp);
 CREATE INDEX IF NOT EXISTS idx_documents_record_row ON documents(record_row);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username != '';
+-- idx_users_dashboard_url is created by db.js AFTER its migration adds the
+-- users.divisional_dashboard_url column (same rule as idx_records_record_id:
+-- CREATE TABLE IF NOT EXISTS never adds columns to existing restored tables).
 
 -- Record change history: stores a JSON diff for every update so admins can
 -- see exactly what changed on each edit. One row per update event.

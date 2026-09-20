@@ -16,17 +16,19 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-migrations-'));
 const EXPECTED_TABLES = [
   'records', 'users', 'submissions', 'tasks', 'notifications', 'audit',
   'audit_archive', 'documents', 'sessions', 'login_attempts', 'settings',
-  'ai_cache', 'dedupe', 'ask_ai_history', 'record_changes'
+  'ai_cache', 'dedupe', 'ask_ai_history', 'record_changes',
+  'submission_attachments'
 ];
 const EXPECTED_COLUMNS = {
   submissions: ['read_at'],
-  records: ['source', 'displayed', 'record_id'],
+  records: ['source', 'displayed', 'record_id', 'last_meeting_instructions'],
+  users: ['divisional_dashboard_url'],
   tasks: ['record_id'],
   documents: ['keep', 'record_id'],
   record_changes: ['record_id'],
   notifications: ['priority', 'record_row', 'snoozed_until', 'dismissed_at', 'group_key']
 };
-const EXPECTED_INDEXES = ['idx_users_email_unique', 'idx_users_username', 'idx_records_record_id'];
+const EXPECTED_INDEXES = ['idx_users_email_unique', 'idx_users_username', 'idx_records_record_id', 'idx_users_dashboard_url'];
 
 // Columns added by db.js migrations after schema.sql. A legacy restored DB
 // (Render free-tier: the KV snapshot predates these) lacks them, so booting
@@ -35,6 +37,8 @@ const EXPECTED_INDEXES = ['idx_users_email_unique', 'idx_users_username', 'idx_r
 const MIGRATED_COLUMNS = [
   ['submissions', 'read_at'],
   ['records', 'source'], ['records', 'displayed'], ['records', 'record_id'],
+  ['records', 'last_meeting_instructions'],
+  ['users', 'divisional_dashboard_url'],
   ['tasks', 'record_id'], ['documents', 'keep'], ['documents', 'record_id'],
   ['record_changes', 'record_id'],
   ['notifications', 'priority'], ['notifications', 'record_row'],
@@ -58,6 +62,7 @@ function stripToLegacy() {
   const Database = require(path.join(ROOT, 'src', 'server', 'node_modules', 'better-sqlite3'));
   const db = new Database(path.join(dir, 'dashboard.db'));
   db.exec('DROP INDEX IF EXISTS idx_records_record_id');
+  db.exec('DROP INDEX IF EXISTS idx_users_dashboard_url');
   MIGRATED_COLUMNS.forEach(function (d) {
     const have = new Set(db.prepare('PRAGMA table_info(' + d[0] + ')').all().map(function (c) { return c.name; }));
     if (have.has(d[1])) db.exec('ALTER TABLE ' + d[0] + ' DROP COLUMN ' + d[1]);

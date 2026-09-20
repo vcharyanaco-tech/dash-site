@@ -358,7 +358,7 @@ var i18n = (function () {
    onclick handlers referenced by index.html are defined here.
    ========================================================================== */
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.2.0';
 const APP_BUILD = '2026.08.19';
 const PAGE_SIZE = 10;
 const AUDIT_PAGE_SIZE = 20;
@@ -499,8 +499,11 @@ getMyNotifications: function () { return apiCall_('getMyNotifications'); },
   deleteDocument: function (docId) { return apiCall_('deleteDocument', docId); },
   setDocumentKeep: function (docId, keep) { return apiCall_('setDocumentKeep', docId, keep); },
   getSubmissions: function (cardRow) { return apiCall_('getSubmissions', cardRow); },
-  addSubmission: function (cardRow, cardId, text) { return apiCall_('addSubmission', cardRow, cardId, text); },
-  updateSubmission: function (submissionId, text) { return apiCall_('updateSubmission', submissionId, text); },
+  addSubmission: function (cardRow, cardId, text, attachment) { return apiCall_('addSubmission', cardRow, cardId, text, attachment || null); },
+  updateSubmission: function (submissionId, text, attachment) { return apiCall_('updateSubmission', submissionId, text, attachment || null); },
+  getMyDivisionalDashboard: function () { return apiCall_('getMyDivisionalDashboard'); },
+  setMyDivisionalDashboard: function (url) { return apiCall_('setMyDivisionalDashboard', url); },
+  getDivisionalDashboardLinks: function () { return apiCall_('getDivisionalDashboardLinks'); },
   lockSubmission: function (submissionId) { return apiCall_('lockSubmission', submissionId); },
   unlockSubmission: function (submissionId) { return apiCall_('unlockSubmission', submissionId); },
   deleteSubmission: function (submissionId) { return apiCall_('deleteSubmission', submissionId); },
@@ -3430,6 +3433,43 @@ function initApp() {
   loadApp();
 }
 
+function maybePromptForDivisionalDashboard() {
+  ApiService.getMyDivisionalDashboard().then(function (data) {
+    if (!data || !data.eligible || data.url) return;
+    const modal = getEl('divisionalDashboardModal');
+    const input = getEl('divisionalDashboardUrl');
+    if (!modal || !input) return;
+    input.value = '';
+    const status = getEl('divisionalDashboardStatus');
+    if (status) status.textContent = '';
+    modal.classList.remove('hidden');
+    openDialog('divisionalDashboardModal');
+    setTimeout(function () { input.focus(); }, 50);
+  }).catch(function (err) { if (handleServerFailure(err)) return; });
+}
+
+function saveMyDivisionalDashboard() {
+  const input = getEl('divisionalDashboardUrl');
+  const url = input ? input.value.trim() : '';
+  const status = getEl('divisionalDashboardStatus');
+  if (!/^https?:\/\//i.test(url)) { if (status) status.textContent = 'Enter a valid http:// or https:// URL.'; return; }
+  const btn = getEl('saveDivisionalDashboardBtn');
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = 'Saving…';
+  ApiService.setMyDivisionalDashboard(url).then(function (res) {
+    if (btn) btn.disabled = false;
+    if (res && res.success) {
+      appState.user.divisionalDashboardUrl = res.url;
+      closeDialog('divisionalDashboardModal');
+      showToast('Divisional dashboard link saved.', 'success');
+      renderSettings();
+    } else if (status) status.textContent = (res && res.message) || 'Could not save the link.';
+  }).catch(function (err) {
+    if (btn) btn.disabled = false;
+    if (status) status.textContent = err.message || 'Could not save the link.';
+  });
+}
+
 function loadApp() {
   showOverlay('Loading app…');
   ApiService.getAppData().then(function (data) {
@@ -3462,6 +3502,7 @@ function loadApp() {
     loadAskLinkHistory();
     EventBus.emit('DataRefreshed');
     EventBus.emit('UserLoggedIn');
+    maybePromptForDivisionalDashboard();
     startAutoRefresh();
     initRealtime();
 
@@ -3968,7 +4009,8 @@ function rowUpdatesHtml_(row) {
 
 /* Flip the show/hide state for a row, persist it, then sync every matching
    card / dialog element in the DOM to the new state without a re-render. */
-function toggleCardUpdates(row, btn) {
+function toggleCardUpdates(row, btn, allowViewer) {
+  if (!appState.isEditor && !allowViewer) { showToast('Admin/editor access required', 'warning'); return; }
   loadUpdatesHiddenByRow_();
   const key = String(row);
   appState.updatesHiddenByRow[key] = !appState.updatesHiddenByRow[key];
@@ -4035,7 +4077,7 @@ function buildCardHtml(item) {
       <button class="btn btn-secondary btn-small" onclick="openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}')">Submit update</button>
       ${subCount > 0 ? `<span class="submission-badge${subFlash ? ' flash' : ''}">${subCount}</span>` : ''}
     </div>
-    ${updatesCount > 0 ? `<button class="btn btn-secondary btn-small toggle-updates-btn" data-updates-toggle="${escAttr(item.row)}" onclick="toggleCardUpdates('${escAttr(item.row)}', this)">${updatesHidden ? 'Show updates' : 'Hide updates'}</button>` : ''}
+    ${appState.isEditor && updatesCount > 0 ? `<button class="btn btn-secondary btn-small toggle-updates-btn" data-updates-toggle="${escAttr(item.row)}" onclick="toggleCardUpdates('${escAttr(item.row)}', this)">${updatesHidden ? 'Show updates' : 'Hide updates'}</button>` : ''}
     <div class="menu-dropdown">
       <button class="btn btn-secondary btn-small" type="button" onclick="event.stopPropagation(); toggleDropdown(this);">Print</button>
       <span class="menu-dropdown-menu">
@@ -5131,6 +5173,7 @@ function sendEmailAllUsers() {
 /* ---------------------------------- Settings ---------------------------------- */
 
 function renderSettings() {
+  loadDivisionalDashboardLinks();
   getEl('mustChangeBanner').classList.toggle('hidden', !appState.mustChange);
 
   // CSV import drop zone — editors and admins
@@ -5334,6 +5377,22 @@ function saveSettingsFathomKey() {
     hideOverlay();
     if (handleServerFailure(err)) return;
     showToast('Error saving key: ' + (err.message || err), 'error');
+  });
+}
+
+function loadDivisionalDashboardLinks() {
+  const body = getEl('divisionalDashboardLinksBody');
+  if (!body) return;
+  ApiService.getDivisionalDashboardLinks().then(function (rows) {
+    rows = rows || [];
+    if (!rows.length) { body.innerHTML = '<div class="form-status">No DO/RMS users found.</div>'; return; }
+    body.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr><th>Designation / username</th><th>Office</th><th>Dashboard</th></tr></thead><tbody>' + rows.map(function (r) {
+      const link = r.url ? '<a href="' + escapeHtml(r.url) + '" target="_blank" rel="noopener noreferrer">Open dashboard</a>' : '<span class="form-status">Not provided</span>';
+      return '<tr><td><strong>' + escapeHtml(r.designation || r.username || '—') + '</strong></td><td>' + escapeHtml(r.office || r.department || '—') + '</td><td>' + link + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+    body.innerHTML = '<div class="form-status error">Could not load dashboard links.</div>';
   });
 }
 
@@ -6031,7 +6090,7 @@ function openRecordDetail(row) {
   if (appState.isEditor) {
     actionsHtml += `<button class="btn btn-primary" type="button" onclick="closeRecordDetail(); editItem('${escAttr(item.row)}');">Edit</button>`;
   }
-  if (detailUpdatesCount > 0) {
+  if (appState.isEditor && detailUpdatesCount > 0) {
     actionsHtml += `<button class="btn btn-secondary" data-updates-toggle="${escAttr(item.row)}" type="button" onclick="toggleCardUpdates('${escAttr(item.row)}', this)">${detailUpdatesHidden ? 'Show updates' : 'Hide updates'}</button>`;
   }
   if (appState.isEditor) {
@@ -8067,6 +8126,10 @@ function openSubmissionsModal(row, cardId, onlyMine) {
   appState.submissionCardId = cardId;
   appState.submissionEditingId = '';
   getEl('submissionText').value = '';
+  const fileInput = getEl('submissionAttachment');
+  if (fileInput) fileInput.value = '';
+  const fileName = getEl('submissionAttachmentName');
+  if (fileName) fileName.textContent = '';
   resetSubmissionCompose();
   getEl('submissionStatus').textContent = '';
   getEl('submissionsOnlyMine').checked = !!onlyMine;
@@ -8142,6 +8205,7 @@ function renderSubmissionList() {
 function renderSubmissionCard(s) {
   const lockedBadge = s.locked ? '<span class="badge badge-locked">Locked</span>' : '';
   const displayedBadge = s.displayed ? '<span class="badge badge-displayed">On card</span>' : '';
+  const attachmentsHtml = (s.attachments || []).map(function (a) { return '<div class="submission-attachment">📎 <a href="/api/files/' + encodeURIComponent(a.fileKey) + '?download=1" target="_blank" rel="noopener">' + escapeHtml(a.fileName) + '</a> <span class="form-status">(' + formatFileSize(a.size) + ')</span></div>'; }).join('');
   const ownerTag = s.isOwner ? ' <em>(you)</em>' : '';
   const editBtn = s.editable
     ? `<button class="btn btn-secondary btn-small" type="button" onclick="editSubmission('${escAttr(s.id)}')">Edit</button>`
@@ -8168,7 +8232,8 @@ function renderSubmissionCard(s) {
         <span>${escapeHtml(s.email)}${ownerTag} ${lockedBadge} ${displayedBadge}</span>
         <span>${escapeHtml(formatTimestamp(s.createdAt))}</span>
       </div>
-      <div class="submission-text preserve-whitespace">${escapeHtml(s.text || '')}</div>
+      <div class="submission-text preserve-whitespace">${renderSubmissionText(s.text || '')}</div>
+      ${attachmentsHtml ? '<div class="submission-attachments">' + attachmentsHtml + '</div>' : ''}
       <div class="submission-actions">${editBtn}${lockBtn}${deleteBtn}${displayBtn}${lockNote}</div>
     </div>`;
 }
@@ -8178,6 +8243,10 @@ function editSubmission(id) {
   if (!s) return;
   appState.submissionEditingId = s.id;
   getEl('submissionText').value = s.text;
+  const fileInput = getEl('submissionAttachment');
+  if (fileInput) fileInput.value = '';
+  const fileName = getEl('submissionAttachmentName');
+  if (fileName) fileName.textContent = '';
   getEl('submitSubmissionBtn').textContent = 'Save changes';
   getEl('cancelSubmissionBtn').classList.remove('hidden');
   getEl('submissionStatus').textContent = 'Editing your submission';
@@ -8186,20 +8255,67 @@ function editSubmission(id) {
 function cancelSubmissionEdit() {
   appState.submissionEditingId = '';
   getEl('submissionText').value = '';
+  const fileInput = getEl('submissionAttachment');
+  if (fileInput) fileInput.value = '';
+  const fileName = getEl('submissionAttachmentName');
+  if (fileName) fileName.textContent = '';
   getEl('submissionStatus').textContent = '';
   resetSubmissionCompose();
 }
 
+function insertSubmissionLink() {
+  const text = prompt('Link text:', 'Open link');
+  if (text === null) return;
+  const url = prompt('URL (https://…):', 'https://');
+  if (url === null) return;
+  const trimmed = String(url).trim();
+  if (!/^https?:\/\//i.test(trimmed)) { showToast('Please enter a valid http:// or https:// URL.', 'warning'); return; }
+  const ta = getEl('submissionText');
+  const link = '[' + String(text || trimmed).replace(/\]/g, '') + '](' + trimmed.replace(/[()]/g, '') + ')';
+  const start = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+  const end = ta.selectionEnd == null ? ta.value.length : ta.selectionEnd;
+  ta.value = ta.value.slice(0, start) + link + ta.value.slice(end);
+  ta.focus();
+  ta.selectionStart = ta.selectionEnd = start + link.length;
+}
+
+function handleSubmissionAttachmentChange(input) {
+  const file = input && input.files && input.files[0];
+  const label = getEl('submissionAttachmentName');
+  if (!file) { if (label) label.textContent = ''; return; }
+  if (file.size > 1024 * 1024) { input.value = ''; if (label) label.textContent = ''; getEl('submissionStatus').textContent = 'Attachment exceeds the 1 MB limit.'; return; }
+  if (label) label.textContent = file.name + ' (' + formatFileSize(file.size) + ')';
+}
+
+function renderSubmissionText(value) {
+  const source = String(value || '');
+  const escaped = escapeHtml(source);
+  return escaped.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/gi, function (_, label, url) {
+    return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
+  });
+}
+
 function submitSubmission() {
   const text = getEl('submissionText').value;
+  const fileInput = getEl('submissionAttachment');
+  const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+  if (file && file.size > 1024 * 1024) { getEl('submissionStatus').textContent = 'Attachment exceeds the 1 MB limit.'; return; }
   if (!text || !text.trim()) {
     getEl('submissionStatus').textContent = 'Write your update before submitting.';
     return;
   }
   const editingId = appState.submissionEditingId;
+  function buildAttachment(cb) {
+    if (!file) { cb(null); return; }
+    const reader = new FileReader();
+    reader.onload = function () { const result = String(reader.result || ''); cb({ fileName: file.name, mimeType: file.type || 'application/octet-stream', base64: result.split(',')[1] || '' }); };
+    reader.onerror = function () { getEl('submissionStatus').textContent = 'Could not read attachment.'; };
+    reader.readAsDataURL(file);
+  }
+  buildAttachment(function (attachment) {
   if (editingId) {
     showOverlay('Saving submission…');
-    ApiService.updateSubmission(editingId, text).then(function (list) {
+    ApiService.updateSubmission(editingId, text, attachment).then(function (list) {
       hideOverlay();
       appState.submissionSeq++;
       appState.submissions = list || [];
@@ -8216,7 +8332,7 @@ function submitSubmission() {
     });
   } else {
     showOverlay('Submitting update…');
-    ApiService.addSubmission(Number(appState.submissionCardRow), appState.submissionCardId, text).then(function (list) {
+    ApiService.addSubmission(Number(appState.submissionCardRow), appState.submissionCardId, text, attachment).then(function (list) {
       hideOverlay();
       appState.submissionSeq++;
       appState.submissions = list || [];
@@ -8234,6 +8350,7 @@ function submitSubmission() {
       getEl('submissionStatus').textContent = err.message || 'Could not submit update';
     });
   }
+  });
 }
 
 function lockSubmission(id) {
@@ -8901,7 +9018,7 @@ function presentationSlideHtml_(item) {
    owns the authoritative per-record visibility) and relabels with the
    presentation wording. */
 function presentationToggleUpdates_(row, btn) {
-  toggleCardUpdates(row, btn);
+  toggleCardUpdates(row, btn, true);
   const hidden = isRowUpdatesHidden_(row);
   if (btn) btn.textContent = hidden ? 'Show submissions' : 'Hide submissions';
   const stage = getEl('presentationStage');

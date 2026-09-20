@@ -32,6 +32,7 @@ const AUTH_ARG_INDEX = Object.freeze({
   adminUpdateUser: 2, adminExportUsers: 0, adminImportUsers: 1,
   adminGetUserActivity: 0, adminDeleteUser: 1, adminResetPassword: 2,
   adminEmailAllUsers: 2, getAssignableUsers: 0, getMyNotifications: 0,
+  getMyDivisionalDashboard: 0, setMyDivisionalDashboard: 1, getDivisionalDashboardLinks: 0,
   getNotificationPrefs: 0, setNotificationPrefs: 1,
   markNotificationsRead: 1, clearMyNotifications: 0, updateNotificationState: 2, snoozeNotification: 2, dismissNotification: 1, restoreNotification: 1, getNotificationDigest: 0, getTaskCounts: 0,
   createTask: 1, getTasks: 1, getMyTasks: 0, updateTask: 2, deleteTask: 1,
@@ -39,7 +40,7 @@ const AUTH_ARG_INDEX = Object.freeze({
   getReportData: 1, exportToSpreadsheet: 0, createPdfReport: 0,
   emailReport: 0, getAllDocuments: 0, getRecordDocuments: 1, uploadDocument: 5,
   deleteDocument: 1, setDocumentKeep: 2, getSubmissions: 0,
-  addSubmission: 3, updateSubmission: 2, lockSubmission: 1,
+  addSubmission: 4, updateSubmission: 3, lockSubmission: 1,
   unlockSubmission: 1, deleteSubmission: 1, markAllSubmissionsRead: 0,
   toggleSubmissionDisplay: 1, adminDeleteAuditRows: 1, adminClearAudit: 0,
   getAuditEntries: 1, getRecordHistory: 1,
@@ -426,7 +427,7 @@ const VALIDATORS = {
     return null;
   },
   addSubmission: function (args) {
-    if (args.length < 4) return 'addSubmission requires (cardRow, cardId, text, token)';
+    if (args.length < 5) return 'addSubmission requires (cardRow, cardId, text, attachment, token)';
     return null;
   },
   reconcileRecordOrder: function (args) {
@@ -556,7 +557,7 @@ const VALIDATORS = {
     return null;
   },
   updateSubmission: function (args) {
-    if (args.length < 3) return 'updateSubmission requires (submissionId, text, token)';
+    if (args.length < 4) return 'updateSubmission requires (submissionId, text, attachment, token)';
     if (!args[0] && args[0] !== 0) return 'submissionId is required';
     if (typeof args[1] !== 'string' || !args[1].trim()) return 'text is required';
     return null;
@@ -682,6 +683,18 @@ const VALIDATORS = {
   },
   refreshSession: function (args) {
     if (args.length < 1) return 'refreshSession requires (token)';
+    return null;
+  },
+  getMyDivisionalDashboard: function (args) {
+    if (args.length < 1) return 'getMyDivisionalDashboard requires (token)';
+    return null;
+  },
+  setMyDivisionalDashboard: function (args) {
+    if (args.length < 2) return 'setMyDivisionalDashboard requires (url, token)';
+    return null;
+  },
+  getDivisionalDashboardLinks: function (args) {
+    if (args.length < 1) return 'getDivisionalDashboardLinks requires (token)';
     return null;
   },
   adminGetUsers: function (args) {

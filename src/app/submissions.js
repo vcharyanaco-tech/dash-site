@@ -6,6 +6,10 @@ function openSubmissionsModal(row, cardId, onlyMine) {
   appState.submissionCardId = cardId;
   appState.submissionEditingId = '';
   getEl('submissionText').value = '';
+  const fileInput = getEl('submissionAttachment');
+  if (fileInput) fileInput.value = '';
+  const fileName = getEl('submissionAttachmentName');
+  if (fileName) fileName.textContent = '';
   resetSubmissionCompose();
   getEl('submissionStatus').textContent = '';
   getEl('submissionsOnlyMine').checked = !!onlyMine;
@@ -81,6 +85,7 @@ function renderSubmissionList() {
 function renderSubmissionCard(s) {
   const lockedBadge = s.locked ? '<span class="badge badge-locked">Locked</span>' : '';
   const displayedBadge = s.displayed ? '<span class="badge badge-displayed">On card</span>' : '';
+  const attachmentsHtml = (s.attachments || []).map(function (a) { return '<div class="submission-attachment">📎 <a href="/api/files/' + encodeURIComponent(a.fileKey) + '?download=1" target="_blank" rel="noopener">' + escapeHtml(a.fileName) + '</a> <span class="form-status">(' + formatFileSize(a.size) + ')</span></div>'; }).join('');
   const ownerTag = s.isOwner ? ' <em>(you)</em>' : '';
   const editBtn = s.editable
     ? `<button class="btn btn-secondary btn-small" type="button" onclick="editSubmission('${escAttr(s.id)}')">Edit</button>`
@@ -107,7 +112,8 @@ function renderSubmissionCard(s) {
         <span>${escapeHtml(s.email)}${ownerTag} ${lockedBadge} ${displayedBadge}</span>
         <span>${escapeHtml(formatTimestamp(s.createdAt))}</span>
       </div>
-      <div class="submission-text preserve-whitespace">${escapeHtml(s.text || '')}</div>
+      <div class="submission-text preserve-whitespace">${renderSubmissionText(s.text || '')}</div>
+      ${attachmentsHtml ? '<div class="submission-attachments">' + attachmentsHtml + '</div>' : ''}
       <div class="submission-actions">${editBtn}${lockBtn}${deleteBtn}${displayBtn}${lockNote}</div>
     </div>`;
 }
@@ -117,6 +123,10 @@ function editSubmission(id) {
   if (!s) return;
   appState.submissionEditingId = s.id;
   getEl('submissionText').value = s.text;
+  const fileInput = getEl('submissionAttachment');
+  if (fileInput) fileInput.value = '';
+  const fileName = getEl('submissionAttachmentName');
+  if (fileName) fileName.textContent = '';
   getEl('submitSubmissionBtn').textContent = 'Save changes';
   getEl('cancelSubmissionBtn').classList.remove('hidden');
   getEl('submissionStatus').textContent = 'Editing your submission';
@@ -125,20 +135,67 @@ function editSubmission(id) {
 function cancelSubmissionEdit() {
   appState.submissionEditingId = '';
   getEl('submissionText').value = '';
+  const fileInput = getEl('submissionAttachment');
+  if (fileInput) fileInput.value = '';
+  const fileName = getEl('submissionAttachmentName');
+  if (fileName) fileName.textContent = '';
   getEl('submissionStatus').textContent = '';
   resetSubmissionCompose();
 }
 
+function insertSubmissionLink() {
+  const text = prompt('Link text:', 'Open link');
+  if (text === null) return;
+  const url = prompt('URL (https://…):', 'https://');
+  if (url === null) return;
+  const trimmed = String(url).trim();
+  if (!/^https?:\/\//i.test(trimmed)) { showToast('Please enter a valid http:// or https:// URL.', 'warning'); return; }
+  const ta = getEl('submissionText');
+  const link = '[' + String(text || trimmed).replace(/\]/g, '') + '](' + trimmed.replace(/[()]/g, '') + ')';
+  const start = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+  const end = ta.selectionEnd == null ? ta.value.length : ta.selectionEnd;
+  ta.value = ta.value.slice(0, start) + link + ta.value.slice(end);
+  ta.focus();
+  ta.selectionStart = ta.selectionEnd = start + link.length;
+}
+
+function handleSubmissionAttachmentChange(input) {
+  const file = input && input.files && input.files[0];
+  const label = getEl('submissionAttachmentName');
+  if (!file) { if (label) label.textContent = ''; return; }
+  if (file.size > 1024 * 1024) { input.value = ''; if (label) label.textContent = ''; getEl('submissionStatus').textContent = 'Attachment exceeds the 1 MB limit.'; return; }
+  if (label) label.textContent = file.name + ' (' + formatFileSize(file.size) + ')';
+}
+
+function renderSubmissionText(value) {
+  const source = String(value || '');
+  const escaped = escapeHtml(source);
+  return escaped.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/gi, function (_, label, url) {
+    return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
+  });
+}
+
 function submitSubmission() {
   const text = getEl('submissionText').value;
+  const fileInput = getEl('submissionAttachment');
+  const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+  if (file && file.size > 1024 * 1024) { getEl('submissionStatus').textContent = 'Attachment exceeds the 1 MB limit.'; return; }
   if (!text || !text.trim()) {
     getEl('submissionStatus').textContent = 'Write your update before submitting.';
     return;
   }
   const editingId = appState.submissionEditingId;
+  function buildAttachment(cb) {
+    if (!file) { cb(null); return; }
+    const reader = new FileReader();
+    reader.onload = function () { const result = String(reader.result || ''); cb({ fileName: file.name, mimeType: file.type || 'application/octet-stream', base64: result.split(',')[1] || '' }); };
+    reader.onerror = function () { getEl('submissionStatus').textContent = 'Could not read attachment.'; };
+    reader.readAsDataURL(file);
+  }
+  buildAttachment(function (attachment) {
   if (editingId) {
     showOverlay('Saving submission…');
-    ApiService.updateSubmission(editingId, text).then(function (list) {
+    ApiService.updateSubmission(editingId, text, attachment).then(function (list) {
       hideOverlay();
       appState.submissionSeq++;
       appState.submissions = list || [];
@@ -155,7 +212,7 @@ function submitSubmission() {
     });
   } else {
     showOverlay('Submitting update…');
-    ApiService.addSubmission(Number(appState.submissionCardRow), appState.submissionCardId, text).then(function (list) {
+    ApiService.addSubmission(Number(appState.submissionCardRow), appState.submissionCardId, text, attachment).then(function (list) {
       hideOverlay();
       appState.submissionSeq++;
       appState.submissions = list || [];
@@ -173,6 +230,7 @@ function submitSubmission() {
       getEl('submissionStatus').textContent = err.message || 'Could not submit update';
     });
   }
+  });
 }
 
 function lockSubmission(id) {

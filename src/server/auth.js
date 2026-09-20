@@ -60,7 +60,7 @@ function getCurrentUser() {
 const USER_FIELDS = [
   'id', 'email', 'role', 'salt', 'password_hash', 'must_change', 'created_by',
   'created_at', 'reset_token', 'reset_expires', 'group_name', 'department',
-  'office', 'preferences', 'reset_requested', 'username'
+  'office', 'preferences', 'reset_requested', 'username', 'divisional_dashboard_url'
 ];
 
 function userRecordFromRow_(row) {
@@ -78,7 +78,8 @@ function userRecordFromRow_(row) {
     office: row.office || '',
     preferences: row.preferences || '',
     resetRequested: row.reset_requested ? String(row.reset_requested) : '',
-    username: row.username ? String(row.username) : ''
+    username: row.username ? String(row.username) : '',
+    divisionalDashboardUrl: row.divisional_dashboard_url ? String(row.divisional_dashboard_url) : ''
   };
 }
 
@@ -246,7 +247,8 @@ function listUserRecords_() {
       department: rows[i].department || '',
       office: rows[i].office || '',
       resetRequested: rows[i].reset_requested ? String(rows[i].reset_requested) : '',
-      username: rows[i].username ? String(rows[i].username) : ''
+      username: rows[i].username ? String(rows[i].username) : '',
+      divisionalDashboardUrl: rows[i].divisional_dashboard_url ? String(rows[i].divisional_dashboard_url) : ''
     });
   }
   return out;
@@ -449,6 +451,7 @@ function getUserContext(email) {
   return {
     email: email,
     username: rec.username || '',
+    divisionalDashboardUrl: rec.divisionalDashboardUrl || '',
     role: getUserRole(email),
     group: rec.group || '',
     department: rec.department || '',
@@ -553,6 +556,7 @@ function login(identifier, password) {
     user: {
       email: email,
       username: rec.username || '',
+      divisionalDashboardUrl: rec.divisionalDashboardUrl || '',
       role: context.role,
       loggedIn: true,
       group: context.group,
@@ -665,6 +669,55 @@ function changePassword(currentPassword, newPassword, token) {
 /* ============================================================
  * Admin: User Management
  * ============================================================ */
+
+function isDashboardLinkUser_(user) {
+  const username = String((user && user.username) || '').trim().toLowerCase();
+  return username.indexOf('do_') === 0 || username.indexOf('rms_') === 0;
+}
+
+function isValidDashboardUrl_(url) {
+  try {
+    const u = new URL(String(url || '').trim());
+    return (u.protocol === 'https:' || u.protocol === 'http:') && !!u.hostname;
+  } catch (err) { return false; }
+}
+
+function getMyDivisionalDashboard(token) {
+  const user = requireLogin_(token);
+  const rec = findUserRecord_(user.email) || {};
+  return {
+    eligible: isDashboardLinkUser_(rec),
+    username: rec.username || '',
+    url: rec.divisionalDashboardUrl || ''
+  };
+}
+
+function setMyDivisionalDashboard(url, token) {
+  const user = requireLogin_(token);
+  const rec = findUserRecord_(user.email) || {};
+  if (!isDashboardLinkUser_(rec)) throw new Error('This account is not eligible for a divisional dashboard link.');
+  const value = String(url || '').trim();
+  if (!isValidDashboardUrl_(value)) throw new Error('Enter a valid http:// or https:// dashboard URL.');
+  db.prepare('UPDATE users SET divisional_dashboard_url = ? WHERE lower(trim(email)) = lower(trim(?))').run(value, user.email);
+  try { logAudit_(require('./audit'), 'DIVISIONAL_DASHBOARD_LINK_UPDATE', '', { username: rec.username || '', url: value }, user.email); } catch (err) {}
+  return { success: true, username: rec.username || '', url: value };
+}
+
+function getDivisionalDashboardLinks(token) {
+  requireLogin_(token);
+  return listUserRecords_()
+    .filter(function (u) { return /^((do_)|(rms_))/i.test(String(u.username || '')); })
+    .map(function (u) {
+      return {
+        username: u.username || '',
+        designation: u.username || u.office || u.department || u.email,
+        email: u.email || '',
+        office: u.office || '',
+        department: u.department || '',
+        url: u.divisionalDashboardUrl || ''
+      };
+    });
+}
 
 function adminGetUsers(token) {
   requireAdmin_(token);
@@ -1131,6 +1184,9 @@ module.exports = {
   requestPasswordReset,
   changePassword,
   adminGetUsers,
+  getMyDivisionalDashboard,
+  setMyDivisionalDashboard,
+  getDivisionalDashboardLinks,
   getAssignableUsers,
   adminAddUser,
   adminUpdateUser,

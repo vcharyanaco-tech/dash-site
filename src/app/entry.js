@@ -28,7 +28,7 @@ function loadScript(src) {
 // session.js must load before dashboard.js (initApp, renderProfile).
 // dashboard.js must load before init.js (wireGlobalEvents calls renderDashboard).
 // init.js loads last (wires global events, calls initApp on window.load).
-const MODULE_VERSION = '2026.09.15b';
+const MODULE_VERSION = '1.2.0';
 const MODULES = [
   'i18n.js',         // i18n translations (EN + HI) — must load before app modules
   'core.js',         // Constants, EventBus, ApiService, state, helpers
@@ -68,7 +68,7 @@ const MODULES = [
 
   // Load the offline queue (standalone, not part of the 16 modules)
   try {
-    await loadScript('offline-queue.js?v=2026.08.16a');
+    await loadScript('offline-queue.js?v=1.2.0');
   } catch (err) {
     console.error(`[entry.js] offline-queue: ${err.message}`);
   }

@@ -116,7 +116,7 @@ test('record CRUD + review flags', async function () {
 
 test('submissions flow', async function () {
   await post('getSubmissions', [token, 0]);
-  const added = await post('addSubmission', [4, 'card-1', 'Smoke submission text', token]);
+  const added = await post('addSubmission', [4, 'card-1', 'Smoke submission text', null, token]);
   assert.strictEqual(added[0].text, 'Smoke submission text');
   const id = added[0].id;
   const toggled = await post('toggleSubmissionDisplay', [id, token]);
@@ -129,7 +129,7 @@ test('submissions flow', async function () {
 
 test('submission badge flashes until an admin reads the updates', async function () {
   // Admin adds an update -> the card's badge flashes.
-  const added = await post('addSubmission', [4, 'card-1', 'Flash test update', token]);
+  const added = await post('addSubmission', [4, 'card-1', 'Flash test update', null, token]);
   assert.ok(added[0].id);
   const id = added[0].id;
 
@@ -160,8 +160,8 @@ test('submission badge flashes until an admin reads the updates', async function
 
 test('mark all submissions as read clears every flashing badge at once', async function () {
   // Admin adds updates on two different cards so both badges flash.
-  const a = await post('addSubmission', [4, 'card-1', 'Mark-all flash A', token]);
-  const b = await post('addSubmission', [5, 'card-2', 'Mark-all flash B', token]);
+  const a = await post('addSubmission', [4, 'card-1', 'Mark-all flash A', null, token]);
+  const b = await post('addSubmission', [5, 'card-2', 'Mark-all flash B', null, token]);
   const idA = a[0].id;
   const idB = b[0].id;
 

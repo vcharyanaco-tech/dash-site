@@ -511,11 +511,11 @@ async function getAiInsights(token) {
 async function getAIInsights(token) { return getAiInsights(token); }
 
 
-/* General Dash AI assistant. Editor-gated and quota-limited like record Ask-AI.
+/* General Dash AI assistant. Available to every signed-in user; quota-limited.
    The client supplies a bounded, already-sanitized dashboard context so the
    model can answer operational questions without exposing arbitrary server data. */
 async function askDashboardAi(token, question, context) {
-  const user = auth.requireEditor(token);
+  const user = auth.requireLogin(token);
   const qQuota = checkAskQuota_(user.email);
   if (!qQuota.ok) return { success: false, message: qQuota.message };
   if (!aiEnabled_()) return { success: false, message: 'AI insights are not enabled.' };

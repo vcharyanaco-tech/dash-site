@@ -11,6 +11,12 @@ const { db } = require('./db');
 const { CONFIG, ROLES, ACTIONS, NOTIFICATION_PRIORITY } = require('./config');
 const { uuid_, now_, formatDate_, runWithLock_ } = require('./helpers');
 const auth = require('./auth');
+const fs = require('fs');
+const path = require('path');
+const documents = require('./documents');
+
+const SUBMISSION_MAX_FILE_BYTES = 1024 * 1024;
+const SUBMISSION_UPLOADS_DIR = documents.UPLOADS_DIR;
 
 function submissionRecordFromRow_(row) {
   return {
@@ -24,7 +30,10 @@ function submissionRecordFromRow_(row) {
     lockedBy: String(row.locked_by || ''),
     lockedAt: row.locked_at,
     displayed: !!row.displayed,
-    readAt: row.read_at || 0
+    readAt: row.read_at || 0,
+    attachments: db.prepare('SELECT id, file_name, file_key, mime_type, size, uploaded_by, uploaded_at FROM submission_attachments WHERE submission_id = ? ORDER BY uploaded_at ASC').all(String(row.id || '')).map(function (a) {
+      return { id: String(a.id || ''), fileName: String(a.file_name || ''), fileKey: String(a.file_key || ''), mimeType: String(a.mime_type || ''), size: Number(a.size) || 0, uploadedBy: String(a.uploaded_by || ''), uploadedAt: Number(a.uploaded_at || 0) };
+    })
   };
 }
 
@@ -176,12 +185,47 @@ function getSubmissions(token, cardRow) {
   return submissionsForCard_(cardRow, user);
 }
 
-function addSubmission(cardRow, cardId, text, token) {
+function validateAttachment_(attachment) {
+  if (!attachment || typeof attachment !== 'object') return null;
+  const name = String(attachment.fileName || attachment.name || '').trim().slice(0, 200);
+  const mime = String(attachment.mimeType || attachment.type || 'application/octet-stream').trim().toLowerCase() || 'application/octet-stream';
+  const encoded = String(attachment.base64 || attachment.fileBytes || '').trim();
+  if (!name) throw new Error('Attachment file name is required.');
+  if (!encoded || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || encoded.length % 4 === 1) throw new Error('Invalid attachment content.');
+  const bytes = Buffer.from(encoded, 'base64');
+  if (!bytes.length) throw new Error('Attachment is empty.');
+  if (bytes.length > SUBMISSION_MAX_FILE_BYTES) throw new Error('Attachment exceeds the 1 MB limit.');
+  return { name: name.replace(/[\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim() || 'attachment', mime: mime.slice(0, 200), bytes: bytes };
+}
+
+function saveSubmissionAttachment_(submissionId, attachment, email) {
+  const file = validateAttachment_(attachment);
+  if (!file) return null;
+  fs.mkdirSync(SUBMISSION_UPLOADS_DIR, { recursive: true });
+  const fileKey = uuid_();
+  fs.writeFileSync(path.join(SUBMISSION_UPLOADS_DIR, fileKey), file.bytes);
+  const id = uuid_();
+  db.prepare('INSERT INTO submission_attachments (id, submission_id, file_name, file_key, mime_type, size, uploaded_by, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, String(submissionId), file.name, fileKey, file.mime, file.bytes.length, email, Date.now());
+  return { id: id, fileName: file.name, fileKey: fileKey, mimeType: file.mime, size: file.bytes.length, uploadedBy: email, uploadedAt: Date.now() };
+}
+
+function deleteSubmissionAttachments_(submissionId) {
+  const rows = db.prepare('SELECT file_key FROM submission_attachments WHERE submission_id = ?').all(String(submissionId));
+  rows.forEach(function (r) {
+    try { fs.unlinkSync(path.join(SUBMISSION_UPLOADS_DIR, String(r.file_key || ''))); } catch (err) {}
+    try { require('./data-sync').deleteRemoteFile('uploads', String(r.file_key || '')); } catch (err) {}
+  });
+  db.prepare('DELETE FROM submission_attachments WHERE submission_id = ?').run(String(submissionId));
+}
+
+function addSubmission(cardRow, cardId, text, attachment, token) {
   const user = auth.requireLogin(token);
   cardRow = Number(cardRow);
   if (!cardRow || isNaN(cardRow) || cardRow <= 0) throw new Error('Invalid record reference.');
   const content = String(text || '').trim();
   if (!content) throw new Error('Write your update before submitting.');
+  validateAttachment_(attachment);
   if (content.length > CONFIG.SUBMISSIONS.MAX_TEXT_LENGTH) {
     throw new Error('Submission is too long (max ' + CONFIG.SUBMISSIONS.MAX_TEXT_LENGTH + ' characters).');
   }
@@ -195,6 +239,7 @@ function addSubmission(cardRow, cardId, text, token) {
       'INSERT INTO submissions (id, card_row, card_id, email, text, created_at, updated_at, locked_by, locked_at, displayed) ' +
       'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(id, cardRow, String(cardId || ''), user.email, content, now, now, '', null, 0);
+    if (attachment) saveSubmissionAttachment_(id, attachment, user.email);
 
     try { require('./audit').logAudit_(ACTIONS.SUBMISSION_ADD, cardRow, { id: id, cardRow: cardRow, text: content }, user.email); } catch (err) {}
     try {
@@ -206,9 +251,10 @@ function addSubmission(cardRow, cardId, text, token) {
   });
 }
 
-function updateSubmission(submissionId, text, token) {
+function updateSubmission(submissionId, text, attachment, token) {
   const user = auth.requireLogin(token);
   const content = String(text || '').trim();
+  validateAttachment_(attachment);
   if (!content) throw new Error('Write your update before saving.');
   if (content.length > CONFIG.SUBMISSIONS.MAX_TEXT_LENGTH) {
     throw new Error('Submission is too long (max ' + CONFIG.SUBMISSIONS.MAX_TEXT_LENGTH + ' characters).');
@@ -220,6 +266,7 @@ function updateSubmission(submissionId, text, token) {
     assertCanEditSubmission_(user, rec);
 
     db.prepare('UPDATE submissions SET text = ?, updated_at = ? WHERE id = ?').run(content, Date.now(), rec.id);
+    if (attachment) saveSubmissionAttachment_(rec.id, attachment, user.email);
 
     try { require('./audit').logAudit_(ACTIONS.SUBMISSION_UPDATE, rec.cardRow, { id: submissionId, text: content }, user.email); } catch (err) {}
     try { require('./data-sync').requestBackup(); } catch (err) {}
@@ -268,6 +315,7 @@ function deleteSubmission(submissionId, token) {
     const rec = findSubmissionRecord_(submissionId);
     if (!rec) throw new Error('Submission not found.');
 
+    deleteSubmissionAttachments_(rec.id);
     db.prepare('DELETE FROM submissions WHERE id = ?').run(rec.id);
 
     try { require('./audit').logAudit_(ACTIONS.SUBMISSION_DELETE, rec.cardRow, { id: submissionId, text: rec.text }, admin.email); } catch (err) {}

@@ -72,7 +72,7 @@ function openRecordDetail(row) {
   if (appState.isEditor) {
     actionsHtml += `<button class="btn btn-primary" type="button" onclick="closeRecordDetail(); editItem('${escAttr(item.row)}');">Edit</button>`;
   }
-  if (detailUpdatesCount > 0) {
+  if (appState.isEditor && detailUpdatesCount > 0) {
     actionsHtml += `<button class="btn btn-secondary" data-updates-toggle="${escAttr(item.row)}" type="button" onclick="toggleCardUpdates('${escAttr(item.row)}', this)">${detailUpdatesHidden ? 'Show updates' : 'Hide updates'}</button>`;
   }
   if (appState.isEditor) {

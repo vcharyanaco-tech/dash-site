@@ -6,7 +6,7 @@
    onclick handlers referenced by index.html are defined here.
    ========================================================================== */
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.2.0';
 const APP_BUILD = '2026.08.19';
 const PAGE_SIZE = 10;
 const AUDIT_PAGE_SIZE = 20;
@@ -147,8 +147,11 @@ getMyNotifications: function () { return apiCall_('getMyNotifications'); },
   deleteDocument: function (docId) { return apiCall_('deleteDocument', docId); },
   setDocumentKeep: function (docId, keep) { return apiCall_('setDocumentKeep', docId, keep); },
   getSubmissions: function (cardRow) { return apiCall_('getSubmissions', cardRow); },
-  addSubmission: function (cardRow, cardId, text) { return apiCall_('addSubmission', cardRow, cardId, text); },
-  updateSubmission: function (submissionId, text) { return apiCall_('updateSubmission', submissionId, text); },
+  addSubmission: function (cardRow, cardId, text, attachment) { return apiCall_('addSubmission', cardRow, cardId, text, attachment || null); },
+  updateSubmission: function (submissionId, text, attachment) { return apiCall_('updateSubmission', submissionId, text, attachment || null); },
+  getMyDivisionalDashboard: function () { return apiCall_('getMyDivisionalDashboard'); },
+  setMyDivisionalDashboard: function (url) { return apiCall_('setMyDivisionalDashboard', url); },
+  getDivisionalDashboardLinks: function () { return apiCall_('getDivisionalDashboardLinks'); },
   lockSubmission: function (submissionId) { return apiCall_('lockSubmission', submissionId); },
   unlockSubmission: function (submissionId) { return apiCall_('unlockSubmission', submissionId); },
   deleteSubmission: function (submissionId) { return apiCall_('deleteSubmission', submissionId); },

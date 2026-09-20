@@ -44,6 +44,9 @@ const dispatch = {
   requestPasswordReset: function (args) { return auth.requestPasswordReset(A(args, 0)); },
   changePassword: function (args) { return auth.changePassword(A(args, 0), A(args, 1), A(args, 2)); },
 
+  getMyDivisionalDashboard: function (args) { return auth.getMyDivisionalDashboard(A(args, 0)); },
+  setMyDivisionalDashboard: function (args) { return auth.setMyDivisionalDashboard(A(args, 0), A(args, 1)); },
+  getDivisionalDashboardLinks: function (args) { return auth.getDivisionalDashboardLinks(A(args, 0)); },
   adminGetUsers: function (args) { return auth.adminGetUsers(A(args, 0)); },
   adminAddUser: function (args) { return auth.adminAddUser(A(args, 0), A(args, 1), A(args, 2), A(args, 3), A(args, 4), A(args, 5), A(args, 6), A(args, 7)); },
   adminUpdateUser: function (args) { return auth.adminUpdateUser(A(args, 0), A(args, 1), A(args, 2)); },
@@ -90,8 +93,8 @@ const dispatch = {
   setDocumentKeep: function (args) { return documents.setDocumentKeep(A(args, 0), A(args, 1), A(args, 2)); },
 
   getSubmissions: function (args) { return submissions.getSubmissions(A(args, 0), A(args, 1)); },
-  addSubmission: function (args) { return submissions.addSubmission(A(args, 0), A(args, 1), A(args, 2), A(args, 3)); },
-  updateSubmission: function (args) { return submissions.updateSubmission(A(args, 0), A(args, 1), A(args, 2)); },
+  addSubmission: function (args) { return submissions.addSubmission(A(args, 0), A(args, 1), A(args, 2), A(args, 3), A(args, 4)); },
+  updateSubmission: function (args) { return submissions.updateSubmission(A(args, 0), A(args, 1), A(args, 2), A(args, 3)); },
   lockSubmission: function (args) { return submissions.lockSubmission(A(args, 0), A(args, 1)); },
   unlockSubmission: function (args) { return submissions.unlockSubmission(A(args, 0), A(args, 1)); },
   deleteSubmission: function (args) { return submissions.deleteSubmission(A(args, 0), A(args, 1)); },

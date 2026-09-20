@@ -39,6 +39,13 @@ function Invoke-Git {
 $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 $commitMsg = if ($CommitMessage -ne "") { $CommitMessage } else { "auto: $timestamp" }
 
+# Every deployment receives a new dashboard version. The bump happens before
+# git status/commit so the version shown in the UI, runtime config, and service
+# worker cache are part of the same deployment commit. Use an explicit version
+# (or major/minor/patch) by running bump-version.ps1 separately before deploy.
+Write-Host "[0/4] Bumping dashboard version..." -ForegroundColor Yellow
+& "$PSScriptRoot\bump-version.ps1" patch | Out-Null
+
 Write-Host "===================================================" -ForegroundColor Cyan
 Write-Host " India Post Dashboard - Full Deployment Pipeline" -ForegroundColor Cyan
 Write-Host "===================================================" -ForegroundColor Cyan

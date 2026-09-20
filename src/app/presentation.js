@@ -231,7 +231,7 @@ function presentationSlideHtml_(item) {
    owns the authoritative per-record visibility) and relabels with the
    presentation wording. */
 function presentationToggleUpdates_(row, btn) {
-  toggleCardUpdates(row, btn);
+  toggleCardUpdates(row, btn, true);
   const hidden = isRowUpdatesHidden_(row);
   if (btn) btn.textContent = hidden ? 'Show submissions' : 'Hide submissions';
   const stage = getEl('presentationStage');

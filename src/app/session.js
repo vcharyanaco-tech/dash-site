@@ -602,6 +602,43 @@ function initApp() {
   loadApp();
 }
 
+function maybePromptForDivisionalDashboard() {
+  ApiService.getMyDivisionalDashboard().then(function (data) {
+    if (!data || !data.eligible || data.url) return;
+    const modal = getEl('divisionalDashboardModal');
+    const input = getEl('divisionalDashboardUrl');
+    if (!modal || !input) return;
+    input.value = '';
+    const status = getEl('divisionalDashboardStatus');
+    if (status) status.textContent = '';
+    modal.classList.remove('hidden');
+    openDialog('divisionalDashboardModal');
+    setTimeout(function () { input.focus(); }, 50);
+  }).catch(function (err) { if (handleServerFailure(err)) return; });
+}
+
+function saveMyDivisionalDashboard() {
+  const input = getEl('divisionalDashboardUrl');
+  const url = input ? input.value.trim() : '';
+  const status = getEl('divisionalDashboardStatus');
+  if (!/^https?:\/\//i.test(url)) { if (status) status.textContent = 'Enter a valid http:// or https:// URL.'; return; }
+  const btn = getEl('saveDivisionalDashboardBtn');
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = 'Saving…';
+  ApiService.setMyDivisionalDashboard(url).then(function (res) {
+    if (btn) btn.disabled = false;
+    if (res && res.success) {
+      appState.user.divisionalDashboardUrl = res.url;
+      closeDialog('divisionalDashboardModal');
+      showToast('Divisional dashboard link saved.', 'success');
+      renderSettings();
+    } else if (status) status.textContent = (res && res.message) || 'Could not save the link.';
+  }).catch(function (err) {
+    if (btn) btn.disabled = false;
+    if (status) status.textContent = err.message || 'Could not save the link.';
+  });
+}
+
 function loadApp() {
   showOverlay('Loading app…');
   ApiService.getAppData().then(function (data) {
@@ -634,6 +671,7 @@ function loadApp() {
     loadAskLinkHistory();
     EventBus.emit('DataRefreshed');
     EventBus.emit('UserLoggedIn');
+    maybePromptForDivisionalDashboard();
     startAutoRefresh();
     initRealtime();
 

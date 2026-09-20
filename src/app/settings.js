@@ -2,6 +2,7 @@
 /* ---------------------------------- Settings ---------------------------------- */
 
 function renderSettings() {
+  loadDivisionalDashboardLinks();
   getEl('mustChangeBanner').classList.toggle('hidden', !appState.mustChange);
 
   // CSV import drop zone — editors and admins
@@ -205,6 +206,22 @@ function saveSettingsFathomKey() {
     hideOverlay();
     if (handleServerFailure(err)) return;
     showToast('Error saving key: ' + (err.message || err), 'error');
+  });
+}
+
+function loadDivisionalDashboardLinks() {
+  const body = getEl('divisionalDashboardLinksBody');
+  if (!body) return;
+  ApiService.getDivisionalDashboardLinks().then(function (rows) {
+    rows = rows || [];
+    if (!rows.length) { body.innerHTML = '<div class="form-status">No DO/RMS users found.</div>'; return; }
+    body.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr><th>Designation / username</th><th>Office</th><th>Dashboard</th></tr></thead><tbody>' + rows.map(function (r) {
+      const link = r.url ? '<a href="' + escapeHtml(r.url) + '" target="_blank" rel="noopener noreferrer">Open dashboard</a>' : '<span class="form-status">Not provided</span>';
+      return '<tr><td><strong>' + escapeHtml(r.designation || r.username || '—') + '</strong></td><td>' + escapeHtml(r.office || r.department || '—') + '</td><td>' + link + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+    body.innerHTML = '<div class="form-status error">Could not load dashboard links.</div>';
   });
 }
 

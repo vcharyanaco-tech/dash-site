@@ -56,6 +56,12 @@ db.exec(
    (read_at = created_at) so historical updates do not flash on deploy.
    New submissions default to read_at = 0 and flash until an admin opens
    the card's update list. */
+const userColumns = db.prepare('PRAGMA table_info(users)').all();
+if (!userColumns.some(function (c) { return String(c.name) === 'divisional_dashboard_url'; })) {
+  db.exec("ALTER TABLE users ADD COLUMN divisional_dashboard_url TEXT NOT NULL DEFAULT ''");
+}
+db.exec("CREATE INDEX IF NOT EXISTS idx_users_dashboard_url ON users(divisional_dashboard_url) WHERE divisional_dashboard_url != ''");
+
 const submissionColumns = db.prepare('PRAGMA table_info(submissions)').all();
 if (!submissionColumns.some(function (c) { return String(c.name) === 'read_at'; })) {
   db.exec('ALTER TABLE submissions ADD COLUMN read_at INTEGER NOT NULL DEFAULT 0');
@@ -126,6 +132,14 @@ if (!docColumns.some(function (c) { return String(c.name) === 'keep'; })) {
 const recordDisplayCols = db.prepare('PRAGMA table_info(records)').all();
 if (!recordDisplayCols.some(function (c) { return String(c.name) === 'displayed'; })) {
   db.exec('ALTER TABLE records ADD COLUMN displayed INTEGER NOT NULL DEFAULT 1');
+}
+
+/* ---- Migration: records.last_meeting_instructions ----
+   Per-record meeting guidance editable by admins/editors. Older databases
+   receive an empty value so existing records remain unchanged. */
+const lastMeetingInstructionCols = db.prepare('PRAGMA table_info(records)').all();
+if (!lastMeetingInstructionCols.some(function (c) { return String(c.name) === 'last_meeting_instructions'; })) {
+  db.exec("ALTER TABLE records ADD COLUMN last_meeting_instructions TEXT NOT NULL DEFAULT ''");
 }
 
 /* ---- Migration: username index ---- */

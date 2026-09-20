@@ -234,6 +234,7 @@ function rowToRowSpec_(row) {
     description: row.description || '',
     entryDate: row.entry_date || '',
     action: row.action || '',
+    lastMeetingInstructions: row.last_meeting_instructions || '',
     responsibility: row.responsibility || '',
     reviewDate: row.review_date || '',
     reviewBg: row.review_bg || CONFIG.COLORS.NORMAL,
@@ -253,15 +254,17 @@ function buildItemFromRowSpec_(rowSpec) {
     rowSpec.description,
     rowSpec.entryDate,
     rowSpec.action,
+    rowSpec.lastMeetingInstructions,
     rowSpec.responsibility,
     rowSpec.reviewDate
   ];
-  const labels = HEADERS;
+  const labels = ['ID', 'Sector', 'Description', 'Entry Date', 'Action', 'Last Meeting Instructions', 'Responsibility', 'Review Date'];
+  const fieldKeys = ['id', 'sector', 'description', 'entryDate', 'action', 'lastMeetingInstructions', 'responsibility', 'reviewDate'];
 
   const displayFields = labels.map(function (label, i) {
     const value = values[i];
     const normalizedLabel = label.toLowerCase();
-    const linkObj = rowSpec.links[FIELD_KEYS[i]];
+    const linkObj = rowSpec.links[fieldKeys[i]];
     let formattedValue = value;
     if (normalizedLabel.indexOf('date') !== -1 && value !== '') {
       formattedValue = formatDate_(value);
@@ -302,6 +305,7 @@ function buildItemFromRowSpec_(rowSpec) {
     entryDate: formatDate_(rowSpec.entryDate),
     action: rowSpec.action,
     actionHtml: actionHtml,
+    lastMeetingInstructions: rowSpec.lastMeetingInstructions,
     responsibility: rowSpec.responsibility,
     reviewDate: formatDate_(rowSpec.reviewDate),
     flagged: flagged,
@@ -507,6 +511,7 @@ function getAppData(token) {
     user: {
       email: context.email,
       username: context.username || '',
+      divisionalDashboardUrl: context.divisionalDashboardUrl || '',
       role: context.role,
       loggedIn: true,
       group: context.group,
@@ -545,8 +550,8 @@ function addRecord_(item, token) {
     const id = row - CONFIG.SHEET.START_ROW + 1;
 
     db.prepare(
-      'INSERT INTO records (row, record_id, sector, description, entry_date, action, responsibility, review_date, links, review_bg, source, created_at, updated_at) ' +
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO records (row, record_id, sector, description, entry_date, action, last_meeting_instructions, responsibility, review_date, links, review_bg, source, created_at, updated_at) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(
       row,
       uuid_(),
@@ -554,6 +559,7 @@ function addRecord_(item, token) {
       String(normalized.description || ''),
       String(normalized.entryDate || ''),
       String(normalized.action || ''),
+      String(normalized.lastMeetingInstructions || ''),
       String(normalized.responsibility || ''),
       String(normalized.reviewDate || ''),
       JSON.stringify(normalizeLinksForStorage_(normalized.links || {})),
@@ -593,7 +599,7 @@ function updateRecord_(item, token) {
     const existing = resolved;
 
     // Compute diff before writing
-    const FIELD_MAP = { sector: 'sector', description: 'description', entry_date: 'entryDate', action: 'action', responsibility: 'responsibility', review_date: 'reviewDate' };
+    const FIELD_MAP = { sector: 'sector', description: 'description', entry_date: 'entryDate', action: 'action', last_meeting_instructions: 'lastMeetingInstructions', responsibility: 'responsibility', review_date: 'reviewDate' };
     const diff = {};
     Object.keys(FIELD_MAP).forEach(function (dbCol) {
       const newVal = String(normalized[FIELD_MAP[dbCol]] || '');
@@ -606,12 +612,13 @@ function updateRecord_(item, token) {
     if (existing.review_bg !== newBg) diff.review_bg = { from: existing.review_bg, to: newBg };
 
     db.prepare(
-      'UPDATE records SET sector = ?, description = ?, entry_date = ?, action = ?, responsibility = ?, review_date = ?, links = ?, review_bg = ?, updated_at = ? WHERE row = ?'
+      'UPDATE records SET sector = ?, description = ?, entry_date = ?, action = ?, last_meeting_instructions = ?, responsibility = ?, review_date = ?, links = ?, review_bg = ?, updated_at = ? WHERE row = ?'
     ).run(
       String(normalized.sector || ''),
       String(normalized.description || ''),
       String(normalized.entryDate || ''),
       String(normalized.action || ''),
+      String(normalized.lastMeetingInstructions || ''),
       String(normalized.responsibility || ''),
       String(normalized.reviewDate || ''),
       JSON.stringify(normalizeLinksForStorage_(normalized.links || {})),

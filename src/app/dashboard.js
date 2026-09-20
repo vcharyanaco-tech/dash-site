@@ -378,7 +378,8 @@ function rowUpdatesHtml_(row) {
 
 /* Flip the show/hide state for a row, persist it, then sync every matching
    card / dialog element in the DOM to the new state without a re-render. */
-function toggleCardUpdates(row, btn) {
+function toggleCardUpdates(row, btn, allowViewer) {
+  if (!appState.isEditor && !allowViewer) { showToast('Admin/editor access required', 'warning'); return; }
   loadUpdatesHiddenByRow_();
   const key = String(row);
   appState.updatesHiddenByRow[key] = !appState.updatesHiddenByRow[key];
@@ -445,7 +446,7 @@ function buildCardHtml(item) {
       <button class="btn btn-secondary btn-small" onclick="openSubmissionsModal('${escAttr(item.row)}','${escAttr(item.id)}')">Submit update</button>
       ${subCount > 0 ? `<span class="submission-badge${subFlash ? ' flash' : ''}">${subCount}</span>` : ''}
     </div>
-    ${updatesCount > 0 ? `<button class="btn btn-secondary btn-small toggle-updates-btn" data-updates-toggle="${escAttr(item.row)}" onclick="toggleCardUpdates('${escAttr(item.row)}', this)">${updatesHidden ? 'Show updates' : 'Hide updates'}</button>` : ''}
+    ${appState.isEditor && updatesCount > 0 ? `<button class="btn btn-secondary btn-small toggle-updates-btn" data-updates-toggle="${escAttr(item.row)}" onclick="toggleCardUpdates('${escAttr(item.row)}', this)">${updatesHidden ? 'Show updates' : 'Hide updates'}</button>` : ''}
     <div class="menu-dropdown">
       <button class="btn btn-secondary btn-small" type="button" onclick="event.stopPropagation(); toggleDropdown(this);">Print</button>
       <span class="menu-dropdown-menu">

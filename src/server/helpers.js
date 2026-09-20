@@ -235,6 +235,7 @@ function normalizeItemForSheet_(item) {
     description: item && item.description !== undefined && item.description !== null ? item.description : '',
     entryDate: item && item.entryDate !== undefined && item.entryDate !== null ? item.entryDate : '',
     action: item && item.action !== undefined && item.action !== null ? item.action : '',
+    lastMeetingInstructions: item && item.lastMeetingInstructions !== undefined && item.lastMeetingInstructions !== null ? item.lastMeetingInstructions : '',
     responsibility: item && item.responsibility !== undefined && item.responsibility !== null ? item.responsibility : '',
     reviewDate: item && item.reviewDate !== undefined && item.reviewDate !== null ? item.reviewDate : '',
     links: item && item.links && typeof item.links === 'object' ? item.links : {}
