@@ -604,6 +604,10 @@
                 <p class="section-copy">Create, assign, and track tasks linked to records.</p>
               </div>
               <div class="section-actions">
+                <div class="task-view-toggle" role="group" aria-label="Tasks view">
+                  <button id="taskViewListBtn" class="view-toggle-btn" type="button" onclick="setTaskView('list')" aria-pressed="true">List</button>
+                  <button id="taskViewBoardBtn" class="view-toggle-btn" type="button" onclick="setTaskView('board')" aria-pressed="false">Board</button>
+                </div>
                 <button id="addTaskBtn" class="btn btn-primary" type="button" onclick="openTaskModal()">
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                   New task
@@ -633,7 +637,8 @@
                 </label>
               </div>
             </div>
-            <div class="table-card">
+            <div id="kanbanBoard" class="kanban-board hidden" aria-label="Kanban board"></div>
+            <div class="table-card" id="taskListView">
               <div class="table-scroll" tabindex="0" aria-label="Tasks list">
                 <table class="data-table" id="tasksTable">
                   <thead><tr><th>Title</th><th>Assignee</th><th>Status</th><th>Priority</th><th>Due</th><th>Actions</th></tr></thead>

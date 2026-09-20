@@ -23,6 +23,7 @@ function renderTasks() {
     }
 
     renderTaskList();
+    if (appState.taskView === 'board') renderKanbanBoard_();
   }).catch(function (err) {
     hideOverlay();
     if (handleServerFailure(err)) return;
@@ -75,6 +76,159 @@ function renderTaskList() {
   }
   if (empty) empty.classList.toggle('hidden', !!tasks.length);
 }
+
+/* ---------------------------------- Kanban board ---------------------------------- */
+
+var KANBAN_COLUMNS = [
+  { status: 'OPEN', label: 'Open' },
+  { status: 'IN_PROGRESS', label: 'In progress' },
+  { status: 'DONE', label: 'Done' },
+  { status: 'CANCELLED', label: 'Cancelled' }
+];
+
+var KANBAN_LABELS = { OPEN: 'Open', IN_PROGRESS: 'In progress', DONE: 'Done', CANCELLED: 'Cancelled' };
+
+function setTaskView(view) {
+  appState.taskView = view;
+  const listBtn = getEl('taskViewListBtn');
+  const boardBtn = getEl('taskViewBoardBtn');
+  const listView = getEl('taskListView');
+  const empty = getEl('tasksEmpty');
+  const board = getEl('kanbanBoard');
+  if (listBtn) listBtn.setAttribute('aria-pressed', String(view === 'list'));
+  if (boardBtn) boardBtn.setAttribute('aria-pressed', String(view === 'board'));
+  if (listView) listView.classList.toggle('hidden', view !== 'list');
+  if (empty) empty.classList.toggle('hidden', view !== 'list');
+  if (board) board.classList.toggle('hidden', view !== 'board');
+  if (view === 'board') {
+    // The board shows every status as a column; drop the list's status filter
+    // so columns populate fully.
+    const statusFilter = getEl('taskStatusFilter');
+    if (statusFilter) statusFilter.value = '';
+    if (!appState.tasks || !appState.tasks.length) {
+      renderTasks();
+    } else {
+      renderKanbanBoard_();
+    }
+  } else {
+    renderTasks();
+  }
+}
+
+function renderKanbanBoard_() {
+  const board = getEl('kanbanBoard');
+  if (!board) return;
+  const tasks = appState.tasks || [];
+  const user = appState.user;
+  const isAdminOrEditor = user && (user.role === 'ADMIN' || user.role === 'EDITOR');
+
+  board.innerHTML = KANBAN_COLUMNS.map(function (col) {
+    const colTasks = tasks.filter(function (t) { return String(t.status || 'OPEN') === col.status; });
+    const cards = colTasks.map(function (t) { return kanbanCardHtml_(t, isAdminOrEditor); }).join('');
+    return '<section class="kanban-column" data-status="' + col.status + '" aria-label="' + col.label + ' tasks">' +
+      '<header class="kanban-col-head"><span class="kanban-col-title">' + col.label + '</span>' +
+      '<span class="kanban-col-count">' + colTasks.length + '</span></header>' +
+      '<div class="kanban-col-body">' +
+      (cards || '<div class="kanban-empty">No tasks</div>') +
+      '</div>' +
+      '</section>';
+  }).join('');
+}
+
+function kanbanCardHtml_(t, isAdminOrEditor) {
+  const id = escAttr(t.id);
+  const status = String(t.status || 'OPEN');
+  const isOverdue = status !== 'DONE' && status !== 'CANCELLED' && t.dueDate && new Date(t.dueDate).getTime() < Date.now();
+  const overdueFlag = isOverdue ? ' <span class="badge badge-danger" data-overdue title="This task is past its due date">Overdue</span>' : '';
+  const priorityClass = t.priority === 'URGENT' ? 'badge-danger' : t.priority === 'HIGH' ? 'badge-warning' : t.priority === 'MEDIUM' ? 'badge-info' : 'badge-muted';
+  const assigneeDisplay = (t.assignee || '').split(',').map(function (a) {
+    a = a.trim();
+    if (a === 'group:all-divisional-heads') return 'All Divisional Heads';
+    return a;
+  }).filter(Boolean).join(', ');
+  const options = KANBAN_COLUMNS.map(function (col) {
+    const selected = col.status === status ? ' selected' : '';
+    return '<option value="' + col.status + '"' + selected + '>' + col.label + '</option>';
+  }).join('');
+  const quickComplete = (status !== 'DONE' && status !== 'CANCELLED')
+    ? '<button class="btn btn-ghost btn-small" type="button" onclick="kanbanMoveTask(\'' + id + '\',\'DONE\')">Complete</button>'
+    : '';
+  const editBtn = isAdminOrEditor
+    ? '<button class="btn btn-ghost btn-small" type="button" onclick="editTask(\'' + id + '\')">Edit</button>'
+    : '';
+  return '<article class="kanban-card" draggable="true" data-task-id="' + id + '" data-status="' + status + '">' +
+    '<div class="kanban-card-title">' + escapeHtml(t.title || '') + '</div>' +
+    '<div class="kanban-card-meta">' + escapeHtml(assigneeDisplay || 'Unassigned') + '</div>' +
+    '<div class="kanban-card-sub">' +
+    '<span class="badge ' + priorityClass + '">' + escapeHtml(t.priority || '') + '</span>' +
+    '<span class="kanban-card-due">' + (t.dueDate ? escapeHtml(formatDate(t.dueDate)) : '') + '</span>' + overdueFlag +
+    '</div>' +
+    '<div class="kanban-card-actions">' +
+    quickComplete +
+    editBtn +
+    '<label class="kanban-move-label">Move' +
+    '<select class="kanban-move" data-move-task="' + id + '" aria-label="Move to status">' + options + '</select>' +
+    '</label>' +
+    '</div>' +
+    '</article>';
+}
+
+function kanbanMoveTask(id, newStatus) {
+  const task = (appState.tasks || []).find(function (t) { return t.id === id; });
+  if (!task || task.status === newStatus) { renderKanbanBoard_(); return; }
+  ApiService.updateTask(id, { status: newStatus }).then(function () {
+    task.status = newStatus;
+    if (newStatus === 'DONE') task.completedAt = Date.now();
+    if (appState.taskView === 'board') renderKanbanBoard_();
+    showToast('Task moved to ' + (KANBAN_LABELS[newStatus] || newStatus) + '.', 'success');
+    refreshCounts();
+  }).catch(function (err) {
+    renderKanbanBoard_();
+    if (handleServerFailure(err)) return;
+    showToast('Could not move task: ' + (err.message || err), 'error');
+  });
+}
+
+function wireKanbanBoard() {
+  document.addEventListener('change', function (e) {
+    const sel = e.target && e.target.closest ? e.target.closest('select[data-move-task]') : null;
+    if (!sel) return;
+    kanbanMoveTask(sel.getAttribute('data-move-task'), sel.value);
+  });
+  document.addEventListener('dragstart', function (e) {
+    const card = e.target && e.target.closest ? e.target.closest('.kanban-card[data-task-id]') : null;
+    if (!card) return;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', card.getAttribute('data-task-id'));
+    card.classList.add('kanban-dragging');
+  });
+  document.addEventListener('dragend', function (e) {
+    const card = e.target && e.target.closest ? e.target.closest('.kanban-card') : null;
+    if (card) card.classList.remove('kanban-dragging');
+  });
+  document.addEventListener('dragover', function (e) {
+    if (!e.dataTransfer || !e.dataTransfer.types || e.dataTransfer.types.indexOf('text/plain') === -1) return;
+    const col = e.target && e.target.closest ? e.target.closest('.kanban-column[data-status]') : null;
+    if (!col) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    col.classList.add('kanban-over');
+  });
+  document.addEventListener('dragleave', function (e) {
+    const col = e.target && e.target.closest ? e.target.closest('.kanban-column') : null;
+    if (col) col.classList.remove('kanban-over');
+  });
+  document.addEventListener('drop', function (e) {
+    const col = e.target && e.target.closest ? e.target.closest('.kanban-column[data-status]') : null;
+    if (!col) return;
+    e.preventDefault();
+    col.classList.remove('kanban-over');
+    const id = e.dataTransfer && e.dataTransfer.getData('text/plain');
+    if (id) kanbanMoveTask(id, col.getAttribute('data-status'));
+  });
+}
+
+wireKanbanBoard();
 
 function populateTaskAssigneeDropdown() {
   const hiddenInput = getEl('taskAssignee');
