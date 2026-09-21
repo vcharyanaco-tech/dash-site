@@ -378,12 +378,44 @@ function rowUpdatesHtml_(row) {
   return (appState.displayedSubmissions || [])
     .filter(function (s) { return Number(s.cardRow) === Number(row); })
     .map(function (s) {
+      const actionsHtml = submissionInlineActionsHtml_(s);
       return `
         <div class="card-field submission-display">
           <span class="field-label submission-display-label">Update by ${escapeHtml((s.office || '').trim() ? s.office : s.email)} <span class="submission-display-time">${escapeHtml(formatTimestamp(s.createdAt))}</span></span>
           <div class="field-value preserve-whitespace">${escapeHtml(s.text || '')}</div>
+          ${actionsHtml ? '<div class="submission-actions">' + actionsHtml + '</div>' : ''}
         </div>`;
     }).join('');
+}
+
+/* Editor/admin management actions rendered on the updates shown on the card /
+   detail — the same Edit / Lock / Display / Delete the modal offers, driven
+   by the per-submission flags the overview carries. */
+function submissionInlineActionsHtml_(s) {
+  if (!appState.isEditor || !s || !s.id) return '';
+  const stop = 'event.stopPropagation(); ';
+  let html = '';
+  if (s.editable) {
+    html += `<button class="btn btn-secondary btn-small" type="button" onclick="${stop}editCardSubmission('${escAttr(s.cardRow)}','${escAttr(s.cardId || '')}','${escAttr(s.id)}')">Edit</button>`;
+  }
+  if (s.canUnlock) {
+    html += `<button class="btn btn-secondary btn-small" type="button" onclick="${stop}unlockSubmission('${escAttr(s.id)}')">Unlock</button>`;
+  } else if (s.canLock) {
+    html += `<button class="btn btn-secondary btn-small" type="button" onclick="${stop}lockSubmission('${escAttr(s.id)}')">Lock</button>`;
+  }
+  html += `<button class="btn btn-danger btn-small" type="button" onclick="${stop}deleteSubmission('${escAttr(s.id)}')">Delete</button>`;
+  if (appState.isAdmin) {
+    html += `<button class="btn btn-secondary btn-small" type="button" onclick="${stop}toggleDisplaySubmission('${escAttr(s.id)}')">${s.displayed ? 'Hide from card' : 'Display on card'}</button>`;
+  }
+  return html;
+}
+
+/* Inline Edit opens the submissions modal for the row and auto-enters edit
+   mode once that card's submission list has loaded. */
+function editCardSubmission(row, cardId, id) {
+  appState.pendingInlineEditId = '';
+  openSubmissionsModal(row, cardId);
+  appState.pendingInlineEditId = id;
 }
 
 /* Flip the show/hide state for a row, persist it, then sync every matching

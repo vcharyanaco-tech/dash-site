@@ -39,3 +39,20 @@ test('getSubmissionOverview_ displayed entries include the submitter office', fu
   const other = displayed.find(function (s) { return s.cardRow === 5; });
   assert.strictEqual(other.office, '', 'unknown submitter falls back to empty office');
 });
+
+test('getSubmissionOverview_ displayed entries carry id + per-user flags when a user is supplied', function () {
+  db.prepare(
+    "INSERT INTO submissions (id, card_row, card_id, email, text, created_at, updated_at, displayed) VALUES ('s3', 6, 'card-6', 'other@example.com', 'inline manage', ?, ?, 1)"
+  ).run(Date.now(), Date.now());
+
+  // A non-owner editor: can lock and can edit any unlocked submission.
+  const overview = submissions.getSubmissionOverview_({ email: 'editor@example.com', role: 'EDITOR' });
+  const entry = overview.displayed.find(function (s) { return s.id === 's3'; });
+  assert.ok(entry, 'displayed entry carries the submission id');
+  assert.strictEqual(entry.cardRow, 6);
+  assert.strictEqual(entry.editable, true, 'editor edits any unlocked submission');
+  assert.strictEqual(entry.canLock, true, 'editor can lock an unlocked submission');
+  assert.strictEqual(entry.canUnlock, false, 'not unlocked yet');
+  assert.strictEqual(entry.displayed, true);
+  assert.strictEqual(entry.isOwner, false);
+});

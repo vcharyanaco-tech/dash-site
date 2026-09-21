@@ -5,6 +5,7 @@ function openSubmissionsModal(row, cardId, onlyMine) {
   appState.submissionCardRow = row;
   appState.submissionCardId = cardId;
   appState.submissionEditingId = '';
+  appState.pendingInlineEditId = '';
   getEl('submissionText').value = '';
   const fileInput = getEl('submissionAttachment');
   if (fileInput) fileInput.value = '';
@@ -56,6 +57,15 @@ function loadSubmissions() {
   ApiService.getSubmissions(Number(appState.submissionCardRow)).then(function (list) {
     appState.submissions = list || [];
     renderSubmissionList();
+    // Inline "Edit" (card/detail) opened the modal with a target submission:
+    // drop into edit mode for it now that this card's list is loaded.
+    if (appState.pendingInlineEditId) {
+      const pendingId = appState.pendingInlineEditId;
+      appState.pendingInlineEditId = '';
+      if ((list || []).some(function (s) { return String(s.id) === String(pendingId); })) {
+        editSubmission(pendingId);
+      }
+    }
     // Reading a card's update list counts as reading it: an admin who opens
     // the modal stops that card's badge flashing (the counter stays).
     if (appState.isAdmin && appState.submissionCardRow) {
@@ -241,6 +251,7 @@ function lockSubmission(id) {
     appState.submissions = list || [];
     renderSubmissionList();
     showToast('Submission locked', 'success');
+    renderDashboard(true);
   }).catch(function (err) {
     hideOverlay();
     if (handleServerFailure(err)) return;
@@ -256,6 +267,7 @@ function unlockSubmission(id) {
     appState.submissions = list || [];
     renderSubmissionList();
     showToast('Submission unlocked', 'success');
+    renderDashboard(true);
   }).catch(function (err) {
     hideOverlay();
     if (handleServerFailure(err)) return;

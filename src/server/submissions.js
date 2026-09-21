@@ -145,7 +145,7 @@ function cardExists_(cardRow) {
   return (data.items || []).some(function (item) { return Number(item.row) === Number(cardRow); });
 }
 
-function getSubmissionOverview_() {
+function getSubmissionOverview_(user) {
   const counts = {};
   const flash = {};
   const displayed = [];
@@ -157,13 +157,21 @@ function getSubmissionOverview_() {
     // the counter itself keeps showing the total either way.
     if (!rec.readAt) flash[key] = true;
     if (rec.displayed) {
-      displayed.push({
-        cardRow: key,
-        email: rec.email,
-        office: officeForEmail_(rec.email),
-        text: rec.text,
-        createdAt: formatDateTime_(rec.createdAt)
-      });
+      // With a user present the entries carry the submission id plus the
+      // per-user permission flags so the card/detail can render the same
+      // Edit/Lock/Delete/Display actions the modal offers. Without a user
+      // (headless tests, legacy callers) keep the minimal display shape.
+      if (user) {
+        displayed.push(visibleSubmission_(rec, user));
+      } else {
+        displayed.push({
+          cardRow: key,
+          email: rec.email,
+          office: officeForEmail_(rec.email),
+          text: rec.text,
+          createdAt: formatDateTime_(rec.createdAt)
+        });
+      }
     }
   });
 
@@ -331,7 +339,7 @@ function markAllSubmissionsRead(token) {
 
   try { require('./audit').logAudit_(ACTIONS.SUBMISSION_READ_ALL, '', 'Marked all submissions as read', admin.email); } catch (err) {}
   try { require('./data-sync').requestBackup(); } catch (err) {}
-  return getSubmissionOverview_();
+  return getSubmissionOverview_(admin);
 }
 
 function toggleSubmissionDisplay(submissionId, token) {

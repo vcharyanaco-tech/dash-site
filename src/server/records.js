@@ -496,7 +496,7 @@ function getAppData(token) {
   const settings = getAppSettings();
   const summary = buildSummaryFromItems(items);
   const analytics = buildAnalytics_(items);
-  const submissionOverview = require('./submissions').getSubmissionOverview_();
+  const submissionOverview = require('./submissions').getSubmissionOverview_(user);
   // Most recent data change across records (and submissions), as a display
   // date — used by the About dialog's Build row to show the last update.
   const lastUpdatedRow = db.prepare(
