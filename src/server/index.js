@@ -18,7 +18,7 @@ const auth = require('./auth');
 const dispatch = require('./index-dispatch');
 const { rateLimiter } = require('./rate-limiter');
 const { registerSseRoute, broadcast } = require('./events');
-const { cspMiddleware } = require('./csp');
+const { cspMiddleware, stampCspNonce } = require('./csp');
 const systemHealth = require('./system-health');
 
 const PORT = Number(process.env.PORT || process.env.DASH_PORT || 8787);
@@ -163,6 +163,33 @@ app.use(function (req, res, next) {
     return;
   }
   next();
+});
+
+// ── Static HTML pages through the nonce pipeline ──────────────────────────
+// Serve the root .html pages (/, /app.html, /about.html, ...) with the CSP
+// nonce stamped into their inline <script> tags. express.static is bypassed
+// for HTML: it streams the raw file, which cannot carry a per-request nonce,
+// and its 1h cache would pin the first nonce forever — the header nonce
+// rotates on every visit while the cached body keeps the old one, so the
+// page's scripts would stop running. Assets (js/css/images) stay on
+// express.static unchanged.
+app.use(function (req, res, next) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  if (req.path !== '/' && !/\.html$/i.test(req.path)) return next();
+  const rel = req.path === '/' ? 'index.html' : req.path.replace(/^\/+/, '').split(/[?#]/)[0];
+  const abs = path.resolve(STATIC_ROOT, rel);
+  const root = path.resolve(STATIC_ROOT);
+  if (abs !== root && !abs.startsWith(root + path.sep)) return next();
+  let html;
+  try {
+    html = fs.readFileSync(abs, 'utf8');
+  } catch (err) {
+    return next(); // let express.static / the SPA fallback handle it
+  }
+  html = stampCspNonce(html, res.locals.cspNonce);
+  res.set('Content-Type', 'text/html; charset=utf-8');
+  res.set('Cache-Control', 'no-store');
+  res.send(html);
 });
 
 app.use(express.static(STATIC_ROOT, {

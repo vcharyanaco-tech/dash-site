@@ -379,6 +379,17 @@ function debounce(fn, ms) {
   };
 }
 
+/* The per-page CSP nonce, stamped by the server onto the app bundle's
+ * <script> tag (see src/server/csp.js stampCspNonce). Print windows are
+ * about:blank documents that inherit this page's CSP — including its nonce —
+ * so document.write() builders must re-stamp the same value onto their own
+ * inline <script> blocks or they'll be refused. Returns '' when no nonce is
+ * present (e.g. file:// or a non-nonce environment). */
+function pageCspNonce() {
+  const el = document.querySelector('script[nonce]');
+  return el ? (el.getAttribute('nonce') || '') : '';
+}
+
 function svgIcon(name) {
   const paths = {
     database: '<ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>',

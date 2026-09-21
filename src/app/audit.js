@@ -255,6 +255,10 @@ function printAudit() {
   const count = entries.length;
   const title = appState.settings.appName || 'India Post Dashboard';
   const now = new Date().toLocaleString();
+  // about:blank print windows inherit this page's CSP including its nonce, so
+  // the inline script below must carry the same value (see pageCspNonce).
+  const cspNonce = pageCspNonce();
+  const scriptNonce = cspNonce ? ' nonce="' + cspNonce + '"' : '';
 
   const html = `<!DOCTYPE html>
 <html>
@@ -289,7 +293,7 @@ function printAudit() {
     <tbody>${rowsHtml}</tbody>
   </table>
   <div class="report-footer">India Post Dashboard &middot; Circle Office Haryana</div>
-  <script>window.onload = function () { window.focus(); setTimeout(function () { window.print(); }, 100); };<\/script>
+  <script${scriptNonce}>window.onload = function () { window.focus(); setTimeout(function () { window.print(); }, 100); };<\/script>
 </body>
 </html>`;
 

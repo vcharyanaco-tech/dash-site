@@ -130,7 +130,12 @@ function applySecurityHeaders(response, request) {
   }
   else headers.delete('Access-Control-Allow-Origin');
   headers.set('X-Frame-Options', 'SAMEORIGIN');
-  headers.set('Content-Security-Policy', "frame-ancestors 'self'");
+  // If the route already set a full CSP (fetchFromPages stamps a nonce-based
+  // policy into HTML), respect it. Otherwise apply the clickjacking-only
+  // default to API JSON / binary responses where a full policy is inert.
+  if (!headers.has('Content-Security-Policy')) {
+    headers.set('Content-Security-Policy', "frame-ancestors 'self'");
+  }
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('Referrer-Policy', 'no-referrer-when-downgrade');
   // Enforce HTTPS for a year (no includeSubDomains: dashboardharyana.site may
@@ -323,21 +328,22 @@ async function fetchFromPages(path, search) {
   if (resp.status === 404) {
     // Fallback: serve index.html for unknown paths (SPA-style)
     const fallback = await fetch(GITHUB_RAW + '/index.html');
-    const html = await fallback.text();
-    return new Response(html, {
-      status: 200,
-      headers: {
-        ...COMMON_HEADERS,
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'public, max-age=300',
-        'Vary': 'Origin',
-      },
-    });
+    let html = await fallback.text();
+    const nonce = generateNonce_();
+    const headers = {
+      ...COMMON_HEADERS,
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Security-Policy': buildWorkerCsp_(nonce),
+      'Cache-Control': 'no-store',
+      'Vary': 'Origin',
+    };
+    return new Response(stampCspNonce_(html, nonce), { status: 200, headers });
   }
 
   // Determine content-type from path extension since raw CDN may not set it
   const ct = guessContentType(filePath) || resp.headers.get('Content-Type') || 'application/octet-stream';
-  const body = await resp.arrayBuffer();
+  const isHtml = String(ct).toLowerCase().indexOf('text/html') !== -1;
+  const body = isHtml ? await resp.text() : await resp.arrayBuffer();
 
   // The app bundle (HTML/JS/CSS) changes on every deploy. The Cloudflare
   // edge caches these responses keyed WITHOUT the query string, so the old
@@ -356,6 +362,13 @@ async function fetchFromPages(path, search) {
     // different Origin with the wrong CORS exposure.
     'Vary': 'Origin',
   };
+
+  if (isHtml) {
+    // HTML needs a nonce-based CSP stamped to match the served markup.
+    const nonce = generateNonce_();
+    headers['Content-Security-Policy'] = buildWorkerCsp_(nonce);
+    return new Response(stampCspNonce_(body, nonce), { status: resp.status, headers });
+  }
 
   return new Response(body, { status: resp.status, headers });
 }
@@ -564,6 +577,44 @@ function stripDisclaimerJs(js) {
 // are read only from Worker environment/secrets and never echoed in responses.
 
 const AI_INSIGHTS_TTL = 3600; // seconds; 1h keeps insights fresh-ish
+
+// ── Content-Security-Policy (mirrors src/server/csp.js) ─────────────────────
+// The Worker is deployed as a single self-contained module, so it cannot
+// import the Node csp.js helpers — these are kept in sync by hand. HTML from
+// GitHub Pages gets a full nonce-based policy (not just frame-ancestors);
+// everything else keeps the clickjacking-only default.
+function generateNonce_() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function buildWorkerCsp_(nonce) {
+  return [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "script-src-elem 'self' 'nonce-" + nonce + "'",
+    "script-src-attr 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https:",
+    "font-src 'self'",
+    "media-src 'self' blob:",
+    "connect-src 'self'",
+    "frame-src 'self' data: https: http: about:",
+    "worker-src 'self'",
+    "frame-ancestors 'self'",
+    "form-action 'self'",
+    "base-uri 'self'",
+    "object-src 'none'"
+  ].join('; ');
+}
+
+function stampCspNonce_(html, nonce) {
+  return html.replace(/<script\b(?![^>]*\snonce=)([^>]*?)>/gi, function (match, attrs) {
+    return '<script' + attrs + ' nonce="' + nonce + '">';
+  });
+}
 
 function jsonResponse(obj, status, extraHeaders) {
   return new Response(JSON.stringify(obj), {

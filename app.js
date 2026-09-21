@@ -731,6 +731,17 @@ function debounce(fn, ms) {
   };
 }
 
+/* The per-page CSP nonce, stamped by the server onto the app bundle's
+ * <script> tag (see src/server/csp.js stampCspNonce). Print windows are
+ * about:blank documents that inherit this page's CSP — including its nonce —
+ * so document.write() builders must re-stamp the same value onto their own
+ * inline <script> blocks or they'll be refused. Returns '' when no nonce is
+ * present (e.g. file:// or a non-nonce environment). */
+function pageCspNonce() {
+  const el = document.querySelector('script[nonce]');
+  return el ? (el.getAttribute('nonce') || '') : '';
+}
+
 function svgIcon(name) {
   const paths = {
     database: '<ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>',
@@ -5031,6 +5042,10 @@ function printAudit() {
   const count = entries.length;
   const title = appState.settings.appName || 'India Post Dashboard';
   const now = new Date().toLocaleString();
+  // about:blank print windows inherit this page's CSP including its nonce, so
+  // the inline script below must carry the same value (see pageCspNonce).
+  const cspNonce = pageCspNonce();
+  const scriptNonce = cspNonce ? ' nonce="' + cspNonce + '"' : '';
 
   const html = `<!DOCTYPE html>
 <html>
@@ -5065,7 +5080,7 @@ function printAudit() {
     <tbody>${rowsHtml}</tbody>
   </table>
   <div class="report-footer">India Post Dashboard &middot; Circle Office Haryana</div>
-  <script>window.onload = function () { window.focus(); setTimeout(function () { window.print(); }, 100); };<\/script>
+  <script${scriptNonce}>window.onload = function () { window.focus(); setTimeout(function () { window.print(); }, 100); };<\/script>
 </body>
 </html>`;
 
@@ -5127,6 +5142,10 @@ function buildPrintPage(opts) {
   const now = new Date().toLocaleString();
   const subtitle = opts.subtitle ? ' &middot; ' + escapeHtml(opts.subtitle) : '';
   const initialOrient = opts.landscape ? 'landscape' : 'portrait';
+  // about:blank print windows inherit this page's CSP including its nonce, so
+  // the inline script below must carry the same value (see pageCspNonce).
+  const cspNonce = pageCspNonce();
+  const scriptNonce = cspNonce ? ' nonce="' + cspNonce + '"' : '';
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -5188,7 +5207,7 @@ function buildPrintPage(opts) {
   </div>
   ${opts.body}
   <div class="report-footer">India Post Dashboard &middot; Circle Office Haryana</div>
-  <script>
+  <script${scriptNonce}>
     function setOrient(o) {
       var rule = '@page { size: ' + (o === 'landscape' ? 'A4 landscape' : 'A4 portrait') + '; margin: 16mm; }';
       document.getElementById('pageRule').textContent = rule;

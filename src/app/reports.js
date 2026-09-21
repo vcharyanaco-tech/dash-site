@@ -50,6 +50,10 @@ function buildPrintPage(opts) {
   const now = new Date().toLocaleString();
   const subtitle = opts.subtitle ? ' &middot; ' + escapeHtml(opts.subtitle) : '';
   const initialOrient = opts.landscape ? 'landscape' : 'portrait';
+  // about:blank print windows inherit this page's CSP including its nonce, so
+  // the inline script below must carry the same value (see pageCspNonce).
+  const cspNonce = pageCspNonce();
+  const scriptNonce = cspNonce ? ' nonce="' + cspNonce + '"' : '';
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -111,7 +115,7 @@ function buildPrintPage(opts) {
   </div>
   ${opts.body}
   <div class="report-footer">India Post Dashboard &middot; Circle Office Haryana</div>
-  <script>
+  <script${scriptNonce}>
     function setOrient(o) {
       var rule = '@page { size: ' + (o === 'landscape' ? 'A4 landscape' : 'A4 portrait') + '; margin: 16mm; }';
       document.getElementById('pageRule').textContent = rule;
