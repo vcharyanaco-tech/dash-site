@@ -324,7 +324,7 @@ function myDayItemHtml_(title, subtitle, dateLabel, actionHtml) {
   return '<div class="myday-item">' +
     '<div class="myday-item-body">' +
       '<div class="myday-item-title">' + title + '</div>' +
-      '<div class="myday-item-meta">' + subtitle + '</div>' +
+      '<div class="myday-item-meta">' + escapeHtml(subtitle) + '</div>' +
     '</div>' +
     '<div class="myday-item-date">' + escapeHtml(dateLabel) + '</div>' +
     '<div class="myday-item-actions">' + actionHtml + '</div>' +

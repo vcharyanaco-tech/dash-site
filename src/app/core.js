@@ -346,14 +346,24 @@ function escAttr(value) {
   return escapeHtml(value);
 }
 
+function linkableHref(value) {
+  const url = String(value == null ? '' : value).trim();
+  if (!url) return '';
+  if (/^www\./i.test(url)) return 'https://' + url;
+  if (/^(https?|mailto|tel):/i.test(url)) return url;
+  if (/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(\/[^\s]*)?$/i.test(url)) {
+    return 'https://' + url;
+  }
+  return '';
+}
+
 function renderLinkableText(value) {
   const text = value == null ? '' : String(value);
   if (!text) return '';
   const normalized = text.trim();
   if (!normalized) return '';
-  const isUrl = /^(https?:\/\/|mailto:|ftp:\/\/|www\.)/i.test(normalized) || /(?:\.[a-z]{2,})(?:\/|$)/i.test(normalized);
-  if (!isUrl) return escapeHtml(text);
-  const href = /^www\./i.test(normalized) ? 'https://' + normalized : normalized;
+  const href = linkableHref(normalized);
+  if (!href) return escapeHtml(text);
   return `<a href="${escAttr(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`;
 }
 

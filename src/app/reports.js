@@ -165,7 +165,10 @@ function printLinksHtml_(item) {
   return `<div class="print-links-block"><h2 style="margin:20px 0 10px;font-size:16px;color:#1f5c2e;">Hyperlinks</h2><div class="sub-block">
     <table style="margin:0"><thead><tr><th style="width:22%">Field</th><th style="width:58%">Link text</th><th>URL</th></tr></thead><tbody>
       ${rows.map(function (r) {
-        return '<tr><td>' + escapeHtml(r.label) + '</td><td>' + escapeHtml(r.text) + '</td><td><a href="' + escapeHtml(r.url) + '" target="_blank" rel="noopener">' + escapeHtml(r.url) + '</a></td></tr>';
+        const href = linkableHref(r.url);
+        return '<tr><td>' + escapeHtml(r.label) + '</td><td>' + escapeHtml(r.text) + '</td><td>' + (href
+          ? '<a href="' + escAttr(href) + '" target="_blank" rel="noopener">' + escapeHtml(r.url) + '</a>'
+          : escapeHtml(r.url)) + '</td></tr>';
       }).join('')}
     </tbody></table>
   </div></div>`;

@@ -698,14 +698,24 @@ function escAttr(value) {
   return escapeHtml(value);
 }
 
+function linkableHref(value) {
+  const url = String(value == null ? '' : value).trim();
+  if (!url) return '';
+  if (/^www\./i.test(url)) return 'https://' + url;
+  if (/^(https?|mailto|tel):/i.test(url)) return url;
+  if (/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(\/[^\s]*)?$/i.test(url)) {
+    return 'https://' + url;
+  }
+  return '';
+}
+
 function renderLinkableText(value) {
   const text = value == null ? '' : String(value);
   if (!text) return '';
   const normalized = text.trim();
   if (!normalized) return '';
-  const isUrl = /^(https?:\/\/|mailto:|ftp:\/\/|www\.)/i.test(normalized) || /(?:\.[a-z]{2,})(?:\/|$)/i.test(normalized);
-  if (!isUrl) return escapeHtml(text);
-  const href = /^www\./i.test(normalized) ? 'https://' + normalized : normalized;
+  const href = linkableHref(normalized);
+  if (!href) return escapeHtml(text);
   return `<a href="${escAttr(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`;
 }
 
@@ -1701,6 +1711,7 @@ function renderFathomMeetingList(items) {
     const highlightCount = (m.highlights && m.highlights.length) || 0;
     const sharedWith = m.sharedWith || 'none';
     const meetingUrl = m.meetingUrl || '';
+    const meetingHref = linkableHref(meetingUrl);
     html += '<div class="fathom-meeting-item" role="button" tabindex="0" onclick="viewFathomMeeting(' + i + ')">' +
       '<div class="fathom-meeting-title">' + escapeHtml(m.title) + '</div>' +
       '<div class="fathom-meeting-meta">' + escapeHtml(date) +
@@ -1708,7 +1719,7 @@ function renderFathomMeetingList(items) {
       (actionCount ? ' &middot; ' + actionCount + ' action item(s)' : '') +
       (highlightCount ? ' &middot; ' + highlightCount + ' highlight(s)' : '') +
       (sharedWith !== 'none' ? ' &middot; Shared: ' + escapeHtml(sharedWith) : '') + '</div>' +
-      (meetingUrl ? '<div class="fathom-meeting-meta"><a href="' + escapeHtml(meetingUrl) + '" target="_blank" rel="noopener noreferrer">Open in Fathom</a></div>' : '') +
+      (meetingHref ? '<div class="fathom-meeting-meta"><a href="' + escAttr(meetingHref) + '" target="_blank" rel="noopener noreferrer">Open in Fathom</a></div>' : '') +
       (m.summary ? '<div class="fathom-meeting-summary">' + escapeHtml(m.summary.substring(0, 220)) + '</div>' : '') +
       '<div class="fathom-meeting-actions">' +
       '<span class="btn btn-small btn-secondary" style="pointer-events:none;">View notes</span>' +
@@ -2689,16 +2700,18 @@ function ensurePreviewFrame_(stage) {
 }
 
 function openLinkPreview(url, title) {
+  const safe = linkableHref(url);
+  if (!safe) { showToast('Preview blocked: not a supported http(s) / mailto / tel link.', 'error'); return; }
   const stage = getEl('previewStage');
-  if (!stage) { window.open(url, '_blank'); return; }
+  if (!stage) { window.open(safe, '_blank'); return; }
   const openNew = getEl('previewOpenNew');
   const titleEl = getEl('previewModalTitle');
   if (titleEl) titleEl.textContent = title || 'Preview';
-  if (openNew) openNew.href = url;
+  if (openNew) openNew.href = safe;
   previewZoom = 80;
 
   let target = '';
-  try { target = (typeof toEmbeddableUrl === 'function' && toEmbeddableUrl(url)) || url; } catch (err) { target = url; }
+  try { target = (typeof toEmbeddableUrl === 'function' && toEmbeddableUrl(safe)) || safe; } catch (err) { target = safe; }
 
   /* Presentation Mode keeps two levels of reuse:
      1) a background warm frame that has already finished loading;
@@ -2847,7 +2860,10 @@ function wireEmbeddedLinkPreview() {
     if (!link) return;
     if (link.closest && link.closest('#previewModal')) return;
     const href = link.getAttribute('href') || '';
-    if (!/^https?:/i.test(href)) return;
+    if (!/^https?:/i.test(href)) {
+      if (!/^(mailto|tel):/i.test(href)) event.preventDefault();
+      return;
+    }
     event.preventDefault();
     openLinkPreview(href, link.textContent.trim());
   });
@@ -5257,7 +5273,10 @@ function printLinksHtml_(item) {
   return `<div class="print-links-block"><h2 style="margin:20px 0 10px;font-size:16px;color:#1f5c2e;">Hyperlinks</h2><div class="sub-block">
     <table style="margin:0"><thead><tr><th style="width:22%">Field</th><th style="width:58%">Link text</th><th>URL</th></tr></thead><tbody>
       ${rows.map(function (r) {
-        return '<tr><td>' + escapeHtml(r.label) + '</td><td>' + escapeHtml(r.text) + '</td><td><a href="' + escapeHtml(r.url) + '" target="_blank" rel="noopener">' + escapeHtml(r.url) + '</a></td></tr>';
+        const href = linkableHref(r.url);
+        return '<tr><td>' + escapeHtml(r.label) + '</td><td>' + escapeHtml(r.text) + '</td><td>' + (href
+          ? '<a href="' + escAttr(href) + '" target="_blank" rel="noopener">' + escapeHtml(r.url) + '</a>'
+          : escapeHtml(r.url)) + '</td></tr>';
       }).join('')}
     </tbody></table>
   </div></div>`;
@@ -5757,7 +5776,8 @@ function loadDivisionalDashboardLinks() {
     rows = rows || [];
     if (!rows.length) { body.innerHTML = '<div class="form-status">No DO/RMS users found.</div>'; return; }
     body.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr><th>Designation / username</th><th>Office</th><th>Dashboard</th></tr></thead><tbody>' + rows.map(function (r) {
-      const link = r.url ? '<a href="' + escapeHtml(r.url) + '" target="_blank" rel="noopener noreferrer">Open dashboard</a>' : '<span class="form-status">Not provided</span>';
+      const dashHref = linkableHref(r.url || '');
+      const link = dashHref ? '<a href="' + escAttr(dashHref) + '" target="_blank" rel="noopener noreferrer">Open dashboard</a>' : '<span class="form-status">Not provided</span>';
       return '<tr><td><strong>' + escapeHtml(r.designation || r.username || '—') + '</strong></td><td>' + escapeHtml(r.office || r.department || '—') + '</td><td>' + link + '</td></tr>';
     }).join('') + '</tbody></table></div>';
   }).catch(function (err) {
@@ -6411,9 +6431,12 @@ function detailLinksHtml_(item) {
     var url = item.linkUrls[key];
     if (!url) return;
     var text = (item.linkTexts && item.linkTexts[key]) || key;
+    const href = linkableHref(url);
     html += '<div class="about-row detail-row">' +
       '<span class="detail-label">' + escapeHtml(text) + '</span>' +
-      '<div class="detail-value"><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener" data-embed>' + escapeHtml(url) + '</a></div></div>';
+      '<div class="detail-value">' + (href
+        ? '<a href="' + escAttr(href) + '" target="_blank" rel="noopener" data-embed>' + escapeHtml(url) + '</a>'
+        : escapeHtml(url)) + '</div></div>';
   });
   html += '</div>';
   return html;
@@ -9134,7 +9157,7 @@ function myDayItemHtml_(title, subtitle, dateLabel, actionHtml) {
   return '<div class="myday-item">' +
     '<div class="myday-item-body">' +
       '<div class="myday-item-title">' + title + '</div>' +
-      '<div class="myday-item-meta">' + subtitle + '</div>' +
+      '<div class="myday-item-meta">' + escapeHtml(subtitle) + '</div>' +
     '</div>' +
     '<div class="myday-item-date">' + escapeHtml(dateLabel) + '</div>' +
     '<div class="myday-item-actions">' + actionHtml + '</div>' +

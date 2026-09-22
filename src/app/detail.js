@@ -23,9 +23,12 @@ function detailLinksHtml_(item) {
     var url = item.linkUrls[key];
     if (!url) return;
     var text = (item.linkTexts && item.linkTexts[key]) || key;
+    const href = linkableHref(url);
     html += '<div class="about-row detail-row">' +
       '<span class="detail-label">' + escapeHtml(text) + '</span>' +
-      '<div class="detail-value"><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener" data-embed>' + escapeHtml(url) + '</a></div></div>';
+      '<div class="detail-value">' + (href
+        ? '<a href="' + escAttr(href) + '" target="_blank" rel="noopener" data-embed>' + escapeHtml(url) + '</a>'
+        : escapeHtml(url)) + '</div></div>';
   });
   html += '</div>';
   return html;

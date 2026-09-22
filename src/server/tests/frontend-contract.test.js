@@ -71,7 +71,7 @@ test('link preview rebuilds a missing #previewFrame instead of escaping to a new
   // into the window.open new-tab path after the first preview.
   assert.ok(appJs.indexOf('function ensurePreviewFrame_(stage)') !== -1,
     'ensurePreviewFrame_ missing');
-  assert.ok(appJs.indexOf("if (!stage) { window.open(url, '_blank'); return; }") !== -1,
+  assert.ok(appJs.indexOf("if (!stage) { window.open(safe, '_blank'); return; }") !== -1,
     'openLinkPreview must only fall back to a new tab when #previewStage is missing');
   assert.ok(appJs.indexOf("if (!frame) { window.open(url, '_blank'); return; }") === -1,
     'openLinkPreview still bails to a new tab when #previewFrame is absent');

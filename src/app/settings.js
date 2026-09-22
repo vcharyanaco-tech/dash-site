@@ -216,7 +216,8 @@ function loadDivisionalDashboardLinks() {
     rows = rows || [];
     if (!rows.length) { body.innerHTML = '<div class="form-status">No DO/RMS users found.</div>'; return; }
     body.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr><th>Designation / username</th><th>Office</th><th>Dashboard</th></tr></thead><tbody>' + rows.map(function (r) {
-      const link = r.url ? '<a href="' + escapeHtml(r.url) + '" target="_blank" rel="noopener noreferrer">Open dashboard</a>' : '<span class="form-status">Not provided</span>';
+      const dashHref = linkableHref(r.url || '');
+      const link = dashHref ? '<a href="' + escAttr(dashHref) + '" target="_blank" rel="noopener noreferrer">Open dashboard</a>' : '<span class="form-status">Not provided</span>';
       return '<tr><td><strong>' + escapeHtml(r.designation || r.username || '—') + '</strong></td><td>' + escapeHtml(r.office || r.department || '—') + '</td><td>' + link + '</td></tr>';
     }).join('') + '</tbody></table></div>';
   }).catch(function (err) {

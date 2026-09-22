@@ -548,16 +548,18 @@ function ensurePreviewFrame_(stage) {
 }
 
 function openLinkPreview(url, title) {
+  const safe = linkableHref(url);
+  if (!safe) { showToast('Preview blocked: not a supported http(s) / mailto / tel link.', 'error'); return; }
   const stage = getEl('previewStage');
-  if (!stage) { window.open(url, '_blank'); return; }
+  if (!stage) { window.open(safe, '_blank'); return; }
   const openNew = getEl('previewOpenNew');
   const titleEl = getEl('previewModalTitle');
   if (titleEl) titleEl.textContent = title || 'Preview';
-  if (openNew) openNew.href = url;
+  if (openNew) openNew.href = safe;
   previewZoom = 80;
 
   let target = '';
-  try { target = (typeof toEmbeddableUrl === 'function' && toEmbeddableUrl(url)) || url; } catch (err) { target = url; }
+  try { target = (typeof toEmbeddableUrl === 'function' && toEmbeddableUrl(safe)) || safe; } catch (err) { target = safe; }
 
   /* Presentation Mode keeps two levels of reuse:
      1) a background warm frame that has already finished loading;
@@ -706,7 +708,10 @@ function wireEmbeddedLinkPreview() {
     if (!link) return;
     if (link.closest && link.closest('#previewModal')) return;
     const href = link.getAttribute('href') || '';
-    if (!/^https?:/i.test(href)) return;
+    if (!/^https?:/i.test(href)) {
+      if (!/^(mailto|tel):/i.test(href)) event.preventDefault();
+      return;
+    }
     event.preventDefault();
     openLinkPreview(href, link.textContent.trim());
   });

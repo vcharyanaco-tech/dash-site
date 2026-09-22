@@ -179,7 +179,7 @@ export default {
       const inner = (err && err.message) || String(err);
       if (path === '/api' || path.startsWith('/api/') || path.startsWith('/macros/') || path.startsWith('/static/')) {
         console.error('proxy failure on ' + path + ': ' + inner);
-        return jsonResponse({ error: 'internal', message: 'Proxy error: ' + inner }, 500);
+        return jsonResponse({ error: 'internal', message: 'Proxy error: upstream request failed' }, 500);
       }
       console.error('proxy failure on ' + path + ': ' + inner);
       return new Response('Internal proxy error.', { status: 500, headers: COMMON_HEADERS });

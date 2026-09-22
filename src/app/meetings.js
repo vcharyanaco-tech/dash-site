@@ -733,6 +733,7 @@ function renderFathomMeetingList(items) {
     const highlightCount = (m.highlights && m.highlights.length) || 0;
     const sharedWith = m.sharedWith || 'none';
     const meetingUrl = m.meetingUrl || '';
+    const meetingHref = linkableHref(meetingUrl);
     html += '<div class="fathom-meeting-item" role="button" tabindex="0" onclick="viewFathomMeeting(' + i + ')">' +
       '<div class="fathom-meeting-title">' + escapeHtml(m.title) + '</div>' +
       '<div class="fathom-meeting-meta">' + escapeHtml(date) +
@@ -740,7 +741,7 @@ function renderFathomMeetingList(items) {
       (actionCount ? ' &middot; ' + actionCount + ' action item(s)' : '') +
       (highlightCount ? ' &middot; ' + highlightCount + ' highlight(s)' : '') +
       (sharedWith !== 'none' ? ' &middot; Shared: ' + escapeHtml(sharedWith) : '') + '</div>' +
-      (meetingUrl ? '<div class="fathom-meeting-meta"><a href="' + escapeHtml(meetingUrl) + '" target="_blank" rel="noopener noreferrer">Open in Fathom</a></div>' : '') +
+      (meetingHref ? '<div class="fathom-meeting-meta"><a href="' + escAttr(meetingHref) + '" target="_blank" rel="noopener noreferrer">Open in Fathom</a></div>' : '') +
       (m.summary ? '<div class="fathom-meeting-summary">' + escapeHtml(m.summary.substring(0, 220)) + '</div>' : '') +
       '<div class="fathom-meeting-actions">' +
       '<span class="btn btn-small btn-secondary" style="pointer-events:none;">View notes</span>' +
