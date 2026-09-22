@@ -214,9 +214,25 @@ function openDashAutomation(){dashOpsEnsureUi_();openDialog('dashOpsAutomationMo
 function loadDashAutomation(){return ApiService.listAutomationRules().then(function(r){DASHOPS_RULES=r.rules||[];renderDashAutomation_();});}
 function renderDashAutomation_(){var h=getEl('dashOpsAutomationBody');if(!h)return;var rows=DASHOPS_RULES.map(function(r){return '<div class="workspace-rule-row"><div><strong>'+escapeHtml(r.name)+'</strong><small>IF '+escapeHtml(r.trigger)+' → '+escapeHtml(r.action)+'</small></div><label><input type="checkbox" '+(r.enabled?'checked':'')+' onchange="toggleDashRule(\''+escAttr(r.id)+'\',this.checked)"> Enabled</label><button class="btn btn-ghost btn-small" onclick="deleteDashRule(\''+escAttr(r.id)+'\')">Delete</button></div>';}).join('');
 h.innerHTML='<div class="workspace-ops-toolbar"><button class="btn btn-primary btn-small" onclick="addDashRulePrompt()">Add rule</button><button class="btn btn-secondary btn-small" onclick="runDashAutomationNow()">Run scheduler now</button></div>'+(rows||'<div class="workspace-search-empty">No automation rules yet.</div>');}
-function addDashRulePrompt(){var name=prompt('Rule name','Morning briefing');if(!name)return;var trigger=prompt('Trigger: SUBMISSION_CREATED, TASK_OVERDUE, REVIEW_DUE, MORNING_BRIEFING, REVIEW_COMPLETED','TASK_OVERDUE');if(!trigger)return;var action=prompt('Action: NOTIFY_SELF or NOTIFY_STAFF','NOTIFY_SELF');if(!action)return;ApiService.saveAutomationRule({name:name,trigger:trigger,action:action,enabled:true,config:{title:name,body:'Dash automation: '+name}}).then(loadDashAutomation).catch(function(e){showToast(e.message||String(e),'error');});}
+function addDashRulePrompt(){
+  showPrompt({ title: 'Rule name', message: 'Rule name:', value: 'Morning briefing' }).then(function (name) {
+    if (!name) return;
+    showPrompt({ title: 'Trigger', message: 'Trigger: SUBMISSION_CREATED, TASK_OVERDUE, REVIEW_DUE, MORNING_BRIEFING, REVIEW_COMPLETED', value: 'TASK_OVERDUE' }).then(function (trigger) {
+      if (!trigger) return;
+      showPrompt({ title: 'Action', message: 'Action: NOTIFY_SELF or NOTIFY_STAFF', value: 'NOTIFY_SELF' }).then(function (action) {
+        if (!action) return;
+        ApiService.saveAutomationRule({ name: name, trigger: trigger, action: action, enabled: true, config: { title: name, body: 'Dash automation: ' + name } }).then(loadDashAutomation).catch(function (e) { showToast(e.message || String(e), 'error'); });
+      });
+    });
+  });
+}
 function toggleDashRule(id,on){var r=DASHOPS_RULES.find(function(x){return x.id===id;});if(!r)return;r.enabled=!!on;ApiService.saveAutomationRule(r).then(loadDashAutomation);}
-function deleteDashRule(id){if(!confirm('Delete this automation rule?'))return;ApiService.deleteAutomationRule(id).then(loadDashAutomation);}
+function deleteDashRule(id){
+  showConfirm({ title: 'Delete rule', message: 'Delete this automation rule?', okLabel: 'Delete', danger: true }).then(function (ok) {
+    if (!ok) return;
+    ApiService.deleteAutomationRule(id).then(loadDashAutomation);
+  });
+}
 function runDashAutomationNow(){ApiService.runAutomationNow().then(function(r){showToast('Automation checked: '+JSON.stringify(r),'success');}).catch(function(e){showToast(e.message||String(e),'error');});}
 function openDashSecurity(){dashOpsEnsureUi_();openDialog('dashOpsSecurityModal');var h=getEl('dashOpsSecurityBody');h.innerHTML='<div class="workspace-search-empty">Loading security status…</div>';ApiService.getSecurityStatus().then(function(s){h.innerHTML='<div class="workspace-exec-grid">'+[['Signed-in user',s.admin],['Active sessions',s.sessions],['Users',s.users],['Audit rows',s.auditRows]].map(function(x){return '<div class="workspace-exec-kpi"><span>'+escapeHtml(x[0])+'</span><strong>'+escapeHtml(String(x[1]))+'</strong></div>';}).join('')+'</div><div class="workspace-ops-toolbar"><button class="btn btn-secondary btn-small" onclick="rotateDashSession()">Rotate session</button><span class="section-copy">API writes require trusted origins; sessions are server-side.</span></div>';}).catch(function(e){h.innerHTML='<div class="workspace-search-empty">'+escapeHtml(e.message||String(e))+'</div>';});}
 function rotateDashSession(){ApiService.rotateSession().then(function(){showToast('Session rotated.','success');}).catch(function(e){showToast(e.message||String(e),'error');});}

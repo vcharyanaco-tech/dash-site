@@ -46,43 +46,43 @@
       </div>
 
       <nav class="sidebar-nav" aria-label="Main navigation">
-        <div class="sidebar-section-label" data-group-label="overview">Overview</div>
+        <div class="sidebar-section-label" data-group-label="overview" data-i18n="nav.sectionOverview">Overview</div>
         <button class="nav-item active" data-tab="dashboard" data-group="overview" onclick="openTab('dashboard')" aria-current="page">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
-          <span>Dashboard</span>
+          <span data-i18n="nav.dashboard">Dashboard</span>
         </button>
         <button class="nav-item" data-tab="myday" data-group="overview" onclick="openTab('myday')">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-          <span>My Day</span>
+          <span data-i18n="nav.myday">My Day</span>
         </button>
-        <div class="sidebar-section-label" data-group-label="work">Work</div>
+        <div class="sidebar-section-label" data-group-label="work" data-i18n="nav.sectionWork">Work</div>
         <button class="nav-item" data-tab="tasks" data-group="work" onclick="openTab('tasks')">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
-          <span>Tasks</span>
+          <span data-i18n="nav.tasks">Tasks</span>
         </button>
-        <div class="sidebar-section-label" data-group-label="insights">Insights</div>
+        <div class="sidebar-section-label" data-group-label="insights" data-i18n="nav.sectionInsights">Insights</div>
         <button class="nav-item" data-tab="reports" data-group="insights" onclick="openTab('reports')">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-          <span>Reports</span>
+          <span data-i18n="nav.reports">Reports</span>
         </button>
         <button class="nav-item" data-tab="analytics" data-group="insights" onclick="openTab('analytics')">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
-          <span>Analytics</span>
+          <span data-i18n="nav.analytics">Analytics</span>
         </button>
-        <div class="sidebar-section-label" data-group-label="admin">Admin</div>
+        <div class="sidebar-section-label" data-group-label="admin" data-i18n="nav.sectionAdmin">Admin</div>
         <button class="nav-item" data-tab="audit" data-group="admin" data-perm="audit" onclick="openTab('audit')">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
-          <span>Audit Log</span>
+          <span data-i18n="nav.audit">Audit Log</span>
         </button>
         <button class="nav-item" data-tab="settings" data-group="admin" onclick="openTab('settings')">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-          <span>Settings</span>
+          <span data-i18n="nav.settings">Settings</span>
         </button>
       </nav>
 
       <div class="sidebar-footer">
-        <div class="version-chip" id="versionChip" title="App version">v1.2.0</div>
-        <div class="sidebar-credit">Designed &amp; maintained by Circle Office, Haryana</div>
+        <div class="version-chip" id="versionChip" title="App version">v1.2.1</div>
+        <div class="sidebar-credit" data-i18n="about.designedBy">Designed &amp; maintained by Circle Office, Haryana</div>
       </div>
     </aside>
 
@@ -176,7 +176,7 @@
         <section id="dashboard" class="tab-panel active" aria-labelledby="dashboardTitle">
           <div class="section-header">
             <div>
-              <h2 class="text-heading" id="dashboardTitle">Live Dashboard</h2>
+              <h2 class="text-heading" id="dashboardTitle" data-i18n="dashboard.live">Live Dashboard</h2>
               <p class="section-copy">View live items, search across sectors, and update records if you have access.</p>
             </div>
             <div class="section-actions">
@@ -247,6 +247,7 @@
             <div class="table-scroll" tabindex="0" aria-label="Records table">
               <table class="data-table" id="dashboardTable">
                 <thead><tr>
+                  <th data-col="sel" class="dash-sel-col"><input type="checkbox" id="dashSelAll" aria-label="Select all records" title="Select all records" onclick="toggleDashSelectAll(this)"></th>
                   <th data-col="id" data-dash-sort="id">ID</th>
                   <th data-col="sector" data-dash-sort="sector">Sector</th>
                   <th data-col="description" data-dash-sort="description">Description</th>
@@ -260,6 +261,12 @@
               </table>
             </div>
             <div class="table-resize-handle" id="dashboardTableResize" title="Drag to resize table height"></div>
+            <div id="dashBatchBar" class="dash-batch-bar hidden" aria-hidden="true">
+              <span id="dashBatchCount">0 selected</span>
+              <button class="btn btn-secondary btn-small" type="button" onclick="dashBatchReview('done')">Mark review done</button>
+              <button class="btn btn-secondary btn-small" type="button" onclick="dashBatchReview('due')">Mark review not done</button>
+              <button class="btn btn-danger btn-small" type="button" onclick="dashBatchDelete()">Delete</button>
+            </div>
             <div class="table-footer">
               <span class="table-summary" id="dashboardTableSummary"></span>
             </div>
@@ -438,6 +445,17 @@
                   <span id="changePasswordStatus" class="form-status" aria-live="polite"></span>
                 </div>
               </form>
+            </div>
+
+            <div id="languageCard" class="settings-card">
+              <div class="settings-card-head">
+                <h3 class="text-subheading" data-i18n="settings.language">Language</h3>
+                <p class="section-copy" data-i18n="settings.languageCopy">Switch the dashboard chrome between English and Hindi.</p>
+              </div>
+              <div class="settings-card-actions">
+                <button class="btn btn-secondary" type="button" onclick="toggleLanguage()" data-i18n="settings.switchLang">Switch to Hindi</button>
+                <span id="languageStatus" class="form-status" aria-live="polite"></span>
+              </div>
             </div>
 
             <div id="sheetSyncCard" class="settings-card hidden">
@@ -668,7 +686,7 @@
         <div class="footer-brand-line">
           <span class="footer-title">India Post Dashboard</span>
           <span class="footer-dot" aria-hidden="true">•</span>
-          <span class="footer-version" id="footerVersion">v1.2.0</span>
+          <span class="footer-version" id="footerVersion">v1.2.1</span>
         </div>
         <div class="footer-credit">Designed, developed and maintained by <span class="footer-credit-org">Circle Office, Haryana</span></div>
       </footer>
@@ -938,7 +956,7 @@
         <div class="about-title">India Post Dashboard</div>
         <div class="about-subtitle">Circle Office Haryana — Operations &amp; Compliance Tracker</div>
         <div class="about-rows">
-          <div class="about-row"><span>Version</span><strong id="aboutVersion">1.2.0</strong></div>
+          <div class="about-row"><span>Version</span><strong id="aboutVersion">1.2.1</strong></div>
           <div class="about-row"><span>Build</span><strong id="aboutBuild">—</strong></div>
         </div>
         <p class="about-note">Built for the Department of Posts, Government of India.</p>
@@ -1021,6 +1039,26 @@
         <div class="form-row">
           <button id="confirmOkBtn" class="btn btn-primary" type="button" onclick="runConfirmDialog()">OK</button>
           <button class="btn btn-secondary" type="button" onclick="cancelConfirmDialog()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="promptModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="promptModalTitle">
+    <div class="modal-card modal-card-sm">
+      <div class="modal-header">
+        <h3 class="text-subheading" id="promptModalTitle">Enter value</h3>
+        <button class="icon-btn" type="button" onclick="cancelPromptDialog()" aria-label="Close dialog">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="confirm-body">
+        <p id="promptMessage" class="confirm-message"></p>
+        <input id="promptInput" class="input" type="text" onkeydown="if (event.key === 'Enter') { runPromptDialog(); }">
+        <span id="promptError" class="field-error" style="display:none"></span>
+        <div class="form-row">
+          <button class="btn btn-primary" type="button" onclick="runPromptDialog()">OK</button>
+          <button class="btn btn-secondary" type="button" onclick="cancelPromptDialog()">Cancel</button>
         </div>
       </div>
     </div>
@@ -1254,6 +1292,7 @@
         <div class="field">
           <label>Visible fields (cards &amp; table view)</label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;"><input type="checkbox" class="col-toggle" data-col="sel" checked> Select</label>
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;"><input type="checkbox" class="col-toggle" data-col="id" checked> ID</label>
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;"><input type="checkbox" class="col-toggle" data-col="sector" checked> Sector</label>
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;"><input type="checkbox" class="col-toggle" data-col="description" checked> Description</label>

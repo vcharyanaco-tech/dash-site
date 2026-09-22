@@ -483,13 +483,20 @@ function cancelSyncPreview() {
 /** Push: send all DB records back to the Google Spreadsheet. */
 function pushAllToSheet() {
   if (!appState.isAdmin) { showToast('Admin access required', 'warning'); return; }
-  if (!confirm('This will overwrite the Google Spreadsheet with the current database records. Continue?')) return;
-  const btn = getEl('pushSheetBtn');
-  const status = getEl('syncSheetStatus');
-  if (btn) btn.disabled = true;
-  if (status) { status.textContent = 'Pushing records to spreadsheet…'; status.className = 'form-status'; }
-  showOverlay('Pushing to spreadsheet…');
-  ApiService.adminPushToSheet().then(function (result) {
+  showConfirm({
+    title: 'Overwrite spreadsheet',
+    message: 'This will overwrite the Google Spreadsheet with the current database records. Continue?',
+    okLabel: 'Overwrite',
+    danger: true
+  }).then(function (confirmed) {
+    if (!confirmed) return;
+    const btn = getEl('pushSheetBtn');
+    const status = getEl('syncSheetStatus');
+    if (btn) btn.disabled = true;
+    if (status) { status.textContent = 'Pushing records to spreadsheet…'; status.className = 'form-status'; }
+    showOverlay('Pushing to spreadsheet…');
+    const run = function () {
+      ApiService.adminPushToSheet().then(function (result) {
     hideOverlay();
     if (btn) btn.disabled = false;
     if (!result || result.pushed === false) {
@@ -508,6 +515,9 @@ function pushAllToSheet() {
     const msg = 'Push failed: ' + (err.message || err);
     if (status) { status.textContent = msg; status.className = 'form-status error'; }
     showToast(msg, 'error');
+    });
+  };
+  run();
   });
 }
 
@@ -826,17 +836,22 @@ function deleteUser(email) {
 }
 
 function resetUserPassword(email) {
-  const newPassword = prompt('New password for ' + email + ' (min 8 characters):');
-  if (!newPassword) return;
-  showOverlay('Resetting password…');
-  ApiService.adminResetPassword(email, newPassword).then(function (users) {
-    hideOverlay();
-    renderUsersTable(users || []);
-    showToast('Password reset for ' + email, 'success');
-  }).catch(function (err) {
-    hideOverlay();
-    if (handleServerFailure(err)) return;
-    showToast('Reset failed: ' + (err.message || err), 'error');
+  showPrompt({
+    title: 'Reset password',
+    message: 'New password for ' + email + ' (min 8 characters):',
+    type: 'password'
+  }).then(function (newPassword) {
+    if (!newPassword) return;
+    showOverlay('Resetting password…');
+    ApiService.adminResetPassword(email, newPassword).then(function (users) {
+      hideOverlay();
+      renderUsersTable(users || []);
+      showToast('Password reset for ' + email, 'success');
+    }).catch(function (err) {
+      hideOverlay();
+      if (handleServerFailure(err)) return;
+      showToast('Reset failed: ' + (err.message || err), 'error');
+    });
   });
 }
 

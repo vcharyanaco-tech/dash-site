@@ -63,7 +63,7 @@ jobs:
 
       - name: Syntax check server sources
         run: |
-          for f in app.js src/worker/worker.js src/server/*.js src/server/tests/*.js src/scripts/*.cjs scripts/*.cjs; do
+          for f in app.js src/worker/worker.js src/server/*.js src/server/tests/*.js scripts/*.cjs; do
             [ -f "$f" ] && node --check "$f"
           done
         shell: bash

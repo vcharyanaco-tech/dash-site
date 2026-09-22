@@ -2471,6 +2471,20 @@ body.dark-mode .card-ai-table {
 .data-table th.audit-check-col { padding-left: 6px; padding-right: 6px; }
 .data-table .audit-row-check { vertical-align: middle; cursor: pointer; }
 
+.data-table .dash-sel-col { width: 40px; text-align: center; }
+.data-table th.dash-sel-col { padding-left: 6px; padding-right: 6px; }
+.data-table .dash-row-check { vertical-align: middle; cursor: pointer; }
+.dash-batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-top: 1px solid var(--dt-border);
+  background: var(--dt-header);
+}
+.dash-batch-bar .btn { white-space: nowrap; }
+
 .table-footer {
   display: flex;
   align-items: center;

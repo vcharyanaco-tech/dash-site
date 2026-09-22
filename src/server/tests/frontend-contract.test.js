@@ -78,3 +78,19 @@ test('link preview rebuilds a missing #previewFrame instead of escaping to a new
   assert.ok(appJs.indexOf('ensurePreviewFrame_(stage)') !== -1,
     'openLinkPreview never invokes ensurePreviewFrame_');
 });
+
+test('no native prompt()/confirm() boxes remain', function () {
+  assert.ok(appJs.indexOf('if (!confirm(') === -1, 'native confirm() block still present');
+  assert.ok(appJs.indexOf('window.confirm(') === -1, 'window.confirm still present');
+  assert.ok(appJs.indexOf('= prompt(') === -1, 'native prompt() call still present');
+  assert.ok(appJs.indexOf('function showPrompt(') !== -1, 'in-app showPrompt helper missing');
+  assert.ok(appJs.indexOf('function showConfirm(') !== -1, 'in-app showConfirm helper missing');
+});
+
+test('dashboard table supports editor multi-select', function () {
+  assert.ok(appJs.indexOf('function toggleDashSelectAll(') !== -1, 'toggleDashSelectAll missing');
+  assert.ok(appJs.indexOf('function dashRowSelect(') !== -1, 'dashRowSelect missing');
+  assert.ok(appJs.indexOf('function dashBatchReview(') !== -1, 'bulk review missing');
+  assert.ok(appJs.indexOf('selectedDashRows_') !== -1, 'selection state missing');
+  assert.ok(appJs.indexOf('visibleDashColumnCount()') !== -1, 'computed colspan missing');
+});

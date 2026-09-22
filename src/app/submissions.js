@@ -154,19 +154,21 @@ function cancelSubmissionEdit() {
 }
 
 function insertSubmissionLink() {
-  const text = prompt('Link text:', 'Open link');
-  if (text === null) return;
-  const url = prompt('URL (https://…):', 'https://');
-  if (url === null) return;
-  const trimmed = String(url).trim();
-  if (!/^https?:\/\//i.test(trimmed)) { showToast('Please enter a valid http:// or https:// URL.', 'warning'); return; }
-  const ta = getEl('submissionText');
-  const link = '[' + String(text || trimmed).replace(/\]/g, '') + '](' + trimmed.replace(/[()]/g, '') + ')';
-  const start = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
-  const end = ta.selectionEnd == null ? ta.value.length : ta.selectionEnd;
-  ta.value = ta.value.slice(0, start) + link + ta.value.slice(end);
-  ta.focus();
-  ta.selectionStart = ta.selectionEnd = start + link.length;
+  showPrompt({ title: 'Link text', message: 'Link text:', value: 'Open link' }).then(function (text) {
+    if (text === null) return;
+    showPrompt({ title: 'URL', message: 'URL (https://…):', value: 'https://' }).then(function (url) {
+      if (url === null) return;
+      const trimmed = String(url).trim();
+      if (!/^https?:\/\//i.test(trimmed)) { showToast('Please enter a valid http:// or https:// URL.', 'warning'); return; }
+      const ta = getEl('submissionText');
+      const link = '[' + String(text || trimmed).replace(/\]/g, '') + '](' + trimmed.replace(/[()]/g, '') + ')';
+      const start = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+      const end = ta.selectionEnd == null ? ta.value.length : ta.selectionEnd;
+      ta.value = ta.value.slice(0, start) + link + ta.value.slice(end);
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = start + link.length;
+    });
+  });
 }
 
 function handleSubmissionAttachmentChange(input) {

@@ -1,4 +1,5 @@
-﻿{
+{
+  "id": "/app.html",
   "name": "India Post Dashboard",
   "short_name": "Dashboard",
   "start_url": "/app.html",
@@ -12,7 +13,7 @@
       "src": "/docs-pwa-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any"
+      "purpose": "any maskable"
     }
   ]
 }

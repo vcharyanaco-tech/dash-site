@@ -182,8 +182,14 @@ function downloadMeetingFile(name) {
 
 function deleteMeetingFile(name) {
   if (!name) return;
-  if (!window.confirm('Delete \u201C' + name + '\u201D from the server? This cannot be undone.')) return;
-  ApiService.deleteMeetingFile(name).then(function (data) {
+  showConfirm({
+    title: 'Delete file',
+    message: 'Delete "' + name + '" from the server? This cannot be undone.',
+    okLabel: 'Delete',
+    danger: true
+  }).then(function (confirmed) {
+    if (!confirmed) return;
+    ApiService.deleteMeetingFile(name).then(function (data) {
     if (data && data.success === true) {
       showToast('Deleted ' + name, 'success');
     } else {
@@ -194,6 +200,7 @@ function deleteMeetingFile(name) {
     if (handleServerFailure(err)) return;
     showToast('Delete failed: ' + (err && err.message ? err.message : String(err)), 'error');
     loadPreviousMeetings();
+    });
   });
 }
 

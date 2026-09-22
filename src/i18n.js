@@ -25,15 +25,21 @@ var i18n = (function () {
     en: {
       // Navigation & chrome
       'nav.dashboard': 'Dashboard',
+      'nav.myday': 'My Day',
       'nav.analytics': 'Analytics',
       'nav.audit': 'Audit Log',
       'nav.reports': 'Reports',
       'nav.tasks': 'Tasks',
       'nav.settings': 'Settings',
       'nav.signout': 'Sign out',
+      'nav.sectionOverview': 'Overview',
+      'nav.sectionWork': 'Work',
+      'nav.sectionInsights': 'Insights',
+      'nav.sectionAdmin': 'Admin',
 
       // Dashboard
       'dashboard.title': 'India Post Dashboard',
+      'dashboard.live': 'Live Dashboard',
       'dashboard.subtitle': 'Circle Office Haryana',
       'dashboard.total': 'Total Records',
       'dashboard.flagged': 'Review Due',
@@ -96,6 +102,8 @@ var i18n = (function () {
       'settings.theme': 'Theme',
       'settings.darkMode': 'Dark mode',
       'settings.language': 'Language',
+      'settings.languageCopy': 'Switch the dashboard chrome between English and Hindi.',
+      'settings.switchLang': 'Switch to Hindi',
       'settings.hindi': 'हिन्दी',
       'settings.english': 'English',
       'settings.backup': 'Full backup',
@@ -149,15 +157,21 @@ var i18n = (function () {
     hi: {
       // Navigation & chrome
       'nav.dashboard': 'डैशबोर्ड',
+      'nav.myday': 'मेरा दिन',
       'nav.analytics': 'विश्लेषण',
       'nav.audit': 'ऑडिट लॉग',
       'nav.reports': 'रिपोर्ट',
       'nav.tasks': 'कार्य',
       'nav.settings': 'सेटिंग्स',
       'nav.signout': 'साइन आउट',
+      'nav.sectionOverview': 'अवलोकन',
+      'nav.sectionWork': 'कार्य',
+      'nav.sectionInsights': 'अंतर्दृष्टि',
+      'nav.sectionAdmin': 'प्रशासन',
 
       // Dashboard
       'dashboard.title': 'भारतीय डाक डैशबोर्ड',
+      'dashboard.live': 'लाइव डैशबोर्ड',
       'dashboard.subtitle': 'सर्कल कार्यालय हरियाणा',
       'dashboard.total': 'कुल रिकॉर्ड',
       'dashboard.flagged': 'समीक्षा बाकी',
@@ -220,6 +234,8 @@ var i18n = (function () {
       'settings.theme': 'थीम',
       'settings.darkMode': 'डार्क मोड',
       'settings.language': 'भाषा',
+      'settings.languageCopy': 'डैशबोर्ड का इंटरफ़ेस अंग्रेज़ी और हिन्दी के बीच बदलें।',
+      'settings.switchLang': 'हिन्दी में बदलें',
       'settings.hindi': 'हिन्दी',
       'settings.english': 'English',
       'settings.backup': 'पूर्ण बैकअप',

@@ -31,6 +31,10 @@ if ($Mode -match '^\d+\.\d+\.\d+$') {
     $newVersion = "$major.$minor.$patch"
 }
 
+# Build date stamped into the client ("About" build line) and used as the
+# SW cache-rollover base so app.js/APP_BUILD and SW_VERSION can never diverge.
+$buildStamp = Get-Date -Format "yyyy.MM.dd"
+
 $files = @(
     "app.js",
     "src/app/core.js",
@@ -44,8 +48,16 @@ foreach ($rel in $files) {
     $path = Join-Path $root $rel
     $s = Get-Content $path -Raw
     # Replace only the current semantic version, preserving surrounding text.
-    $s = $s.Replace($m.Value, $m.Value) # no-op; keeps PowerShell string handling predictable
     $s = [regex]::Replace($s, [regex]::Escape($m.Groups[1].Value + "." + $m.Groups[2].Value + "." + $m.Groups[3].Value), $newVersion)
+    # Stamp the APP_BUILD date from the same clock as SW_VERSION below.
+    # String.Replace (not regex) keeps endings where 2-digit day/date tokens
+    # would otherwise be misread as backreferences (e.g. '$1' + '2026.09.22').
+    $bd = [regex]::Match($s, "const APP_BUILD = '([0-9]{4}\.[0-9]{2}\.[0-9]{2})';")
+    if ($bd.Success) {
+        $oldBuild = "const APP_BUILD = '$($bd.Groups[1].Value)';"
+        $newBuild = "const APP_BUILD = '$buildStamp';"
+        $s = $s.Replace($oldBuild, $newBuild)
+    }
     Set-Content -Path $path -Value $s -NoNewline
 }
 

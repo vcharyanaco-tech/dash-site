@@ -88,6 +88,11 @@ function wireGlobalEvents() {
         cancelConfirmDialog();
         return;
       }
+      const promptModal = getEl('promptModal');
+      if (promptModal && !promptModal.classList.contains('hidden')) {
+        cancelPromptDialog();
+        return;
+      }
       ['editModal', 'aboutModal', 'submissionsModal', 'recordDetailModal', 'editUserModal', 'taskModal', 'columnModal', 'commandPalette', 'linkModal', 'syncPreviewModal', 'offlineCenterModal', 'notifCenterModal'].forEach(function (id) {
         const el = getEl(id);
         if (el && !el.classList.contains('hidden')) closeDialog(id);
@@ -134,6 +139,7 @@ function wireGlobalEvents() {
         else if (backdrop.id === 'recordDetailModal') closeRecordDetail();
         else if (backdrop.id === 'editUserModal') closeEditUser();
         else if (backdrop.id === 'confirmModal') cancelConfirmDialog();
+        else if (backdrop.id === 'promptModal') cancelPromptDialog();
         else if (backdrop.id === 'previewModal') closeLinkPreview();
         else if (backdrop.id === 'linkModal') closeLinkModal();
         else if (backdrop.id === 'meetingNotesModal') closeMeetingNotes();

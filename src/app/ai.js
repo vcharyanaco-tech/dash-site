@@ -91,7 +91,7 @@ function toggleRowAi(row, btn) {
   const panelTr = document.createElement('tr');
   panelTr.className = 'ai-insight-tr';
   const td = document.createElement('td');
-  td.setAttribute('colspan', '7');
+  td.setAttribute('colspan', String(visibleDashColumnCount()));
   td.className = 'card-ai-panel card-ai-insight';
   td.innerHTML = cardAiPanelHtml_();
   panelTr.appendChild(td);
@@ -231,7 +231,7 @@ function toggleRowLink(row, btn) {
   const panelTr = document.createElement('tr');
   panelTr.className = 'ai-link-tr';
   const td = document.createElement('td');
-  td.setAttribute('colspan', '7');
+  td.setAttribute('colspan', String(visibleDashColumnCount()));
   td.className = 'card-ai-panel card-link-panel';
   td.innerHTML = cardLinkPanelHtml_();
   panelTr.appendChild(td);
@@ -744,4 +744,53 @@ function cancelConfirmDialog() {
   confirmDialogState = null;
   closeDialog('confirmModal');
   if (cb) cb(false);
+}
+
+/* ---------------------------------- Prompt dialog ---------------------------------- */
+/* In-app single-value input replacing native prompt(). Resolves with the
+   trimmed string, or null when cancelled. Mirrors showConfirm(). */
+
+let promptDialogState = null;
+
+function showPrompt(options) {
+  return new Promise(function (resolve) {
+    promptDialogState = { onValue: resolve };
+    getEl('promptModalTitle').textContent = options.title || 'Enter value';
+    getEl('promptMessage').textContent = options.message || '';
+    const input = getEl('promptInput');
+    input.value = options.value || '';
+    input.placeholder = options.placeholder || '';
+    input.type = options.type || 'text';
+    const err = getEl('promptError');
+    if (err) err.style.display = 'none';
+    openDialog('promptModal');
+    input.focus();
+    input.select();
+  });
+}
+
+function runPromptDialog() {
+  const st = promptDialogState;
+  const input = getEl('promptInput');
+  const raw = input ? input.value : '';
+  if (!st) {
+    closeDialog('promptModal');
+    return;
+  }
+  const err = getEl('promptError');
+  if (!String(raw).trim()) {
+    if (err) { err.style.display = ''; err.textContent = 'A value is required.'; }
+    if (input) input.focus();
+    return;
+  }
+  promptDialogState = null;
+  closeDialog('promptModal');
+  st.onValue(String(raw).trim());
+}
+
+function cancelPromptDialog() {
+  const st = promptDialogState;
+  promptDialogState = null;
+  closeDialog('promptModal');
+  if (st) st.onValue(null);
 }

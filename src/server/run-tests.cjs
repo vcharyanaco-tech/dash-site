@@ -33,9 +33,16 @@ if (seed.status !== 0) {
 // test-bootstrap.js re-seeds the admin password with its own random value.
 // Parallel execution therefore races on one SQLite DB (flaky login failures
 // and 5-minute SQLITE_BUSY hangs). Serial execution is deterministic.
+// Coverage gate: only enforced in CI, with a safety margin under the
+// measured all-files% (83.6 line / 64.2 branch / 86.7 funcs). A regression
+// below the floor fails `npm test` and red-lights the PR.
+const coverArgs = process.env.CI
+  ? ['--test-coverage-lines=80', '--test-coverage-branches=60', '--test-coverage-functions=80']
+  : [];
+
 const child = spawn(
   process.execPath,
-  ['--test', '--experimental-test-coverage', '--test-concurrency=1'],
+  ['--test', '--experimental-test-coverage', '--test-concurrency=1'].concat(coverArgs),
   { stdio: 'inherit', cwd: __dirname }
 );
 

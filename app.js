@@ -25,15 +25,21 @@ var i18n = (function () {
     en: {
       // Navigation & chrome
       'nav.dashboard': 'Dashboard',
+      'nav.myday': 'My Day',
       'nav.analytics': 'Analytics',
       'nav.audit': 'Audit Log',
       'nav.reports': 'Reports',
       'nav.tasks': 'Tasks',
       'nav.settings': 'Settings',
       'nav.signout': 'Sign out',
+      'nav.sectionOverview': 'Overview',
+      'nav.sectionWork': 'Work',
+      'nav.sectionInsights': 'Insights',
+      'nav.sectionAdmin': 'Admin',
 
       // Dashboard
       'dashboard.title': 'India Post Dashboard',
+      'dashboard.live': 'Live Dashboard',
       'dashboard.subtitle': 'Circle Office Haryana',
       'dashboard.total': 'Total Records',
       'dashboard.flagged': 'Review Due',
@@ -96,6 +102,8 @@ var i18n = (function () {
       'settings.theme': 'Theme',
       'settings.darkMode': 'Dark mode',
       'settings.language': 'Language',
+      'settings.languageCopy': 'Switch the dashboard chrome between English and Hindi.',
+      'settings.switchLang': 'Switch to Hindi',
       'settings.hindi': 'हिन्दी',
       'settings.english': 'English',
       'settings.backup': 'Full backup',
@@ -149,15 +157,21 @@ var i18n = (function () {
     hi: {
       // Navigation & chrome
       'nav.dashboard': 'डैशबोर्ड',
+      'nav.myday': 'मेरा दिन',
       'nav.analytics': 'विश्लेषण',
       'nav.audit': 'ऑडिट लॉग',
       'nav.reports': 'रिपोर्ट',
       'nav.tasks': 'कार्य',
       'nav.settings': 'सेटिंग्स',
       'nav.signout': 'साइन आउट',
+      'nav.sectionOverview': 'अवलोकन',
+      'nav.sectionWork': 'कार्य',
+      'nav.sectionInsights': 'अंतर्दृष्टि',
+      'nav.sectionAdmin': 'प्रशासन',
 
       // Dashboard
       'dashboard.title': 'भारतीय डाक डैशबोर्ड',
+      'dashboard.live': 'लाइव डैशबोर्ड',
       'dashboard.subtitle': 'सर्कल कार्यालय हरियाणा',
       'dashboard.total': 'कुल रिकॉर्ड',
       'dashboard.flagged': 'समीक्षा बाकी',
@@ -220,6 +234,8 @@ var i18n = (function () {
       'settings.theme': 'थीम',
       'settings.darkMode': 'डार्क मोड',
       'settings.language': 'भाषा',
+      'settings.languageCopy': 'डैशबोर्ड का इंटरफ़ेस अंग्रेज़ी और हिन्दी के बीच बदलें।',
+      'settings.switchLang': 'हिन्दी में बदलें',
       'settings.hindi': 'हिन्दी',
       'settings.english': 'English',
       'settings.backup': 'पूर्ण बैकअप',
@@ -358,8 +374,8 @@ var i18n = (function () {
    onclick handlers referenced by index.html are defined here.
    ========================================================================== */
 
-const APP_VERSION = '1.2.0';
-const APP_BUILD = '2026.08.19';
+const APP_VERSION = '1.2.1';
+const APP_BUILD = '2026.09.22';
 const PAGE_SIZE = 10;
 const AUDIT_PAGE_SIZE = 20;
 const STORAGE_THEME = 'indiaPostDarkMode';
@@ -1259,8 +1275,14 @@ function downloadMeetingFile(name) {
 
 function deleteMeetingFile(name) {
   if (!name) return;
-  if (!window.confirm('Delete \u201C' + name + '\u201D from the server? This cannot be undone.')) return;
-  ApiService.deleteMeetingFile(name).then(function (data) {
+  showConfirm({
+    title: 'Delete file',
+    message: 'Delete "' + name + '" from the server? This cannot be undone.',
+    okLabel: 'Delete',
+    danger: true
+  }).then(function (confirmed) {
+    if (!confirmed) return;
+    ApiService.deleteMeetingFile(name).then(function (data) {
     if (data && data.success === true) {
       showToast('Deleted ' + name, 'success');
     } else {
@@ -1271,6 +1293,7 @@ function deleteMeetingFile(name) {
     if (handleServerFailure(err)) return;
     showToast('Delete failed: ' + (err && err.message ? err.message : String(err)), 'error');
     loadPreviousMeetings();
+    });
   });
 }
 
@@ -2342,7 +2365,7 @@ function toggleRowAi(row, btn) {
   const panelTr = document.createElement('tr');
   panelTr.className = 'ai-insight-tr';
   const td = document.createElement('td');
-  td.setAttribute('colspan', '7');
+  td.setAttribute('colspan', String(visibleDashColumnCount()));
   td.className = 'card-ai-panel card-ai-insight';
   td.innerHTML = cardAiPanelHtml_();
   panelTr.appendChild(td);
@@ -2482,7 +2505,7 @@ function toggleRowLink(row, btn) {
   const panelTr = document.createElement('tr');
   panelTr.className = 'ai-link-tr';
   const td = document.createElement('td');
-  td.setAttribute('colspan', '7');
+  td.setAttribute('colspan', String(visibleDashColumnCount()));
   td.className = 'card-ai-panel card-link-panel';
   td.innerHTML = cardLinkPanelHtml_();
   panelTr.appendChild(td);
@@ -2995,6 +3018,55 @@ function cancelConfirmDialog() {
   confirmDialogState = null;
   closeDialog('confirmModal');
   if (cb) cb(false);
+}
+
+/* ---------------------------------- Prompt dialog ---------------------------------- */
+/* In-app single-value input replacing native prompt(). Resolves with the
+   trimmed string, or null when cancelled. Mirrors showConfirm(). */
+
+let promptDialogState = null;
+
+function showPrompt(options) {
+  return new Promise(function (resolve) {
+    promptDialogState = { onValue: resolve };
+    getEl('promptModalTitle').textContent = options.title || 'Enter value';
+    getEl('promptMessage').textContent = options.message || '';
+    const input = getEl('promptInput');
+    input.value = options.value || '';
+    input.placeholder = options.placeholder || '';
+    input.type = options.type || 'text';
+    const err = getEl('promptError');
+    if (err) err.style.display = 'none';
+    openDialog('promptModal');
+    input.focus();
+    input.select();
+  });
+}
+
+function runPromptDialog() {
+  const st = promptDialogState;
+  const input = getEl('promptInput');
+  const raw = input ? input.value : '';
+  if (!st) {
+    closeDialog('promptModal');
+    return;
+  }
+  const err = getEl('promptError');
+  if (!String(raw).trim()) {
+    if (err) { err.style.display = ''; err.textContent = 'A value is required.'; }
+    if (input) input.focus();
+    return;
+  }
+  promptDialogState = null;
+  closeDialog('promptModal');
+  st.onValue(String(raw).trim());
+}
+
+function cancelPromptDialog() {
+  const st = promptDialogState;
+  promptDialogState = null;
+  closeDialog('promptModal');
+  if (st) st.onValue(null);
 }
 
 /* ---------------------------------- Auth helpers ---------------------------------- */
@@ -3808,6 +3880,10 @@ function dismissNotificationUi(id){ApiService.dismissNotification(id).then(funct
 
 /* ---------------------------------- Dashboard: filters ---------------------------------- */
 
+/* Row multi-select (table view, editors). Keyed by row id so selection
+   survives page changes/filtering; drives the dashBatchBar bulk actions. */
+let selectedDashRows_ = {};
+
 function populateFilters() {
   const filter = getEl('sectorFilter');
   if (!filter) return;
@@ -4436,19 +4512,21 @@ function cancelLastMeetingEdit() {
 }
 
 function insertLastMeetingLink() {
-  const text = prompt('Link text:', 'Open link');
-  if (text === null) return;
-  const url = prompt('URL (https://…):', 'https://');
-  if (url === null) return;
-  const trimmed = String(url).trim();
-  if (!/^https?:\/\//i.test(trimmed)) { showToast('Please enter a valid http:// or https:// URL.', 'warning'); return; }
-  const ta = getEl('lastMeetingInstructionsText');
-  const link = '[' + String(text || trimmed).replace(/\]/g, '') + '](' + trimmed.replace(/[()]/g, '') + ')';
-  const start = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
-  const end = ta.selectionEnd == null ? ta.value.length : ta.selectionEnd;
-  ta.value = ta.value.slice(0, start) + link + ta.value.slice(end);
-  ta.focus();
-  ta.selectionStart = ta.selectionEnd = start + link.length;
+  showPrompt({ title: 'Link text', message: 'Link text:', value: 'Open link' }).then(function (text) {
+    if (text === null) return;
+    showPrompt({ title: 'URL', message: 'URL (https://…):', value: 'https://' }).then(function (url) {
+      if (url === null) return;
+      const trimmed = String(url).trim();
+      if (!/^https?:\/\//i.test(trimmed)) { showToast('Please enter a valid http:// or https:// URL.', 'warning'); return; }
+      const ta = getEl('lastMeetingInstructionsText');
+      const link = '[' + String(text || trimmed).replace(/\]/g, '') + '](' + trimmed.replace(/[()]/g, '') + ')';
+      const start = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+      const end = ta.selectionEnd == null ? ta.value.length : ta.selectionEnd;
+      ta.value = ta.value.slice(0, start) + link + ta.value.slice(end);
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = start + link.length;
+    });
+  });
 }
 
 function handleLastMeetingAttachmentChange(input) {
@@ -4660,11 +4738,12 @@ function buildTableRowHtml(item) {
     </div>`;
   let persistedPanels = '';
   const aiPanel = aiPanelHtmlFromCache_(item.row);
-  if (aiPanel) persistedPanels += '<tr class="ai-insight-tr"><td colspan="8">' + aiPanel + '</td></tr>';
+  if (aiPanel) persistedPanels += '<tr class="ai-insight-tr"><td colspan="' + visibleDashColumnCount() + '">' + aiPanel + '</td></tr>';
   const linkPanel = linkPanelHtmlFromCache_(item.row);
-  if (linkPanel) persistedPanels += '<tr class="ai-link-tr"><td colspan="8">' + linkPanel + '</td></tr>';
+  if (linkPanel) persistedPanels += '<tr class="ai-link-tr"><td colspan="' + visibleDashColumnCount() + '">' + linkPanel + '</td></tr>';
   return `
     <tr class="row-clickable ${item.reviewStatus === 'due' ? 'row-flagged' : ''} ${item.displayed === false ? 'row-hidden' : ''}" data-row="${escAttr(item.row)}" tabindex="0">
+      <td class="dash-sel-col">${appState.isEditor ? `<input type="checkbox" class="dash-row-check" data-row="${escAttr(item.row)}" ${selectedDashRows_[item.row] ? 'checked' : ''} onchange="event.stopPropagation(); dashRowSelect(this)">` : ''}</td>
       <td><span class="id-badge">#${escapeHtml(item.id)}</span>${appState.isEditor ? `<label class="display-toggle" title="${item.displayed !== false ? 'Hide this record from viewers' : 'Show this record to viewers'}"><input type="checkbox" aria-label="Show this record to viewers" ${item.displayed !== false ? 'checked' : ''} onchange="event.stopPropagation(); toggleRecordDisplay('${escAttr(item.row)}', this.checked)"><span></span></label>` : ''}</td>
       <td class="preserve-whitespace">${escapeHtml(item.sector || '')}</td>
       <td class="details-cell preserve-whitespace">${escapeHtml(item.description || '')}</td>
@@ -4708,12 +4787,126 @@ function renderDashboardTable() {
 
   table.querySelector('tbody').innerHTML = pageItems.length
     ? pageItems.map(buildTableRowHtml).join('')
-    : '<tr><td colspan="8">No records found.</td></tr>';
+    : '<tr><td colspan="' + visibleDashColumnCount() + '">No records found.</td></tr>';
 
   const summaryEl = getEl('dashboardTableSummary');
   if (summaryEl) summaryEl.textContent = appState.filtered.length + ' record' + (appState.filtered.length === 1 ? '' : 's') + ' found';
 
   applyColumnVisibility();
+  updateDashBatchBar();
+}
+
+/* ---------------------------------- Row multi-select (bulk actions) ---------------------------------- */
+
+function toggleDashSelectAll(cb) {
+  if (!appState.isEditor) { if (cb) cb.checked = false; return; }
+  const on = !!(cb && cb.checked);
+  document.querySelectorAll('.dash-row-check').forEach(function (box) {
+    box.checked = on;
+    if (on) selectedDashRows_[box.getAttribute('data-row')] = true;
+    else delete selectedDashRows_[box.getAttribute('data-row')];
+  });
+  updateDashBatchBar();
+}
+
+function dashRowSelect(box) {
+  const row = box.getAttribute('data-row');
+  if (box.checked) selectedDashRows_[row] = true;
+  else delete selectedDashRows_[row];
+  const all = document.querySelectorAll('.dash-row-check');
+  const selAll = getEl('dashSelAll');
+  if (selAll) selAll.checked = all.length > 0 && Array.prototype.every.call(all, function (b) { return b.checked; });
+  updateDashBatchBar();
+}
+
+function selectedDashRowsArray_() {
+  return Object.keys(selectedDashRows_);
+}
+
+function updateDashBatchBar() {
+  const bar = getEl('dashBatchBar');
+  if (!bar) return;
+  const n = selectedDashRowsArray_().length;
+  if (appState.isEditor && n > 0) {
+    bar.classList.remove('hidden');
+    bar.setAttribute('aria-hidden', 'false');
+    const count = getEl('dashBatchCount');
+    if (count) count.textContent = n + ' selected';
+  } else {
+    bar.classList.add('hidden');
+    bar.setAttribute('aria-hidden', 'true');
+  }
+}
+
+function clearDashSelection() {
+  selectedDashRows_ = {};
+  document.querySelectorAll('.dash-row-check').forEach(function (box) { box.checked = false; });
+  const selAll = getEl('dashSelAll');
+  if (selAll) selAll.checked = false;
+  updateDashBatchBar();
+}
+
+function dashBatchReview(status) {
+  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
+  const rows = selectedDashRowsArray_();
+  if (!rows.length) return;
+  const done = status === 'done';
+  showOverlay(done ? 'Marking review done…' : 'Clearing review…');
+  const call = done ? ApiService.markReviewDone : ApiService.markReviewNotDone;
+  let seq = Promise.resolve();
+  rows.forEach(function (row) { seq = seq.then(function () { return call(row); }); });
+  seq.then(function () {
+    hideOverlay();
+    clearDashSelection();
+    showToast(done ? 'Review marked done for ' + rows.length + ' record' + (rows.length === 1 ? '' : 's') : 'Review cleared for ' + rows.length + ' record' + (rows.length === 1 ? '' : 's'), 'success');
+    refreshData();
+  }).catch(function (err) {
+    hideOverlay();
+    if (handleServerFailure(err)) return;
+    showToast('Update failed: ' + (err.message || err), 'error');
+  });
+}
+
+function dashBatchDelete() {
+  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
+  const rows = selectedDashRowsArray_();
+  if (!rows.length) return;
+  showConfirm({
+    title: 'Delete records',
+    message: 'Delete ' + rows.length + ' selected record' + (rows.length === 1 ? '' : 's') + '? This cannot be undone.',
+    okLabel: 'Delete',
+    danger: true
+  }).then(function (ok) {
+    if (!ok) return;
+    showOverlay('Deleting records…');
+    let seq = Promise.resolve();
+    rows.forEach(function (row) { seq = seq.then(function () { return ApiService.deleteItem(row); }); });
+    seq.then(function () {
+      hideOverlay();
+      clearDashSelection();
+      showToast('Deleted ' + rows.length + ' record' + (rows.length === 1 ? '' : 's'), 'success');
+      refreshData();
+    }).catch(function (err) {
+      hideOverlay();
+      if (handleServerFailure(err)) return;
+      showToast('Delete failed: ' + (err.message || err), 'error');
+    });
+  });
+}
+
+/* Count of currently visible dashboard columns (th[data-col] not toggled off).
+   Colspan sinks must mirror this: a fixed colspan that exceeds the visible
+   columns makes full-row AI/link panels overflow past the row grid. */
+function visibleDashColumnCount() {
+  const table = getEl('dashboardTable');
+  if (!table) return 8;
+  const columns = (appState.dashboardPrefs && appState.dashboardPrefs.columns) || {};
+  const headers = table.querySelectorAll('th[data-col]');
+  let n = 0;
+  headers.forEach(function (th) {
+    if (columns[th.getAttribute('data-col')] !== false) n++;
+  });
+  return Math.max(1, n);
 }
 
 function applyColumnVisibility() {
@@ -4727,6 +4920,14 @@ function applyColumnVisibility() {
     th.style.display = show ? '' : 'none';
   });
   table.querySelectorAll('tbody tr').forEach(function (tr) {
+    /* Full-width AI/link panels carry a single computed-colspan td; mapping
+       their only cell to the first header would collapse panels when column 0
+       is hidden. Keep the panel spanning all visible columns instead. */
+    if (tr.classList.contains('ai-insight-tr') || tr.classList.contains('ai-link-tr')) {
+      const panel = tr.querySelector('td');
+      if (panel) panel.style.display = '';
+      return;
+    }
     const cells = tr.querySelectorAll('td');
     const headers = table.querySelectorAll('th[data-col]');
     headers.forEach(function (th, idx) {
@@ -6142,13 +6343,20 @@ function cancelSyncPreview() {
 /** Push: send all DB records back to the Google Spreadsheet. */
 function pushAllToSheet() {
   if (!appState.isAdmin) { showToast('Admin access required', 'warning'); return; }
-  if (!confirm('This will overwrite the Google Spreadsheet with the current database records. Continue?')) return;
-  const btn = getEl('pushSheetBtn');
-  const status = getEl('syncSheetStatus');
-  if (btn) btn.disabled = true;
-  if (status) { status.textContent = 'Pushing records to spreadsheet…'; status.className = 'form-status'; }
-  showOverlay('Pushing to spreadsheet…');
-  ApiService.adminPushToSheet().then(function (result) {
+  showConfirm({
+    title: 'Overwrite spreadsheet',
+    message: 'This will overwrite the Google Spreadsheet with the current database records. Continue?',
+    okLabel: 'Overwrite',
+    danger: true
+  }).then(function (confirmed) {
+    if (!confirmed) return;
+    const btn = getEl('pushSheetBtn');
+    const status = getEl('syncSheetStatus');
+    if (btn) btn.disabled = true;
+    if (status) { status.textContent = 'Pushing records to spreadsheet…'; status.className = 'form-status'; }
+    showOverlay('Pushing to spreadsheet…');
+    const run = function () {
+      ApiService.adminPushToSheet().then(function (result) {
     hideOverlay();
     if (btn) btn.disabled = false;
     if (!result || result.pushed === false) {
@@ -6167,6 +6375,9 @@ function pushAllToSheet() {
     const msg = 'Push failed: ' + (err.message || err);
     if (status) { status.textContent = msg; status.className = 'form-status error'; }
     showToast(msg, 'error');
+    });
+  };
+  run();
   });
 }
 
@@ -6485,17 +6696,22 @@ function deleteUser(email) {
 }
 
 function resetUserPassword(email) {
-  const newPassword = prompt('New password for ' + email + ' (min 8 characters):');
-  if (!newPassword) return;
-  showOverlay('Resetting password…');
-  ApiService.adminResetPassword(email, newPassword).then(function (users) {
-    hideOverlay();
-    renderUsersTable(users || []);
-    showToast('Password reset for ' + email, 'success');
-  }).catch(function (err) {
-    hideOverlay();
-    if (handleServerFailure(err)) return;
-    showToast('Reset failed: ' + (err.message || err), 'error');
+  showPrompt({
+    title: 'Reset password',
+    message: 'New password for ' + email + ' (min 8 characters):',
+    type: 'password'
+  }).then(function (newPassword) {
+    if (!newPassword) return;
+    showOverlay('Resetting password…');
+    ApiService.adminResetPassword(email, newPassword).then(function (users) {
+      hideOverlay();
+      renderUsersTable(users || []);
+      showToast('Password reset for ' + email, 'success');
+    }).catch(function (err) {
+      hideOverlay();
+      if (handleServerFailure(err)) return;
+      showToast('Reset failed: ' + (err.message || err), 'error');
+    });
   });
 }
 
@@ -8850,19 +9066,21 @@ function cancelSubmissionEdit() {
 }
 
 function insertSubmissionLink() {
-  const text = prompt('Link text:', 'Open link');
-  if (text === null) return;
-  const url = prompt('URL (https://…):', 'https://');
-  if (url === null) return;
-  const trimmed = String(url).trim();
-  if (!/^https?:\/\//i.test(trimmed)) { showToast('Please enter a valid http:// or https:// URL.', 'warning'); return; }
-  const ta = getEl('submissionText');
-  const link = '[' + String(text || trimmed).replace(/\]/g, '') + '](' + trimmed.replace(/[()]/g, '') + ')';
-  const start = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
-  const end = ta.selectionEnd == null ? ta.value.length : ta.selectionEnd;
-  ta.value = ta.value.slice(0, start) + link + ta.value.slice(end);
-  ta.focus();
-  ta.selectionStart = ta.selectionEnd = start + link.length;
+  showPrompt({ title: 'Link text', message: 'Link text:', value: 'Open link' }).then(function (text) {
+    if (text === null) return;
+    showPrompt({ title: 'URL', message: 'URL (https://…):', value: 'https://' }).then(function (url) {
+      if (url === null) return;
+      const trimmed = String(url).trim();
+      if (!/^https?:\/\//i.test(trimmed)) { showToast('Please enter a valid http:// or https:// URL.', 'warning'); return; }
+      const ta = getEl('submissionText');
+      const link = '[' + String(text || trimmed).replace(/\]/g, '') + '](' + trimmed.replace(/[()]/g, '') + ')';
+      const start = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+      const end = ta.selectionEnd == null ? ta.value.length : ta.selectionEnd;
+      ta.value = ta.value.slice(0, start) + link + ta.value.slice(end);
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = start + link.length;
+    });
+  });
 }
 
 function handleSubmissionAttachmentChange(input) {
@@ -10229,9 +10447,25 @@ function openDashAutomation(){dashOpsEnsureUi_();openDialog('dashOpsAutomationMo
 function loadDashAutomation(){return ApiService.listAutomationRules().then(function(r){DASHOPS_RULES=r.rules||[];renderDashAutomation_();});}
 function renderDashAutomation_(){var h=getEl('dashOpsAutomationBody');if(!h)return;var rows=DASHOPS_RULES.map(function(r){return '<div class="workspace-rule-row"><div><strong>'+escapeHtml(r.name)+'</strong><small>IF '+escapeHtml(r.trigger)+' → '+escapeHtml(r.action)+'</small></div><label><input type="checkbox" '+(r.enabled?'checked':'')+' onchange="toggleDashRule(\''+escAttr(r.id)+'\',this.checked)"> Enabled</label><button class="btn btn-ghost btn-small" onclick="deleteDashRule(\''+escAttr(r.id)+'\')">Delete</button></div>';}).join('');
 h.innerHTML='<div class="workspace-ops-toolbar"><button class="btn btn-primary btn-small" onclick="addDashRulePrompt()">Add rule</button><button class="btn btn-secondary btn-small" onclick="runDashAutomationNow()">Run scheduler now</button></div>'+(rows||'<div class="workspace-search-empty">No automation rules yet.</div>');}
-function addDashRulePrompt(){var name=prompt('Rule name','Morning briefing');if(!name)return;var trigger=prompt('Trigger: SUBMISSION_CREATED, TASK_OVERDUE, REVIEW_DUE, MORNING_BRIEFING, REVIEW_COMPLETED','TASK_OVERDUE');if(!trigger)return;var action=prompt('Action: NOTIFY_SELF or NOTIFY_STAFF','NOTIFY_SELF');if(!action)return;ApiService.saveAutomationRule({name:name,trigger:trigger,action:action,enabled:true,config:{title:name,body:'Dash automation: '+name}}).then(loadDashAutomation).catch(function(e){showToast(e.message||String(e),'error');});}
+function addDashRulePrompt(){
+  showPrompt({ title: 'Rule name', message: 'Rule name:', value: 'Morning briefing' }).then(function (name) {
+    if (!name) return;
+    showPrompt({ title: 'Trigger', message: 'Trigger: SUBMISSION_CREATED, TASK_OVERDUE, REVIEW_DUE, MORNING_BRIEFING, REVIEW_COMPLETED', value: 'TASK_OVERDUE' }).then(function (trigger) {
+      if (!trigger) return;
+      showPrompt({ title: 'Action', message: 'Action: NOTIFY_SELF or NOTIFY_STAFF', value: 'NOTIFY_SELF' }).then(function (action) {
+        if (!action) return;
+        ApiService.saveAutomationRule({ name: name, trigger: trigger, action: action, enabled: true, config: { title: name, body: 'Dash automation: ' + name } }).then(loadDashAutomation).catch(function (e) { showToast(e.message || String(e), 'error'); });
+      });
+    });
+  });
+}
 function toggleDashRule(id,on){var r=DASHOPS_RULES.find(function(x){return x.id===id;});if(!r)return;r.enabled=!!on;ApiService.saveAutomationRule(r).then(loadDashAutomation);}
-function deleteDashRule(id){if(!confirm('Delete this automation rule?'))return;ApiService.deleteAutomationRule(id).then(loadDashAutomation);}
+function deleteDashRule(id){
+  showConfirm({ title: 'Delete rule', message: 'Delete this automation rule?', okLabel: 'Delete', danger: true }).then(function (ok) {
+    if (!ok) return;
+    ApiService.deleteAutomationRule(id).then(loadDashAutomation);
+  });
+}
 function runDashAutomationNow(){ApiService.runAutomationNow().then(function(r){showToast('Automation checked: '+JSON.stringify(r),'success');}).catch(function(e){showToast(e.message||String(e),'error');});}
 function openDashSecurity(){dashOpsEnsureUi_();openDialog('dashOpsSecurityModal');var h=getEl('dashOpsSecurityBody');h.innerHTML='<div class="workspace-search-empty">Loading security status…</div>';ApiService.getSecurityStatus().then(function(s){h.innerHTML='<div class="workspace-exec-grid">'+[['Signed-in user',s.admin],['Active sessions',s.sessions],['Users',s.users],['Audit rows',s.auditRows]].map(function(x){return '<div class="workspace-exec-kpi"><span>'+escapeHtml(x[0])+'</span><strong>'+escapeHtml(String(x[1]))+'</strong></div>';}).join('')+'</div><div class="workspace-ops-toolbar"><button class="btn btn-secondary btn-small" onclick="rotateDashSession()">Rotate session</button><span class="section-copy">API writes require trusted origins; sessions are server-side.</span></div>';}).catch(function(e){h.innerHTML='<div class="workspace-search-empty">'+escapeHtml(e.message||String(e))+'</div>';});}
 function rotateDashSession(){ApiService.rotateSession().then(function(){showToast('Session rotated.','success');}).catch(function(e){showToast(e.message||String(e),'error');});}
@@ -10581,6 +10815,11 @@ function wireGlobalEvents() {
         cancelConfirmDialog();
         return;
       }
+      const promptModal = getEl('promptModal');
+      if (promptModal && !promptModal.classList.contains('hidden')) {
+        cancelPromptDialog();
+        return;
+      }
       ['editModal', 'aboutModal', 'submissionsModal', 'recordDetailModal', 'editUserModal', 'taskModal', 'columnModal', 'commandPalette', 'linkModal', 'syncPreviewModal', 'offlineCenterModal', 'notifCenterModal'].forEach(function (id) {
         const el = getEl(id);
         if (el && !el.classList.contains('hidden')) closeDialog(id);
@@ -10627,6 +10866,7 @@ function wireGlobalEvents() {
         else if (backdrop.id === 'recordDetailModal') closeRecordDetail();
         else if (backdrop.id === 'editUserModal') closeEditUser();
         else if (backdrop.id === 'confirmModal') cancelConfirmDialog();
+        else if (backdrop.id === 'promptModal') cancelPromptDialog();
         else if (backdrop.id === 'previewModal') closeLinkPreview();
         else if (backdrop.id === 'linkModal') closeLinkModal();
         else if (backdrop.id === 'meetingNotesModal') closeMeetingNotes();

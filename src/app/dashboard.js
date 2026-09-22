@@ -1,6 +1,10 @@
 
 /* ---------------------------------- Dashboard: filters ---------------------------------- */
 
+/* Row multi-select (table view, editors). Keyed by row id so selection
+   survives page changes/filtering; drives the dashBatchBar bulk actions. */
+let selectedDashRows_ = {};
+
 function populateFilters() {
   const filter = getEl('sectorFilter');
   if (!filter) return;
@@ -629,19 +633,21 @@ function cancelLastMeetingEdit() {
 }
 
 function insertLastMeetingLink() {
-  const text = prompt('Link text:', 'Open link');
-  if (text === null) return;
-  const url = prompt('URL (https://…):', 'https://');
-  if (url === null) return;
-  const trimmed = String(url).trim();
-  if (!/^https?:\/\//i.test(trimmed)) { showToast('Please enter a valid http:// or https:// URL.', 'warning'); return; }
-  const ta = getEl('lastMeetingInstructionsText');
-  const link = '[' + String(text || trimmed).replace(/\]/g, '') + '](' + trimmed.replace(/[()]/g, '') + ')';
-  const start = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
-  const end = ta.selectionEnd == null ? ta.value.length : ta.selectionEnd;
-  ta.value = ta.value.slice(0, start) + link + ta.value.slice(end);
-  ta.focus();
-  ta.selectionStart = ta.selectionEnd = start + link.length;
+  showPrompt({ title: 'Link text', message: 'Link text:', value: 'Open link' }).then(function (text) {
+    if (text === null) return;
+    showPrompt({ title: 'URL', message: 'URL (https://…):', value: 'https://' }).then(function (url) {
+      if (url === null) return;
+      const trimmed = String(url).trim();
+      if (!/^https?:\/\//i.test(trimmed)) { showToast('Please enter a valid http:// or https:// URL.', 'warning'); return; }
+      const ta = getEl('lastMeetingInstructionsText');
+      const link = '[' + String(text || trimmed).replace(/\]/g, '') + '](' + trimmed.replace(/[()]/g, '') + ')';
+      const start = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+      const end = ta.selectionEnd == null ? ta.value.length : ta.selectionEnd;
+      ta.value = ta.value.slice(0, start) + link + ta.value.slice(end);
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = start + link.length;
+    });
+  });
 }
 
 function handleLastMeetingAttachmentChange(input) {
@@ -853,11 +859,12 @@ function buildTableRowHtml(item) {
     </div>`;
   let persistedPanels = '';
   const aiPanel = aiPanelHtmlFromCache_(item.row);
-  if (aiPanel) persistedPanels += '<tr class="ai-insight-tr"><td colspan="8">' + aiPanel + '</td></tr>';
+  if (aiPanel) persistedPanels += '<tr class="ai-insight-tr"><td colspan="' + visibleDashColumnCount() + '">' + aiPanel + '</td></tr>';
   const linkPanel = linkPanelHtmlFromCache_(item.row);
-  if (linkPanel) persistedPanels += '<tr class="ai-link-tr"><td colspan="8">' + linkPanel + '</td></tr>';
+  if (linkPanel) persistedPanels += '<tr class="ai-link-tr"><td colspan="' + visibleDashColumnCount() + '">' + linkPanel + '</td></tr>';
   return `
     <tr class="row-clickable ${item.reviewStatus === 'due' ? 'row-flagged' : ''} ${item.displayed === false ? 'row-hidden' : ''}" data-row="${escAttr(item.row)}" tabindex="0">
+      <td class="dash-sel-col">${appState.isEditor ? `<input type="checkbox" class="dash-row-check" data-row="${escAttr(item.row)}" ${selectedDashRows_[item.row] ? 'checked' : ''} onchange="event.stopPropagation(); dashRowSelect(this)">` : ''}</td>
       <td><span class="id-badge">#${escapeHtml(item.id)}</span>${appState.isEditor ? `<label class="display-toggle" title="${item.displayed !== false ? 'Hide this record from viewers' : 'Show this record to viewers'}"><input type="checkbox" aria-label="Show this record to viewers" ${item.displayed !== false ? 'checked' : ''} onchange="event.stopPropagation(); toggleRecordDisplay('${escAttr(item.row)}', this.checked)"><span></span></label>` : ''}</td>
       <td class="preserve-whitespace">${escapeHtml(item.sector || '')}</td>
       <td class="details-cell preserve-whitespace">${escapeHtml(item.description || '')}</td>
@@ -901,12 +908,126 @@ function renderDashboardTable() {
 
   table.querySelector('tbody').innerHTML = pageItems.length
     ? pageItems.map(buildTableRowHtml).join('')
-    : '<tr><td colspan="8">No records found.</td></tr>';
+    : '<tr><td colspan="' + visibleDashColumnCount() + '">No records found.</td></tr>';
 
   const summaryEl = getEl('dashboardTableSummary');
   if (summaryEl) summaryEl.textContent = appState.filtered.length + ' record' + (appState.filtered.length === 1 ? '' : 's') + ' found';
 
   applyColumnVisibility();
+  updateDashBatchBar();
+}
+
+/* ---------------------------------- Row multi-select (bulk actions) ---------------------------------- */
+
+function toggleDashSelectAll(cb) {
+  if (!appState.isEditor) { if (cb) cb.checked = false; return; }
+  const on = !!(cb && cb.checked);
+  document.querySelectorAll('.dash-row-check').forEach(function (box) {
+    box.checked = on;
+    if (on) selectedDashRows_[box.getAttribute('data-row')] = true;
+    else delete selectedDashRows_[box.getAttribute('data-row')];
+  });
+  updateDashBatchBar();
+}
+
+function dashRowSelect(box) {
+  const row = box.getAttribute('data-row');
+  if (box.checked) selectedDashRows_[row] = true;
+  else delete selectedDashRows_[row];
+  const all = document.querySelectorAll('.dash-row-check');
+  const selAll = getEl('dashSelAll');
+  if (selAll) selAll.checked = all.length > 0 && Array.prototype.every.call(all, function (b) { return b.checked; });
+  updateDashBatchBar();
+}
+
+function selectedDashRowsArray_() {
+  return Object.keys(selectedDashRows_);
+}
+
+function updateDashBatchBar() {
+  const bar = getEl('dashBatchBar');
+  if (!bar) return;
+  const n = selectedDashRowsArray_().length;
+  if (appState.isEditor && n > 0) {
+    bar.classList.remove('hidden');
+    bar.setAttribute('aria-hidden', 'false');
+    const count = getEl('dashBatchCount');
+    if (count) count.textContent = n + ' selected';
+  } else {
+    bar.classList.add('hidden');
+    bar.setAttribute('aria-hidden', 'true');
+  }
+}
+
+function clearDashSelection() {
+  selectedDashRows_ = {};
+  document.querySelectorAll('.dash-row-check').forEach(function (box) { box.checked = false; });
+  const selAll = getEl('dashSelAll');
+  if (selAll) selAll.checked = false;
+  updateDashBatchBar();
+}
+
+function dashBatchReview(status) {
+  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
+  const rows = selectedDashRowsArray_();
+  if (!rows.length) return;
+  const done = status === 'done';
+  showOverlay(done ? 'Marking review done…' : 'Clearing review…');
+  const call = done ? ApiService.markReviewDone : ApiService.markReviewNotDone;
+  let seq = Promise.resolve();
+  rows.forEach(function (row) { seq = seq.then(function () { return call(row); }); });
+  seq.then(function () {
+    hideOverlay();
+    clearDashSelection();
+    showToast(done ? 'Review marked done for ' + rows.length + ' record' + (rows.length === 1 ? '' : 's') : 'Review cleared for ' + rows.length + ' record' + (rows.length === 1 ? '' : 's'), 'success');
+    refreshData();
+  }).catch(function (err) {
+    hideOverlay();
+    if (handleServerFailure(err)) return;
+    showToast('Update failed: ' + (err.message || err), 'error');
+  });
+}
+
+function dashBatchDelete() {
+  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
+  const rows = selectedDashRowsArray_();
+  if (!rows.length) return;
+  showConfirm({
+    title: 'Delete records',
+    message: 'Delete ' + rows.length + ' selected record' + (rows.length === 1 ? '' : 's') + '? This cannot be undone.',
+    okLabel: 'Delete',
+    danger: true
+  }).then(function (ok) {
+    if (!ok) return;
+    showOverlay('Deleting records…');
+    let seq = Promise.resolve();
+    rows.forEach(function (row) { seq = seq.then(function () { return ApiService.deleteItem(row); }); });
+    seq.then(function () {
+      hideOverlay();
+      clearDashSelection();
+      showToast('Deleted ' + rows.length + ' record' + (rows.length === 1 ? '' : 's'), 'success');
+      refreshData();
+    }).catch(function (err) {
+      hideOverlay();
+      if (handleServerFailure(err)) return;
+      showToast('Delete failed: ' + (err.message || err), 'error');
+    });
+  });
+}
+
+/* Count of currently visible dashboard columns (th[data-col] not toggled off).
+   Colspan sinks must mirror this: a fixed colspan that exceeds the visible
+   columns makes full-row AI/link panels overflow past the row grid. */
+function visibleDashColumnCount() {
+  const table = getEl('dashboardTable');
+  if (!table) return 8;
+  const columns = (appState.dashboardPrefs && appState.dashboardPrefs.columns) || {};
+  const headers = table.querySelectorAll('th[data-col]');
+  let n = 0;
+  headers.forEach(function (th) {
+    if (columns[th.getAttribute('data-col')] !== false) n++;
+  });
+  return Math.max(1, n);
 }
 
 function applyColumnVisibility() {
@@ -920,6 +1041,14 @@ function applyColumnVisibility() {
     th.style.display = show ? '' : 'none';
   });
   table.querySelectorAll('tbody tr').forEach(function (tr) {
+    /* Full-width AI/link panels carry a single computed-colspan td; mapping
+       their only cell to the first header would collapse panels when column 0
+       is hidden. Keep the panel spanning all visible columns instead. */
+    if (tr.classList.contains('ai-insight-tr') || tr.classList.contains('ai-link-tr')) {
+      const panel = tr.querySelector('td');
+      if (panel) panel.style.display = '';
+      return;
+    }
     const cells = tr.querySelectorAll('td');
     const headers = table.querySelectorAll('th[data-col]');
     headers.forEach(function (th, idx) {
