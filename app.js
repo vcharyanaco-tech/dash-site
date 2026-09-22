@@ -10812,18 +10812,56 @@ function toggleLanguage() {
 
   var MUTATIONS = {
     addItem: true, updateItem: true, deleteItem: true, markReviewDone: true,
-    changePassword: true,
-    adminAddUser: true, adminUpdateUser: true, adminDeleteUser: true,
-    adminResetPassword: true, adminImportUsers: true, adminEmailAllUsers: true,
+    markReviewNotDone: true, setRecordDisplay: true,
     markNotificationsRead: true, clearMyNotifications: true,
     createTask: true, updateTask: true, deleteTask: true,
     saveDashboardPreferences: true,
     addSubmission: true, updateSubmission: true, deleteSubmission: true,
     lockSubmission: true, unlockSubmission: true, toggleSubmissionDisplay: true,
-    uploadDocument: true, deleteDocument: true,
-    adminDeleteAuditRows: true, adminClearAudit: true,
-    exportToSpreadsheet: true
+    deleteDocument: true
   };
+
+  // Record-row-keyed mutations whose first data argument is a *physical row
+  // number*: rows are renumbered when a record is deleted, so replaying the
+  // stored row later can hit a different record. At enqueue time we capture
+  // the record's stable UUID and rewrite the arg to it — the server resolves
+  // record_id first (records.js resolveRecord_), so the queued action always
+  // targets the same record the user acted on.
+  var ROW_KEYED_RECORD = { deleteItem: 0, markReviewDone: 0, markReviewNotDone: 0, setRecordDisplay: 0 };
+
+  function recordIdForRow_(row) {
+    try {
+      var items = (window.appState && window.appState.items) || [];
+      for (var i = 0; i < items.length; i++) {
+        if (items[i] && Number(items[i].row) === Number(row) && items[i].recordId) {
+          return String(items[i].recordId);
+        }
+      }
+      if (window.appState && Array.isArray(window.appState.allItems)) {
+        var all = window.appState.allItems;
+        for (var j = 0; j < all.length; j++) {
+          if (all[j] && Number(all[j].row) === Number(row) && all[j].recordId) {
+            return String(all[j].recordId);
+          }
+        }
+      }
+    } catch (e) {}
+    return '';
+  }
+
+  /* Rewrites a queued mutation's args so physical row numbers are replaced by
+     the record's stable UUID when one is known. Returns a new array only when
+     it actually changes something (identity preserved otherwise). */
+  function stabilizeArgs_(fn, args) {
+    var idx = ROW_KEYED_RECORD[fn];
+    if (idx === undefined || !args || args[idx] == null) return args;
+    if (!/^\d+$/.test(String(args[idx]).trim())) return args;
+    var rid = recordIdForRow_(String(args[idx]));
+    if (!rid) return args;
+    var copy = args.slice();
+    copy[idx] = rid;
+    return copy;
+  }
 
   var CID_COUNTER = 0;
   function cid() {
@@ -11274,7 +11312,7 @@ function registerServiceWorker() {
   window.apiCall_ = function (fn) {
     var args = Array.prototype.slice.call(arguments, 1);
     if (MUTATIONS[fn] && navigator.onLine === false) {
-      return enqueue(fn, args);
+      return enqueue(fn, stabilizeArgs_(fn, args));
     }
     return realApiCall.apply(null, arguments);
   };

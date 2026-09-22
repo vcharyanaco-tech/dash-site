@@ -625,7 +625,11 @@ function updateRecord_(item, token) {
     });
     const newLinks = JSON.stringify(normalizeLinksForStorage_(normalized.links || {}));
     if (existing.links !== newLinks) diff.links = { from: existing.links, to: newLinks };
-    const newBg = item.flagged ? CONFIG.COLORS.FLAG : CONFIG.COLORS.NORMAL;
+    // Review colour: an explicit FLAG wins; otherwise a row already shown as
+    // REVIEW_DONE keeps its highlight through routine edits (the sheet pull
+    // and the detail-page save route never flag, so an admin's review state is
+    // preserved unless the card is genuinely re-flagged).
+    const newBg = item.flagged ? CONFIG.COLORS.FLAG : (existing.review_bg === CONFIG.COLORS.REVIEW_DONE ? CONFIG.COLORS.REVIEW_DONE : CONFIG.COLORS.NORMAL);
     if (existing.review_bg !== newBg) diff.review_bg = { from: existing.review_bg, to: newBg };
 
     db.prepare(
@@ -715,6 +719,7 @@ function deleteRecord_(rowOrId, token) {
     const row = Number(existing.row);
     const deletedId = row - CONFIG.SHEET.START_ROW + 1;
     const recordId = String(existing.record_id || '');
+    const source = String(existing.source || 'sheet');
     db.prepare('DELETE FROM records WHERE row = ?').run(row);
 
     // Cascade-delete child rows that reference the deleted record so they never
@@ -738,10 +743,13 @@ function deleteRecord_(rowOrId, token) {
     bumpDataGeneration_();
 
     try {
-      require('./notifications').notifyStaffLocked_('record', 'Item deleted', 'Record #' + deletedId + ' was removed from the dashboard.', '', editor.email, { priority: NOTIFICATION_PRIORITY.NORMAL, recordRow: rNum });
+      // recordRow: 0 keeps the notification from deep-linking into whatever
+      // record later inherited the deleted row (the renumber would otherwise
+      // point the "Open" action at an unrelated successor).
+      require('./notifications').notifyStaffLocked_('record', 'Item deleted', 'Record #' + deletedId + ' was removed from the dashboard.', '', editor.email, { priority: NOTIFICATION_PRIORITY.NORMAL, recordRow: 0 });
     } catch (err) {}
 
-    return getData();
+    return { data: getData(), row: row, source: source };
   });
 }
 
@@ -839,7 +847,18 @@ async function addItem(item, token) {
 }
 
 async function deleteItem(row, token) {
-  await deleteRecord_(row, token);
+  const res = await deleteRecord_(row, token);
+  // Mirror sheet-origin deletes onto the origin spreadsheet (deleteDimension)
+  // so the next pull doesn't resurrect the record. Never mirrored for
+  // dashboard-created records — they don't exist in the sheet, and removing a
+  // physical sheet row would delete an unrelated record. Best-effort: a
+  // failure (e.g. push-back disabled) is logged in sync-sheet and the local
+  // delete still succeeds.
+  if (res && res.source === 'sheet' && res.row != null) {
+    try {
+      await require('./sync-sheet').deleteSheetRowForRecord_(res.row);
+    } catch (err) { /* local delete already succeeded */ }
+  }
   return getAppData(token);
 }
 

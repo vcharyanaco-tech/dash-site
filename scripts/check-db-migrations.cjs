@@ -17,7 +17,7 @@ const EXPECTED_TABLES = [
   'records', 'users', 'submissions', 'tasks', 'notifications', 'audit',
   'audit_archive', 'documents', 'sessions', 'login_attempts', 'settings',
   'ai_cache', 'dedupe', 'ask_ai_history', 'record_changes',
-  'submission_attachments'
+  'submission_attachments', 'instruction_entries', 'instruction_attachments'
 ];
 const EXPECTED_COLUMNS = {
   submissions: ['read_at'],
@@ -28,7 +28,10 @@ const EXPECTED_COLUMNS = {
   record_changes: ['record_id'],
   notifications: ['priority', 'record_row', 'snoozed_until', 'dismissed_at', 'group_key']
 };
-const EXPECTED_INDEXES = ['idx_users_email_unique', 'idx_users_username', 'idx_records_record_id', 'idx_users_dashboard_url'];
+const EXPECTED_INDEXES = [
+  'idx_users_email_unique', 'idx_users_username', 'idx_records_record_id', 'idx_users_dashboard_url',
+  'idx_instruction_entries_card_row', 'idx_instruction_attachments_entry'
+];
 
 // Columns added by db.js migrations after schema.sql. A legacy restored DB
 // (Render free-tier: the KV snapshot predates these) lacks them, so booting

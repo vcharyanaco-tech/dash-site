@@ -303,15 +303,39 @@ async function buildPullPlan_() {
       appOwned: !!(existingRow && String(existingRow.source || 'sheet') === 'app'),
       existing: existingRow ? {
         row: existingRow.row,
+        recordId: existingRow.record_id,
         sector: existingRow.sector,
         description: existingRow.description,
         entryDate: existingRow.entry_date,
         action: existingRow.action,
         responsibility: existingRow.responsibility,
         reviewDate: existingRow.review_date,
+        reviewBg: existingRow.review_bg,
         links: existingLinks
       } : null
     };
+
+    // true when the sheet proposes content the DB doesn't already have. Only
+    // genuinely-changed rows are rewritten by applyPullPlan_ — an unchanged
+    // row must not lose its review colour or updated_at timestamp.
+    let changed = false;
+    if (entry.appOwned) {
+      changed = false;
+    } else if (!existingRow) {
+      changed = true;
+    } else {
+      const existing = entry.existing;
+      changed =
+        !sameText_(existing.sector, proposed.sector) ||
+        !sameText_(existing.description, proposed.description) ||
+        !sameText_(existing.entryDate, proposed.entryDate) ||
+        !sameText_(existing.action, proposed.action) ||
+        !sameText_(existing.responsibility, proposed.responsibility) ||
+        !sameText_(existing.reviewDate, proposed.reviewDate) ||
+        JSON.stringify(existing.links) !== JSON.stringify(mergedLinks);
+    }
+    entry.changed = changed;
+
     plan.rows.push(entry);
 
     if (entry.appOwned) {
@@ -319,20 +343,10 @@ async function buildPullPlan_() {
       plan.unchanged++;
     } else if (!existingRow) {
       plan.added.push(entry);
+    } else if (changed) {
+      plan.updated.push(entry);
     } else {
-      const existing = entry.existing;
-      const textChanged = !sameText_(existing.sector, proposed.sector) ||
-        !sameText_(existing.description, proposed.description) ||
-        !sameText_(existing.entryDate, proposed.entryDate) ||
-        !sameText_(existing.action, proposed.action) ||
-        !sameText_(existing.responsibility, proposed.responsibility) ||
-        !sameText_(existing.reviewDate, proposed.reviewDate);
-      const linksChanged = JSON.stringify(existing.links) !== JSON.stringify(mergedLinks);
-      if (textChanged || linksChanged) {
-        plan.updated.push(entry);
-      } else {
-        plan.unchanged++;
-      }
+      plan.unchanged++;
     }
   });
 
@@ -381,9 +395,16 @@ async function applyPullPlan_(plan) {
       insert.run(entry.row, uuid_(), p.sector, p.description, p.entryDate, p.action, p.responsibility, p.reviewDate,
         JSON.stringify(entry.links), CONFIG.COLORS.NORMAL, 'sheet', Date.now(), Date.now());
       inserted++;
+    } else if (!entry.changed) {
+      // Sheet content matches the DB — the row is left untouched so the pull
+      // can never wipe an admin's review colour or stamp a spurious updated_at.
+      skipped++;
     } else {
+      // Content changed: keep the record's existing review colour (only a
+      // review action changes it), and only this row gets a fresh updated_at.
+      const reviewBg = String(entry.existing.reviewBg || CONFIG.COLORS.NORMAL);
       update.run(p.sector, p.description, p.entryDate, p.action, p.responsibility, p.reviewDate,
-        JSON.stringify(entry.links), CONFIG.COLORS.NORMAL, Date.now(), entry.row);
+        JSON.stringify(entry.links), reviewBg, Date.now(), entry.row);
       updated++;
     }
   });
@@ -857,12 +878,64 @@ async function pushToSheet() {
   };
 }
 
+// Best-effort mirror of an app-side record delete: removes the record's
+// physical row from the origin sheet (deleteDimension ROWS) so the next pull
+// can't resurrect it. The app renumbers local rows on delete, and DELETE_ROWS
+// shifts the sheet up to match, keeping the two in positional lockstep.
+// No-op (with a warning) when push-back is not configured.
+async function deleteSheetRowForRecord_(physicalRow) {
+  try {
+    if (!writeCredentialConfigured()) {
+      console.warn('[sync] app delete at row ' + physicalRow +
+        ' not mirrored to the sheet (push-back not configured) — a pull may restore the record');
+      return { deleted: false, reason: 'not configured' };
+    }
+    const gridIndex = Number(physicalRow) - START_ROW;
+    if (!Number.isInteger(gridIndex) || gridIndex < 0) {
+      return { deleted: false, reason: 'bad row' };
+    }
+    const token = await accessToken_();
+    if (!token) {
+      console.warn('[sync] app delete at row ' + physicalRow + ' not mirrored to the sheet (no write credential)');
+      return { deleted: false, reason: 'no write credential' };
+    }
+    const sheetId = await sheetGridId_(token);
+    const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + SOURCE_SPREADSHEET_ID +
+      ':batchUpdate?access_token=' + encodeURIComponent(token);
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [{
+          deleteDimension: {
+            range: {
+              sheetId: sheetId,
+              dimension: 'ROWS',
+              startIndex: gridIndex,
+              endIndex: gridIndex + 1
+            }
+          }
+        }]
+      })
+    });
+    if (!resp.ok) {
+      throw new Error('deleteDimension ' + resp.status + ': ' + (await resp.text()).slice(0, 300));
+    }
+    console.warn('[sync] mirrored app delete to sheet row ' + (START_ROW + gridIndex));
+    return { deleted: true };
+  } catch (err) {
+    console.warn('[sync] app delete mirror failed: ' + ((err && err.message) || err));
+    return { deleted: false, reason: (err && err.message) || String(err) };
+  }
+}
+
 module.exports = {
   SOURCE_SPREADSHEET_ID,
   pullFromSheet,
   previewPullFromSheet,
   pushToSheet,
   fetchCanonicalRecords,
+  deleteSheetRowForRecord_,
   writeCredentialConfigured,
   pushToSheetEnabled,
   _parseGviz: parseGviz,
