@@ -12,13 +12,13 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const { db } = require('./db');
+const { db, UPLOAD_DIR } = require('./db');
 const { NOTIFICATION_TYPES, NOTIFICATION_PRIORITY } = require('./config');
 const { uuid_, now_, runWithLock_ } = require('./helpers');
 const { resolveRecord_ } = require('./records');
 const auth = require('./auth');
 
-const UPLOADS_DIR = path.join(__dirname, '..', '..', 'data', 'uploads');
+const UPLOADS_DIR = UPLOAD_DIR; // single source of truth (db.js honours DASH_UPLOAD_DIR)
 const MAX_UPLOAD_BYTES = Number(process.env.DASH_MAX_UPLOAD_BYTES || 25 * 1024 * 1024);
 const ALLOWED_MIME_TYPES = new Set([
   'application/pdf',

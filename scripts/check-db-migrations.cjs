@@ -30,7 +30,7 @@ const EXPECTED_COLUMNS = {
 };
 const EXPECTED_INDEXES = [
   'idx_users_email_unique', 'idx_users_username', 'idx_records_record_id', 'idx_users_dashboard_url',
-  'idx_instruction_entries_card_row', 'idx_instruction_attachments_entry'
+  'idx_instruction_entries_card_row', 'idx_instruction_attachments_entry', 'idx_audit_timestamp'
 ];
 
 // Columns added by db.js migrations after schema.sql. A legacy restored DB

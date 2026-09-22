@@ -399,3 +399,4 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_assignee_status ON tasks(assignee,
 db.exec('CREATE INDEX IF NOT EXISTS idx_submissions_card_created ON submissions(card_row, created_at)');
 db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_email_created ON notifications(email, created_at DESC)');
 db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_email_read ON notifications(email, read_at)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit(timestamp DESC, id ASC)');

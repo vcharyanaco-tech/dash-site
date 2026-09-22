@@ -34,9 +34,11 @@ function auditTimestampMs_(value) {
 
 function getAuditEntries(limit, token) {
   auth.requireViewer(token);
-  const rows = db.prepare('SELECT * FROM audit').all();
+  const rows = db.prepare(
+    'SELECT * FROM audit ORDER BY timestamp DESC, id ASC LIMIT ?'
+  ).all(limit || 100);
   return rows
-    .map(function (r, i) {
+    .map(function (r) {
       const ts = auditTimestampMs_(r.timestamp);
       return {
         row: r.id,
@@ -47,9 +49,7 @@ function getAuditEntries(limit, token) {
         recordId: r.record_id || '',
         details: r.details || ''
       };
-    })
-    .sort(function (a, b) { return b.timestampMs - a.timestampMs || a.row - b.row; })
-    .slice(0, limit || 100);
+    });
 }
 
 function adminDeleteAuditRows(rowNumbers, token) {
