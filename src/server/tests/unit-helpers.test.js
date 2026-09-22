@@ -49,7 +49,8 @@ const {
   parseDisplayDate_,
   addDays_,
   htmlToText_,
-  isSafeLinkUrl_
+  isSafeLinkUrl_,
+  sanitizeTrustedHtml_
 } = require('../helpers');
 
 const { getReportTemplates } = require('../helpers');
@@ -218,6 +219,66 @@ test('isSafeLinkUrl_ blocks alternate IP encodings (SSRF)', function () {
 test('htmlToText_ strips tags', function () {
   assert.strictEqual(htmlToText_('<b>hello</b> <i>world</i>'), 'hello world');
   assert.strictEqual(htmlToText_('no tags'), 'no tags');
+});
+
+/* ============================================================
+ * Trusted-HTML sanitizer (field-html sinks)
+ * ============================================================ */
+
+test('sanitizeTrustedHtml_ keeps exactly what the emitters produce', function () {
+  const out = sanitizeTrustedHtml_(
+    'Intro text &amp; more<br><br>' +
+    '<a href="https://example.com/a?x=1&amp;y=2" target="_blank" rel="noopener noreferrer" data-embed="1">See</a>'
+  );
+  assert.strictEqual(out, 'Intro text &amp; more<br><br>' +
+    '<a href="https://example.com/a?x=1&amp;y=2" target="_blank" rel="noopener noreferrer" data-embed="1">See</a>');
+});
+
+test('sanitizeTrustedHtml_ strips script styles iframes on* and non-allowlisted tags', function () {
+  const evil =
+    '<script>alert(1)</script>' +
+    '<style>body{display:none}</style>' +
+    '<iframe src="https://evil.example"></iframe>' +
+    '<img src=x onerror=alert(1)>' +
+    '<a href="javascript:alert(document.cookie)" onclick="alert(2)">x</a>' +
+    '<a href="data:text/html,<script>alert(3)</script>" onmouseover="alert(4)">y</a>' +
+    '<div class="x">div text</div><table><tr><td>cell</td></tr></table>';
+  const out = sanitizeTrustedHtml_(evil);
+  assert.ok(out.indexOf('<script') === -1 && out.indexOf('</script') === -1, 'no script element');
+  assert.ok(out.indexOf('<style') === -1 && out.indexOf('</style') === -1, 'no style element');
+  assert.ok(out.indexOf('<iframe') === -1, 'no iframe element');
+  assert.ok(out.indexOf('<img') === -1, 'no img element');
+  assert.ok(out.indexOf('<div') === -1 && out.indexOf('<table') === -1 && out.indexOf('<td') === -1,
+    'non-allowlisted elements dropped');
+  assert.ok(!/<a\b[^>]*\b(href|onclick|onmouseover|onerror)=/i.test(out),
+    'no emit-ready a tag carries an href or an event handler');
+  assert.ok(out.indexOf('javascript:') === -1, 'javascript: dropped');
+  assert.ok(out.indexOf('data:text/html') === -1, 'data: dropped');
+  assert.ok(out.indexOf('alert(') > -1, 'dropped-tag bodies degrade to inert text (never executed)');
+  // The allowlisted drop of the handler leaves <a> with only text children.
+  assert.ok(out.indexOf('<a>x</a>') !== -1, 'href-less anchor keeps its text');
+});
+
+test('sanitizeTrustedHtml_ defuses attribute injection and keeps quoted > hrefs', function () {
+  const a = sanitizeTrustedHtml_('<a href="https://x.com/page" onclick="alert(1)">label</a>');
+  assert.ok(!/<a\b[^>]*onclick=/i.test(a), 'real onclick attribute stripped');
+  assert.ok(a.indexOf('href="https://x.com/page"') !== -1, 'clean href kept');
+
+  const dirty = sanitizeTrustedHtml_('<a href="https://x.com/?a=1>2" target="_blank" rel="noopener noreferrer">t</a>');
+  assert.ok(dirty.indexOf('href="https://x.com/?a=1>2"') !== -1,
+    '> inside a quoted href is legal and cannot break out of the tag');
+
+  const kv = sanitizeTrustedHtml_('<a href="java\\nscript:alert(1)" title="ok">y</a>');
+  assert.ok(!/<a\b[^>]*href=/i.test(kv), 'obfuscated javascript: href dropped entirely');
+  assert.ok(kv.indexOf('title="ok"') !== -1, 'allowlisted non-url attribute kept');
+
+  const none = sanitizeTrustedHtml_('<a href="javascript:alert(1)">z</a>');
+  assert.ok(none.indexOf('<a>z</a>') !== -1, 'scriptable-scheme anchor degrades to plain text');
+});
+
+test('sanitizeTrustedHtml_ leaves plain text (already-escaped) untouched', function () {
+  assert.strictEqual(sanitizeTrustedHtml_('plain &amp; text &lt;none&gt;'), 'plain &amp; text &lt;none&gt;');
+  assert.strictEqual(sanitizeTrustedHtml_(''), '');
 });
 
 /* ============================================================

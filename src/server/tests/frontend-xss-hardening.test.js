@@ -70,11 +70,13 @@ function extractFunction(name) {
 const ctx = vm.createContext({});
 vm.runInContext(
   [extractFunction('escapeHtml'), extractFunction('escAttr'),
-   extractFunction('linkableHref'), extractFunction('renderLinkableText')].join('\n'),
+   extractFunction('linkableHref'), extractFunction('renderLinkableText'),
+   extractFunction('sanitizeFieldHtml_')].join('\n'),
   ctx, { filename: 'app.js-extract' });
 
 const linkableHref = (v) => ctx.linkableHref(v);
 const renderLinkableText = (v) => ctx.renderLinkableText(v);
+const sanitizeFieldHtml = (v) => ctx.sanitizeFieldHtml_(v);
 
 test('linkableHref: safe schemes and bare hosts resolve to clickable URLs', function () {
   assert.strictEqual(linkableHref('https://example.com'), 'https://example.com');
@@ -135,6 +137,37 @@ test('renderLinkableText itself delegates to linkableHref', function () {
 test('myday subtitle renders through escapeHtml', function () {
   assert.ok(appJs.indexOf("'<div class=\"myday-item-meta\">' + escapeHtml(subtitle)") !== -1,
     'My Day subtitle still interpolated raw into innerHTML');
+});
+
+test('field-html sinks route through sanitizeFieldHtml_', function () {
+  const sinks = [
+    "? `<div class=\"field-value preserve-whitespace field-html\">${sanitizeFieldHtml_(field.html)}</div>`",          // dashboard card
+    "? `<div class=\"detail-value preserve-whitespace field-html\">${sanitizeFieldHtml_(field.html)}</div>`",        // detail drawer
+    'const value = field.html ? sanitizeFieldHtml_(field.html) : escapeHtml(field.value);'                              // print/report
+  ];
+  sinks.forEach(function (needle) {
+    assert.ok(appJs.indexOf(needle) !== -1, 'field-html sink not gated: ' + needle);
+  });
+});
+
+test('sanitizeFieldHtml_: allowlist keeps server output and drops scriptable payloads', function () {
+  // Legit emitter output survives as-is.
+  assert.strictEqual(
+    sanitizeFieldHtml('Intro &amp; text<br><br><a href="https://x.com/a?x=1&amp;y=2" target="_blank" rel="noopener noreferrer" data-embed="1">See</a>'),
+    'Intro &amp; text<br><br><a href="https://x.com/a?x=1&amp;y=2" target="_blank" rel="noopener noreferrer" data-embed="1">See</a>');
+
+  const evil = sanitizeFieldHtml(
+    '<script>alert(1)</script><img src=x onerror=alert(1)>' +
+    '<iframe src="https://e.example"></iframe>' +
+    '<a href="javascript:alert(document.cookie)" onclick="x()">y</a>' +
+    '<a href="data:text/html,<script>x</script>">z</a>' +
+    '<div style="display:none">d</div>');
+  assert.ok(evil.indexOf('<script') === -1 && evil.indexOf('</script') === -1, 'scripts stripped');
+  assert.ok(evil.indexOf('<img') === -1 && evil.indexOf('<iframe') === -1, 'img/iframe stripped');
+  assert.ok(evil.indexOf('onerror=') === -1, 'event handlers stripped');
+  assert.ok(!/<a\b[^>]*\b(href|onclick)=/i.test(evil), 'no emit-ready anchor carries a url or handler');
+  assert.ok(evil.indexOf('javascript:') === -1 && evil.indexOf('data:text/html') === -1, 'scriptable schemes dropped');
+  assert.ok(evil.indexOf('<div') === -1, 'non-allowlisted elements dropped');
 });
 
 test('raw link-url sinks route through linkableHref', function () {

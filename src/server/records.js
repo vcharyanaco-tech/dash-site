@@ -12,7 +12,7 @@ const { db, getAppSettings, cacheGetTTL, cachePut } = require('./db');
 const { CONFIG, ROLES, COL, ACTIONS, NOTIFICATION_TYPES, NOTIFICATION_PRIORITY } = require('./config');
 const {
   now_, today_, formatDate_, parseDisplayDate_, daysUntilDate_,
-  escHtml_, looksLikeUrl_, linkifyText_, absUrl_, uuid_,
+  escHtml_, looksLikeUrl_, linkifyText_, absUrl_, uuid_, sanitizeTrustedHtml_,
   normalizeItemForSheet_, buildSummaryFromItems, buildAnalytics_,
   runWithLock_
 } = require('./helpers');
@@ -281,7 +281,9 @@ function buildItemFromRowSpec_(rowSpec) {
     if (normalizedLabel.indexOf('action') !== -1 && fieldHtml) {
       actionHtml = fieldHtml;
     }
-    return { label: label, value: formattedValue, html: fieldHtml };
+    // Every .html the client/PDF/email pipeline renders is re-gated through the
+    // trusted-HTML allowlist (defence-in-depth on top of the escaped emitters).
+    return { label: label, value: formattedValue, html: sanitizeTrustedHtml_(fieldHtml) };
   });
 
   const linkUrls = {};
@@ -304,7 +306,7 @@ function buildItemFromRowSpec_(rowSpec) {
     description: rowSpec.description,
     entryDate: formatDate_(rowSpec.entryDate),
     action: rowSpec.action,
-    actionHtml: actionHtml,
+    actionHtml: sanitizeTrustedHtml_(actionHtml),
     lastMeetingInstructions: rowSpec.lastMeetingInstructions,
     responsibility: rowSpec.responsibility,
     reviewDate: formatDate_(rowSpec.reviewDate),
@@ -377,7 +379,7 @@ function getData() {
           description: d.description,
           entryDate: formatDate_(d.entryDate),
           action: d.action,
-          actionHtml: escHtml_(d.action),
+          actionHtml: sanitizeTrustedHtml_(escHtml_(d.action)),
           responsibility: d.responsibility,
           reviewDate: formatDate_(d.reviewDate),
           flagged: false,

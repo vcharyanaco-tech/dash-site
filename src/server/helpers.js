@@ -296,6 +296,148 @@ function linkifyText_(text) {
 }
 
 /* ============================================================
+ * Trusted-HTML sanitizer (defense-in-depth for field-html sinks)
+ * ============================================================
+ * The app renders user-authored record text as safe linkified/escaped HTML
+ * (linkifyText_/fieldHtml_ never emit raw user markup). sanitizeTrustedHtml_
+ * is a final gate on that output before it reaches innerHTML sinks, PDF/xlsx
+ * and HTML emails: an explicit tag allowlist with URL scheme enforcement and
+ * event-handler stripping. It keeps exactly what the emitters produce.
+ * ============================================================ */
+
+const TRUSTED_HTML_TAGS = new Set(['a', 'br', 'b', 'strong', 'i', 'em', 'u', 'p', 'ul', 'ol', 'li']);
+const TRUSTED_HTML_ATTRS = new Set(['href', 'target', 'rel', 'data-embed', 'class', 'title']);
+const TRUSTED_URL_PREFIX_RE = /^(https?:|mailto:|tel:)/i;
+
+function isTrustedHref_(value) {
+  const v = String(value || '').trim();
+  if (!v) return false;
+  if (v.charAt(0) === '#' || v.charAt(0) === '/' || v.indexOf('www.') === 0) return true;
+  return TRUSTED_URL_PREFIX_RE.test(v);
+}
+
+// Attribute values in the trusted output are already entity-encoded by the
+// emitters (linkifyText_/escHtml_), so only the quote — the sole char that can
+// break out of a quoted attribute — needs neutralizing here. Lowercase entities
+// survive untouched, preserving URL fidelity.
+function escapeTrustedAttrValue_(value) {
+  return String(value === null || value === undefined ? '' : value).replace(/"/g, '&quot;');
+}
+
+// Position of the tag's closing '>' starting from `start`, honouring quoted
+// attribute values so hrefs containing '>' cannot break out of the token.
+function tagEndIndex_(s, start) {
+  let quote = null;
+  for (let i = start; i < s.length; i++) {
+    const ch = s.charAt(i);
+    if (quote) {
+      if (ch === '\\') { i++; continue; }
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === '>') return i;
+  }
+  return s.length;
+}
+
+function tagNameAt_(s, start) {
+  let i = start;
+  while (i < s.length && /[a-zA-Z0-9]/.test(s.charAt(i))) i++;
+  return { name: s.slice(start, i), end: i };
+}
+
+function parseTrustedAttrs_(s, start, end) {
+  const attrs = [];
+  let i = start;
+  while (i < end) {
+    if (!/\s/.test(s.charAt(i))) { i++; continue; }
+    i++;
+    let a = i;
+    while (i < end && /[a-zA-Z0-9:_-]/.test(s.charAt(i))) i++;
+    const key = s.slice(a, i);
+    if (!key) continue;
+    while (i < end && /\s/.test(s.charAt(i))) i++;
+    let value = '';
+    if (i < end && s.charAt(i) === '=') {
+      i++;
+      while (i < end && /\s/.test(s.charAt(i))) i++;
+      if (i < end && (s.charAt(i) === '"' || s.charAt(i) === "'")) {
+        const q = s.charAt(i);
+        i++;
+        const v0 = i;
+        while (i < end && s.charAt(i) !== q) i++;
+        value = s.slice(v0, i);
+        if (i < end) i++;
+      } else {
+        const v0 = i;
+        while (i < end && !/\s/.test(s.charAt(i))) i++;
+        value = s.slice(v0, i);
+      }
+    }
+    attrs.push([key, value]);
+  }
+  return attrs;
+}
+
+// Allowlist filter for the server-rendered trusted field/action HTML. Anything
+// not produced by the emitters is dropped; scriptable schemes and all event
+// handler attributes are stripped; attribute values are re-escaped.
+function sanitizeTrustedHtml_(html) {
+  const s = String(html === null || html === undefined ? '' : html);
+  if (!s) return '';
+  let out = '';
+  let i = 0;
+  while (i < s.length) {
+    const lt = s.indexOf('<', i);
+    if (lt === -1) { out += s.slice(i); break; }
+    out += s.slice(i, lt);
+    if (s.startsWith('<!--', lt)) {
+      const end = s.indexOf('-->', lt + 4);
+      i = end === -1 ? s.length : end + 3;
+      continue;
+    }
+    if (s.startsWith('<!', lt) || s.startsWith('<?', lt)) {
+      const end = s.indexOf('>', lt + 2);
+      i = end === -1 ? s.length : end + 1;
+      continue;
+    }
+    const end = tagEndIndex_(s, lt + 1);
+    if (s.charAt(lt + 1) === '/') {
+      const close = tagNameAt_(s, lt + 2);
+      if (TRUSTED_HTML_TAGS.has(close.name.toLowerCase())) {
+        out += '</' + close.name.toLowerCase() + '>';
+      }
+      i = end === s.length ? s.length : end + 1;
+      continue;
+    }
+    const open = tagNameAt_(s, lt + 1);
+    const name = open.name.toLowerCase();
+    if (!TRUSTED_HTML_TAGS.has(name)) {
+      i = end === s.length ? s.length : end + 1;
+      continue;
+    }
+    let tag = '<' + name;
+    parseTrustedAttrs_(s, open.end, end).forEach(function (pair) {
+      const key = pair[0].toLowerCase();
+      if (!TRUSTED_HTML_ATTRS.has(key)) return;
+      if (key === 'href') {
+        if (!isTrustedHref_(pair[1])) return;
+        tag += ' href="' + escapeTrustedAttrValue_(pair[1].trim()) + '"';
+      } else if (key === 'data-embed') {
+        tag += ' data-embed="1"';
+      } else {
+        tag += ' ' + key + '="' + escapeTrustedAttrValue_(pair[1]) + '"';
+      }
+    });
+    tag += '>';
+    out += tag;
+    i = end === s.length ? s.length : end + 1;
+  }
+  return out;
+}
+
+/* ============================================================
  * Reports.gs pure helpers
  * ============================================================ */
 
@@ -740,6 +882,7 @@ module.exports = {
   normalizeUrl_,
   absUrl_,
   linkifyText_,
+  sanitizeTrustedHtml_,
   buildSummaryFromItems,
   buildSectorReportFromSummary,
   buildFlaggedItemsFromItems,

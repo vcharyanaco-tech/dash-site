@@ -7,7 +7,7 @@
 
 function detailRowHtml_(field) {
   const valueHtml = field.html
-    ? `<div class="detail-value preserve-whitespace field-html">${field.html}</div>`
+    ? `<div class="detail-value preserve-whitespace field-html">${sanitizeFieldHtml_(field.html)}</div>`
     : `<div class="detail-value preserve-whitespace">${escapeHtml(field.value)}</div>`;
   return `
       <div class="about-row detail-row">

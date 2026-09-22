@@ -198,7 +198,7 @@ function printCard(row, includeSubmissions) {
   const build = function (subs) {
     const fields = (item.displayFields || []).map(function (field) {
       const label = String(field && field.label || '').trim();
-      const value = field.html ? field.html : escapeHtml(field.value);
+      const value = field.html ? sanitizeFieldHtml_(field.html) : escapeHtml(field.value);
       return `
         <tr>
           <th style="width:32%">${escapeHtml(label || 'Value')}</th>

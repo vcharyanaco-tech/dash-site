@@ -347,6 +347,104 @@ function escAttr(value) {
   return escapeHtml(value);
 }
 
+/* Defense-in-depth gate for the server-rendered field-html sinks (cards, the
+   detail drawer and print views). The server only emits future-escaped linkified
+   output; this allowlist re-checks it before any innerHTML interpolation so a
+   regression upstream can never turn a record field into a scriptable sink. */
+function sanitizeFieldHtml_(html) {
+  var s = String(html === undefined || html === null ? '' : html);
+  if (!s) return '';
+  var allowedTags = { a: 1, br: 1, b: 1, strong: 1, i: 1, em: 1, u: 1, p: 1, ul: 1, ol: 1, li: 1 };
+  var allowedAttrs = { href: 1, target: 1, rel: 1, 'data-embed': 1, class: 1, title: 1 };
+  var out = '';
+  var i = 0;
+  var tagName = function (start) {
+    var j = start;
+    while (j < s.length && /[a-zA-Z0-9]/.test(s.charAt(j))) j++;
+    return { name: s.slice(start, j), end: j };
+  };
+  var tagEnd = function (start) {
+    var q = null;
+    for (var k = start; k < s.length; k++) {
+      var c = s.charAt(k);
+      if (q) { if (c === '\\') { k++; continue; } if (c === q) q = null; continue; }
+      if (c === '"' || c === "'") { q = c; continue; }
+      if (c === '>') return k;
+    }
+    return s.length;
+  };
+  var collectAttrs = function (start, end) {
+    var attrs = [];
+    var k = start;
+    while (k < end) {
+      if (!/\s/.test(s.charAt(k))) { k++; continue; }
+      k++;
+      var a = k;
+      while (k < end && /[a-zA-Z0-9:_-]/.test(s.charAt(k))) k++;
+      var key = s.slice(a, k);
+      if (!key) continue;
+      while (k < end && /\s/.test(s.charAt(k))) k++;
+      var value = '';
+      if (k < end && s.charAt(k) === '=') {
+        k++;
+        while (k < end && /\s/.test(s.charAt(k))) k++;
+        if (k < end && (s.charAt(k) === '"' || s.charAt(k) === "'")) {
+          var q = s.charAt(k);
+          k++;
+          var v0 = k;
+          while (k < end && s.charAt(k) !== q) k++;
+          value = s.slice(v0, k);
+          if (k < end) k++;
+        } else {
+          var w0 = k;
+          while (k < end && !/\s/.test(s.charAt(k))) k++;
+          value = s.slice(w0, k);
+        }
+      }
+      attrs.push([key, value]);
+    }
+    return attrs;
+  };
+  while (i < s.length) {
+    var lt = s.indexOf('<', i);
+    if (lt === -1) { out += s.slice(i); break; }
+    out += s.slice(i, lt);
+    if (s.slice(lt, lt + 4) === '<!--') {
+      var cm = s.indexOf('-->', lt + 4);
+      i = cm === -1 ? s.length : cm + 3;
+      continue;
+    }
+    var end = tagEnd(lt + 1);
+    if (s.charAt(lt + 1) === '/') {
+      var close = tagName(lt + 2);
+      if (allowedTags[close.name.toLowerCase()]) out += '</' + close.name.toLowerCase() + '>';
+      i = end === s.length ? s.length : end + 1;
+      continue;
+    }
+    var open = tagName(lt + 1);
+    var name = open.name.toLowerCase();
+    if (!allowedTags[name]) { i = end === s.length ? s.length : end + 1; continue; }
+    var tag = '<' + name;
+    collectAttrs(open.end, end).forEach(function (pair) {
+      var key = pair[0].toLowerCase();
+      if (!allowedAttrs[key]) return;
+      if (key === 'href') {
+        var v = String(pair[1] || '').trim();
+        if (!v) return;
+        if (!(/^(https?:|mailto:|tel:)/i.test(v) || v.charAt(0) === '#' || v.charAt(0) === '/' || /^www\./i.test(v))) return;
+        tag += ' href="' + String(v).replace(/"/g, '&quot;') + '"';
+      } else if (key === 'data-embed') {
+        tag += ' data-embed="1"';
+      } else {
+        tag += ' ' + key + '="' + String(pair[1] === undefined || pair[1] === null ? '' : pair[1]).replace(/"/g, '&quot;') + '"';
+      }
+    });
+    out += tag + '>';
+    i = end === s.length ? s.length : end + 1;
+  }
+  return out;
+}
+
 function linkableHref(value) {
   const url = String(value == null ? '' : value).trim();
   if (!url) return '';

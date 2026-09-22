@@ -297,7 +297,7 @@ function cardFieldHtml_(item, field) {
     ? (item.reviewStatus === 'due' ? ' card-field-action-due' : ' card-field-action-ok')
     : '';
   const valueHtml = field.html
-    ? `<div class="field-value preserve-whitespace field-html">${field.html}</div>`
+    ? `<div class="field-value preserve-whitespace field-html">${sanitizeFieldHtml_(field.html)}</div>`
     : `<div class="field-value preserve-whitespace">${escapeHtml(field.value)}</div>`;
   const editBtn = (isInstructionField && appState.isEditor)
     ? `<button class="icon-btn card-field-edit-btn" type="button" title="Edit last meeting instructions" aria-label="Edit last meeting instructions" onclick="event.stopPropagation(); openLastMeetingInstructions('${escAttr(item.row)}')">${svgIcon('edit')}</button>`
