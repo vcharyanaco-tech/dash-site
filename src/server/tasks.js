@@ -170,6 +170,14 @@ function updateTask(id, fields, token) {
     if (!isEditorRole && !isAssignee) throw new Error('Permission denied.');
 
     fields = fields || {};
+    // Non-editor assignees act on their own workload only: they may flip the
+    // status (complete / reopen) but must not rewrite task details.
+    if (!isEditorRole) {
+      const detailFields = ['title', 'description', 'priority', 'dueDate'];
+      if (detailFields.some(function (k) { return k in fields; })) {
+        throw new Error('Only editors can edit task details.');
+      }
+    }
     const updates = {};
     if ('title' in fields) updates.title = String(fields.title || '').trim();
     if ('description' in fields) updates.description = String(fields.description || '');

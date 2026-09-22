@@ -25,9 +25,17 @@ setInterval(function () {
 }, 5 * 60 * 1000).unref();
 
 function getClientIp(req) {
+  const remote = (req.socket && req.socket.remoteAddress) || '0.0.0.0';
   const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) return String(forwarded).split(',')[0].trim();
-  return req.socket && req.socket.remoteAddress || '0.0.0.0';
+  // Only trust the client-supplied header when the direct peer is loopback
+  // (e.g. a local dev proxy). A directly-exposed server must not let clients
+  // rotate X-Forwarded-For to bypass the limiter. Behind the Cloudflare
+  // Worker the header is intentionally absent (the Worker rate-limits per
+  // real client IP), so the socket address is the shared egress IP here.
+  if (forwarded && (remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1')) {
+    return String(forwarded).split(',')[0].trim();
+  }
+  return remote;
 }
 
 /**

@@ -401,6 +401,23 @@ function getData() {
   return result;
 }
 
+/* Authenticated view of getData(): the dispatch layer must not hand the raw
+   dataset (including records editors have hidden) to anonymous callers, so
+   the client-facing entry requires a login and scopes viewers to the records
+   that are actually displayed to them. Internal modules keep calling the
+   raw getData() directly. */
+function getDataForUser(token) {
+  const user = auth.requireLogin(token);
+  const context = auth.getUserContext(user.email);
+  const data = getData();
+  return {
+    title: data.title,
+    heading: data.heading,
+    asOf: data.asOf,
+    items: scopeItemsForUser_(data.items || [], context)
+  };
+}
+
 /* ============================================================
  * Scoping / responsibilities / reminders
  * ============================================================ */
@@ -973,6 +990,7 @@ const RecordService = Object.freeze({
 module.exports = {
   HEADERS,
   getData,
+  getDataForUser,
   getAppData,
   getTitle_,
   stampTitle_,

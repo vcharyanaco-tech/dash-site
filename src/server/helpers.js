@@ -610,6 +610,57 @@ function htmlToText_(html) {
     .replace(/\s+/g, ' ').trim();
 }
 
+/* Parse an octet part as decimal, hexadecimal (0x…) or octal (leading 0).
+   Returns the integer or null when the part is not a numeric literal. */
+function parseOctetLit_(p) {
+  p = String(p).toLowerCase();
+  if (/^0x[0-9a-f]+$/.test(p)) return parseInt(p, 16);
+  if (/^0[0-7]+$/.test(p)) return parseInt(p, 8);
+  if (/^\d+$/.test(p)) return parseInt(p, 10);
+  return null;
+}
+
+/* Normalize a numeric IP host literal (inet_aton-style decimal integer, hex,
+   octal, 1–4 dotted parts, IPv4-mapped encodings; IPv6 bracket literals are
+   caught separately) into a canonical dotted-quad string. Returns null when
+   the host is not a numeric literal (i.e. a DNS name). */
+function normalizedIpv4_(host) {
+  const h = String(host || '').toLowerCase().trim();
+  if (/^\[[0-9a-f:.]+]$/.test(h)) return 'REJECT_V6';
+  if (/^[a-z0-9.]+$/.test(host) === false || host.indexOf('..') !== -1) return null;
+  const parts = h.split('.');
+  if (parts.length > 4) return null;
+  if (!parts.length || parts.some(function (p) { return p === ''; })) return null;
+  const vals = [];
+  for (let i = 0; i < parts.length; i++) {
+    const v = parseOctetLit_(parts[i]);
+    if (v === null || v > 0xffffffff) return null;
+    vals.push(v);
+  }
+  let n;
+  if (parts.length === 1) n = vals[0];
+  else if (parts.length === 2) { if (vals[1] > 0xffffff) return null; n = vals[0] * 0x1000000 + vals[1]; }
+  else if (parts.length === 3) { if (vals[2] > 0xffff) return null; n = vals[0] * 0x1000000 + vals[1] * 0x10000 + vals[2]; }
+  else { if (vals.some(function (v) { return v > 0xff; })) return null; n = vals[0] * 0x1000000 + vals[1] * 0x10000 + vals[2] * 0x100 + vals[3]; }
+  if (n < 0 || n > 0xffffffff) return null;
+  return [((n >>> 24) & 255), ((n >>> 16) & 255), ((n >>> 8) & 255), (n & 255)].join('.');
+}
+
+/* True only when the dotted-quad is a globally routable IPv4 address. */
+function isPublicIpv4_(quad) {
+  const p = String(quad || '').split('.').map(function (s) { return parseInt(s, 10); });
+  const a = p[0], b = p[1];
+  if (a === 0 || a === 127 || a === 255) return false;
+  if (a === 10) return false;
+  if (a === 169 && b === 254) return false;             // link-local (metadata)
+  if (a === 172 && b >= 16 && b <= 31) return false;    // private
+  if (a === 192 && b === 168) return false;             // private
+  if (a === 100 && b >= 64 && b <= 127) return false;   // CGNAT
+  if (a === 198 && (b === 18 || b === 19)) return false; // benchmarking
+  if (a >= 224) return false;                           // multicast/reserved
+  return true;
+}
+
 function isSafeLinkUrl_(url) {
   const s = String(url || '').trim();
   const m = s.match(/^(https?):\/\/([^/?#:]+)(?::\d+)?([/?#]|$)/i);
@@ -618,10 +669,18 @@ function isSafeLinkUrl_(url) {
   const host = m[2].toLowerCase();
   if (host.indexOf('@') !== -1) return false;
   if (host === 'localhost' || host.indexOf('.localhost') !== -1 || host.indexOf('.local') !== -1) return false;
-  if (host === '169.254.169.254') return false;
-  if (/^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host) || /^0\./.test(host)) return false;
-  const r = host.match(/^172\.(\d+)\./);
-  if (r) { const n = parseInt(r[1], 10); if (n >= 16 && n <= 31) return false; }
+
+  // Numeric IP literals: normalize every encoding (decimal integer, hex,
+  // octal, dotted-shorthand, IPv4-mapped…) to a dotted quad and reject
+  // reserved, private, loopback and multicast ranges. IPv6 literals are
+  // never legitimate link targets here.
+  const quad = normalizedIpv4_(host);
+  if (quad === 'REJECT_V6') return false;
+  if (quad) return isPublicIpv4_(quad);
+
+  // Unknown single-label numeric hosts (e.g. malformed integer encodings)
+  // are not safe DNS names — reject rather than risk a metadata lookup.
+  if (/^[0-9]+$/.test(host)) return false;
   return true;
 }
 

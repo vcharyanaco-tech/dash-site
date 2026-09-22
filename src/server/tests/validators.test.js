@@ -169,7 +169,7 @@ const validatorCases = [
   { fn: 'sendReviewDeadlinePushNotifications', goodArgs: [adminToken], badArgs: [], msg: /sendReviewDeadlinePushNotifications requires/ },
   // ── 1F: read / informational validators (public, no token) ────────────────
   { fn: 'getServerTime', goodArgs: [], badArgs: ['x'], msg: /getServerTime takes no arguments/ },
-  { fn: 'getData', goodArgs: [], badArgs: ['x'], msg: /getData takes no arguments/ },
+  { fn: 'getData', goodArgs: [adminToken], badArgs: [], msg: /getData requires \(token\)/ },
   { fn: 'getSyncStatus', goodArgs: [], badArgs: ['x'], msg: /getSyncStatus takes no arguments/ },
   { fn: 'getReportTemplates', goodArgs: [], badArgs: ['x'], msg: /getReportTemplates takes no arguments/ },
   { fn: 'getTranslations', goodArgs: ['en'], badArgs: ['en', 'fr'], msg: /getTranslations requires/ },
@@ -256,7 +256,7 @@ for (const c of validatorCases) {
 // ------------------------------------------------------------------
 
 test('cookie-injection: setRecordDisplay via cookie (no token in args)', async function () {
-  const data = await post('getData');
+  const data = await post('getData', [], { cookie: adminCookie });
   const row = data.items[0].row;
   const result = await post('setRecordDisplay', [row, true], { cookie: adminCookie });
   assert.ok(result && result.items, 'setRecordDisplay returns appData');

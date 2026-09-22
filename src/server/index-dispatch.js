@@ -27,7 +27,7 @@ const dispatch = {
   getServerTime: function (args) { return records.getServerTime(); },
 
   getAppData: function (args) { return records.getAppData(A(args, 0)); },
-  getData: function (args) { return records.getData(); },
+  getData: function (args) { return records.getDataForUser(A(args, 0)); },
   addItem: function (args) { return records.addItem(A(args, 0), A(args, 1)); },
   updateItem: function (args) { return records.updateItem(A(args, 0), A(args, 1)); },
   deleteItem: function (args) { return records.deleteItem(A(args, 0), A(args, 1)); },

@@ -118,7 +118,7 @@ function getRecordDocuments(recordRow, token) {
 }
 
 function uploadDocument(recordRow, recordId, fileName, base64, mimeType, token) {
-  const user = auth.requireLogin(token);
+  const user = auth.requireEditor(token);
   const safeName = sanitizeFileName_(fileName);
   const declaredMime = String(mimeType || '').toLowerCase().trim();
   if (!ALLOWED_MIME_TYPES.has(declaredMime)) throw new Error('Unsupported document type.');
@@ -153,7 +153,7 @@ function uploadDocument(recordRow, recordId, fileName, base64, mimeType, token) 
 }
 
 function deleteDocument(docId, token) {
-  const user = auth.requireLogin(token);
+  const user = auth.requireEditor(token);
   const docRow = db.prepare('SELECT record_row FROM documents WHERE id = ?').get(String(docId));
   const ok = deleteDocument_(String(docId));
   if (!ok) throw new Error('Document not found.');
@@ -166,7 +166,7 @@ function deleteDocument(docId, token) {
 /** Toggle a document's retention exemption. keep=1 protects the attachment
  *  from the DASH_RETENTION_DAYS prune sweep (data-sync.enforceRetention_). */
 function setDocumentKeep(docId, keep, token) {
-  const user = auth.requireLogin(token);
+  const user = auth.requireEditor(token);
   const row = db.prepare('SELECT * FROM documents WHERE id = ?').get(String(docId));
   if (!row) throw new Error('Document not found.');
   const keepVal = keep ? 1 : 0;

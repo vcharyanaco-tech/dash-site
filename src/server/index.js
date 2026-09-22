@@ -26,7 +26,7 @@ const STATIC_ROOT = process.env.DASH_STATIC_ROOT || path.join(__dirname, '..', '
 const API_PREFIX = '/api';
 const SESSION_COOKIE = 'dash_session';
 const AUTH_ARG_INDEX = Object.freeze({
-  getAppData: 0, addItem: 1, updateItem: 1, deleteItem: 1,
+  getAppData: 0, getData: 0, addItem: 1, updateItem: 1, deleteItem: 1,
   markReviewDone: 1, markReviewNotDone: 1, logout: 0, validateSession: 0,
   refreshSession: 0, changePassword: 2, adminGetUsers: 0, adminAddUser: 7,
   adminUpdateUser: 2, adminExportUsers: 0, adminImportUsers: 1,
@@ -160,6 +160,25 @@ app.use(function (req, res, next) {
   res.setHeader('Referrer-Policy', 'no-referrer-when-downgrade');
   if (req.method === 'OPTIONS') {
     res.status(204).end();
+    return;
+  }
+  next();
+});
+
+// ── Static path denial ─────────────────────────────────────────────────────
+// Never serve the sensitive directories through the static file server, even
+// when DASH_STATIC_ROOT falls back to the repo root (local/dev). data/ holds
+// the SQLite DB, uploads and sync logs; src/, build/, scripts/ and node_modules
+// are implementation guts; leading-dot segments can hide .env/.git.git. This
+// runs before both the nonce HTML pipeline and express.static so a crafted
+// path like /data/foo.html cannot slip through either of them.
+const STATIC_DENY = /^\/(data|src|build|node_modules|scripts)(\/|$)|(^|\/)\./;
+app.use(function (req, res, next) {
+  // /api/ requests are exempt: the API layer applies its own key validation
+  // (e.g. /api/files/:key rejects traversal keys with 404) and attachment keys
+  // are 32-char hex, so the dot-segment rule must not shadow those handlers.
+  if ((req.method === 'GET' || req.method === 'HEAD') && req.path.indexOf('/api/') !== 0 && STATIC_DENY.test(req.path)) {
+    res.status(403).end();
     return;
   }
   next();
@@ -328,9 +347,18 @@ app.post(API_PREFIX, async function (req, res) {
     metrics.errors++;
     systemHealth.recordApiError_(fn, err);
     console.error('API request failed (' + String(fn || 'unknown') + '): ' + ((err && err.message) || String(err)));
-    res.json({ error: (err && err.message) || String(err) });
+    res.json({ error: sanitizeApiError_(err) });
   }
 });
+
+/* Never leak SQLite internals or stack traces to API clients — a thrown
+   SQLITE_* message (or a raw error that mentions internals) is replaced with
+   a generic message while the full detail stays in the server log. */
+function sanitizeApiError_(err) {
+  const raw = (err && err.message) || String(err);
+  if (/SQLITE_|node_modules|MISSING_ARGUMENT|AssertionError/.test(raw)) return 'Unexpected error.';
+  return raw;
+}
 
 // Internal daily jobs (replaces the decommissioned GAS time-driven triggers:
 // 9am review-reminder emails, 10am audit archival). Not part of the public
@@ -380,9 +408,18 @@ app.get(API_PREFIX + '/files/:key', function (req, res) {
   }
   const meta = found.meta;
   const isDownload = req.query.download === '1';
-  res.setHeader('Content-Type', meta.mimeType || 'application/octet-stream');
+  const mime = String(meta.mimeType || 'application/octet-stream').toLowerCase();
+  // Submission/instruction attachments carry a caller-supplied MIME that was
+  // never whitelisted. Serving an unsolicited text/html attachment inline
+  // would let a crafted file render inside the app origin — force a download
+  // for anything outside a safe inline allowlist (nosniff + CSP stay as
+  // backstops). Record documents are already restricted to a whitelist upstream.
+  const isAttachment = !!(meta.isSubmissionAttachment || meta.isInstructionAttachment);
+  const SAFE_INLINE_MIME = /^(image\/(jpeg|png|gif|webp|bmp|heic|avif)|application\/pdf|text\/(plain|csv)|video\/|audio\/)/i;
+  const forceDownload = isAttachment && !SAFE_INLINE_MIME.test(mime);
+  res.setHeader('Content-Type', forceDownload ? 'application/octet-stream' : mime);
   res.setHeader('Content-Length', String(meta.size));
-  res.setHeader('Content-Disposition', (isDownload ? 'attachment' : 'inline') + '; filename="' + String(meta.fileName || 'document').replace(/"/g, '') + '"');
+  res.setHeader('Content-Disposition', ((isDownload || forceDownload) ? 'attachment' : 'inline') + '; filename="' + String(meta.fileName || 'document').replace(/"/g, '') + '"');
   res.setHeader('Cache-Control', 'private, max-age=300');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.sendFile(found.path);
@@ -698,7 +735,7 @@ const VALIDATORS = {
     return null;
   },
   getData: function (args) {
-    if (args.length > 0) return 'getData takes no arguments';
+    if (args.length < 1) return 'getData requires (token)';
     return null;
   },
   getSyncStatus: function (args) {

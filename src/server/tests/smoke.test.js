@@ -83,7 +83,7 @@ test('admin login + validateSession', async function () {
 test('getServerTime / getData / getAppData', async function () {
   const t = await post('getServerTime', []);
   assert.ok(typeof t === 'number');
-  const data = await post('getData', []);
+  const data = await post('getData', [token]);
   assert.ok(data.title);
   assert.ok(Array.isArray(data.items));
   assert.ok(data.items.length >= 3);

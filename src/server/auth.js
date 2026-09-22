@@ -164,6 +164,12 @@ function setUserField_(email, field, value) {
     bound = String(bound);
   }
   db.prepare('UPDATE users SET ' + col + ' = ? WHERE id = ?').run(bound, rec.id);
+  // Role changes (and email renames) must invalidate the cached role, or a
+  // demotion/promotion only takes effect after a server restart.
+  if (col === 'role' || col === 'email') {
+    invalidateRoleCache_(rec.email);
+    invalidateRoleCache_(String(bound === null ? '' : bound));
+  }
 }
 
 function setUserField(email, field, value) {
@@ -178,6 +184,7 @@ function addUserRecord_(email, role, salt, passwordHash, createdBy, group, depar
     email, role, salt, passwordHash, 0, createdBy || '', Date.now(), '',
     null, group || '', department || '', office || '', '', '', username || ''
   );
+  invalidateRoleCache_(email);
 }
 
 function addUserRecord(email, role, salt, passwordHash, createdBy, group, department, office, username) {
@@ -188,6 +195,7 @@ function deleteUserRecord_(email) {
   const rec = findUserRecord_(email);
   if (!rec) return false;
   db.prepare('DELETE FROM users WHERE id = ?').run(rec.id);
+  invalidateRoleCache_(rec.email);
   return true;
 }
 
@@ -229,6 +237,8 @@ function renameUserEmail_(oldEmail, newEmail) {
       db.prepare('UPDATE users SET created_by = ? WHERE id = ?').run(newPrimary, r.id);
     }
   });
+  invalidateRoleCache_(oldEmail);
+  invalidateRoleCache_(newEmail);
 }
 
 function listUserRecords_() {
@@ -366,6 +376,11 @@ function clearAttempts_(identifier) {
  * ============================================================ */
 
 const roleCache = {};
+
+function invalidateRoleCache_(email) {
+  const key = String(email || '').toLowerCase().trim();
+  if (key) delete roleCache[key];
+}
 
 function getUserRole(email) {
   email = String(email || getCurrentUser() || '').toLowerCase().trim();
@@ -611,7 +626,9 @@ function requestPasswordReset(identifier) {
 
   const rec = resolveUserByIdentifier_(identifier);
   if (!rec) {
-    return { success: true, message: 'If an account exists, your administrator has been notified.' };
+    // Identical response for unknown identifiers so the endpoint cannot be
+    // used to enumerate which accounts exist.
+    return { success: true, message: 'A reset request has been sent to your administrator.' };
   }
   const email = rec.email;
 

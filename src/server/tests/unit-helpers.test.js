@@ -196,6 +196,25 @@ test('isSafeLinkUrl_ blocks private IPs', function () {
   assert.ok(isSafeLinkUrl_('https://example.com'));
 });
 
+test('isSafeLinkUrl_ blocks alternate IP encodings (SSRF)', function () {
+  // Integer / hex / octal / shorthand inet_aton forms of loopback + private
+  assert.ok(!isSafeLinkUrl_('http://2130706433/'), 'integer loopback');
+  assert.ok(!isSafeLinkUrl_('http://0x7f000001/'), 'hex loopback');
+  assert.ok(!isSafeLinkUrl_('http://0177.0.0.1/'), 'octal loopback');
+  assert.ok(!isSafeLinkUrl_('http://127.1/'), '2-part shorthand');
+  assert.ok(!isSafeLinkUrl_('http://127.0.1/'), '3-part shorthand');
+  assert.ok(!isSafeLinkUrl_('http://0x7f.0.0.1/'), 'hex-dotted');
+  assert.ok(!isSafeLinkUrl_('http://017700000001/'), 'octal integer');
+  assert.ok(!isSafeLinkUrl_('http://10.1/'), '2-part private');
+  assert.ok(!isSafeLinkUrl_('http://0xc0a80101/'), 'hex 192.168.1.1');
+  assert.ok(!isSafeLinkUrl_('http://[::1]/'), 'IPv6 loopback literal');
+  assert.ok(!isSafeLinkUrl_('http://[::ffff:127.0.0.1]/'), 'IPv4-mapped loopback');
+  assert.ok(!isSafeLinkUrl_('http://[fe80::1]/'), 'IPv6 link-local literal');
+  // Public IPs and hostnames remain allowed
+  assert.ok(isSafeLinkUrl_('https://8.8.8.8/'));
+  assert.ok(isSafeLinkUrl_('https://docs.google.com/spreadsheets/'));
+});
+
 test('htmlToText_ strips tags', function () {
   assert.strictEqual(htmlToText_('<b>hello</b> <i>world</i>'), 'hello world');
   assert.strictEqual(htmlToText_('no tags'), 'no tags');

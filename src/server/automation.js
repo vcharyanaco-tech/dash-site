@@ -1,5 +1,5 @@
 'use strict';
-const { db } = require('./db');
+const { db, cacheGetTTL, cachePut } = require('./db');
 const auth = require('./auth');
 const notifications = require('./notifications');
 const { uuid_ } = require('./helpers');
@@ -26,6 +26,12 @@ function evaluate_(trigger,payload){
       if(r.action==='NOTIFY_SELF'&&email){notifications.appendNotification_(email,'system',String(cfg.title||r.name),String(cfg.body||payload.message||''),String(cfg.link||''),{priority:Number(cfg.priority)||0,dedupeKey:'auto:'+r.id+':'+String(payload.key||payload.id||Date.now()),dedupeTtlSeconds:Number(cfg.dedupeTtlSeconds)||21600,recordRow:Number(payload.recordRow)||0});actions++;}
       else if(r.action==='NOTIFY_STAFF'){notifications.notifyStaff_( 'system', String(cfg.title||r.name), String(cfg.body||payload.message||''), String(cfg.link||''), email,{priority:Number(cfg.priority)||0,recordRow:Number(payload.recordRow)||0,dedupeKey:'auto:'+r.id+':'+String(payload.key||payload.id||Date.now()),dedupeTtlSeconds:Number(cfg.dedupeTtlSeconds)||21600});actions++;}
       else if(r.action==='CREATE_TASK'){
+        // Idempotency: runScheduled fires every ~60s, so an overdue/due
+        // trigger would re-create the task on every tick. Dedupe per rule +
+        // payload key within the TTL (mirrors the notification dedupe).
+        const dedupeKey='auto_task_'+r.id+':'+String(payload.key||payload.id||'any')+':'+String(cfg.assignee||email||'').toLowerCase();
+        if(cacheGetTTL(dedupeKey))return;
+        cachePut(dedupeKey,'1',Number(cfg.dedupeTtlSeconds)||21600);
         const taskId=uuid_(); const now=Date.now(); const assignee=String(cfg.assignee||email||'').toLowerCase();
         const dueDays=Math.max(0,Math.min(365,Number(cfg.dueDays)||1));
         db.prepare('INSERT INTO tasks (id,record_row,record_id,title,description,assignee,status,priority,due_date,created_by,created_at,updated_at,completed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(taskId,Number(payload.recordRow)||0,String(payload.recordId||''),String(cfg.taskTitle||r.name),String(cfg.taskDescription||payload.message||''),assignee,'OPEN',String(cfg.priority||'MEDIUM').toUpperCase(),Date.now()+dueDays*86400000,'automation',now,now,null);

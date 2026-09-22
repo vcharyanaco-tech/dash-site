@@ -317,18 +317,22 @@ function unlockSubmission(submissionId, token) {
 }
 
 function deleteSubmission(submissionId, token) {
-  const editor = auth.requireEditor(token);
+  const user = auth.requireEditor(token);
 
   return runWithLock_(function () {
     const rec = findSubmissionRecord_(submissionId);
     if (!rec) throw new Error('Submission not found.');
+    // Mirrors update/lock/unlock: an admin-locked submission must not be
+    // deleted out from under the admin who locked it. Editors may still
+    // delete unlocked (or editor-locked) updates.
+    assertCanEditSubmission_(user, rec);
 
     deleteSubmissionAttachments_(rec.id);
     db.prepare('DELETE FROM submissions WHERE id = ?').run(rec.id);
 
-    try { require('./audit').logAudit_(ACTIONS.SUBMISSION_DELETE, rec.cardRow, { id: submissionId, text: rec.text }, editor.email); } catch (err) {}
+    try { require('./audit').logAudit_(ACTIONS.SUBMISSION_DELETE, rec.cardRow, { id: submissionId, text: rec.text }, user.email); } catch (err) {}
     try { require('./data-sync').requestBackup(); } catch (err) {}
-    return submissionsForCard_(rec.cardRow, editor);
+    return submissionsForCard_(rec.cardRow, user);
   });
 }
 

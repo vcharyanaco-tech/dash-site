@@ -122,7 +122,7 @@ test('requestPasswordReset does not reveal whether an account exists', async fun
   const unknown = await post('requestPasswordReset', [NOBODY]);
   assert.strictEqual(known.success, true);
   assert.strictEqual(unknown.success, true);
-  assert.match(String(unknown.message || ''), /if an account exists/i);
+  assert.strictEqual(known.message, unknown.message);
 });
 
 test('requestPasswordReset rejects an empty identifier', async function () {
