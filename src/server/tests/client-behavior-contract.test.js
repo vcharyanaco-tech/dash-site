@@ -18,7 +18,9 @@ const path = require('path');
 const { JSDOM } = require('jsdom');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const appJs = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+// Normalize to LF: the brace scan below is sensitive to a trailing \r on
+// Windows worktrees (which masks a bad regex heuristic that LF checkouts hit).
+const appJs = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8').replace(/\r\n/g, '\n');
 const html = fs.readFileSync(path.join(ROOT, 'app.html'), 'utf8');
 
 function extractFunction(name) {
@@ -27,15 +29,18 @@ function extractFunction(name) {
   if (start === -1) throw new Error('function ' + name + ' not found in app.js');
   let i = appJs.indexOf('{', start);
   let depth = 0;
-  let quote = null;
+  let quote = null;            // opening ' " `
   let inRegex = false;
-  let inClass = false;
-  let last = '';
+  let inClass = false;         // inside a regex [...] class
+  let last = '';               // previous significant char (regex-start heuristic)
   for (; i < appJs.length; i++) {
     const ch = appJs[i];
     if (inRegex) {
       if (ch === '\\') { i++; continue; }
-      if (inClass) { if (ch === ']') inClass = false; continue; }
+      if (inClass) {
+        if (ch === ']') inClass = false;
+        continue;
+      }
       if (ch === '[') { inClass = true; continue; }
       if (ch === '/') inRegex = false;
       continue;
@@ -43,6 +48,16 @@ function extractFunction(name) {
     if (quote) {
       if (ch === '\\') { i++; continue; }
       if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '/' && appJs[i + 1] === '/') {       // line comment
+      const nl = appJs.indexOf('\n', i);
+      i = nl === -1 ? appJs.length : nl;
+      continue;
+    }
+    if (ch === '/' && appJs[i + 1] === '*') {       // block comment
+      const close = appJs.indexOf('*/', i + 2);
+      i = close === -1 ? appJs.length : close + 1;
       continue;
     }
     if (ch === "'" || ch === '"' || ch === '`') { quote = ch; continue; }

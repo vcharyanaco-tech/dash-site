@@ -19,11 +19,13 @@ const path = require('path');
 const vm = require('node:vm');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const appJs = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+// Normalized to LF so the regex-aware brace scan behaves identically on CRLF
+// Windows worktrees and LF CI checkouts.
+const appJs = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8').replace(/\r\n/g, '\n');
 
-// Pull a named top-level function out of the bundle with a string-, regex- and
-// template-aware brace balance (no minifier, so module sources are preserved
-// verbatim in app.js).
+// Pull a named top-level function out of the bundle with a string-, regex-,
+// comment- and template-aware brace balance (no minifier, so module sources
+// are preserved verbatim in app.js).
 function extractFunction(name) {
   const marker = 'function ' + name + '(';
   const start = appJs.indexOf(marker);
@@ -49,6 +51,16 @@ function extractFunction(name) {
     if (quote) {
       if (ch === '\\') { i++; continue; }
       if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '/' && appJs[i + 1] === '/') {       // line comment
+      const nl = appJs.indexOf('\n', i);
+      i = nl === -1 ? appJs.length : nl;
+      continue;
+    }
+    if (ch === '/' && appJs[i + 1] === '*') {       // block comment
+      const close = appJs.indexOf('*/', i + 2);
+      i = close === -1 ? appJs.length : close + 1;
       continue;
     }
     if (ch === "'" || ch === '"' || ch === '`') { quote = ch; continue; }
