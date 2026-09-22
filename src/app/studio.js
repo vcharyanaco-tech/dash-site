@@ -479,14 +479,16 @@ function paletteActivate() {
   }
 })();
 
-/* Debounced filter for oninput (keeps direct calls synchronous) */
+/* Debounced filter for oninput (keeps direct calls synchronous).
+   Named distinctly from filterCommands: this bundle concatenates every
+   module into one scope, so a second `function filterCommands` declaration
+   would hoist over the original and capture itself (infinite recursion). */
 var _filterTimer = null;
-var _origFilterCommands = filterCommands;
-function filterCommands(query) {
+function filterCommandsDebounced_(query) {
   if (document.activeElement && document.activeElement.id === 'commandInput') {
     if (_filterTimer) clearTimeout(_filterTimer);
-    _filterTimer = setTimeout(function () { _origFilterCommands(query); }, 120);
+    _filterTimer = setTimeout(function () { filterCommands(query); }, 120);
     return;
   }
-  _origFilterCommands(query);
+  filterCommands(query);
 }

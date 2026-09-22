@@ -374,7 +374,7 @@ var i18n = (function () {
    onclick handlers referenced by index.html are defined here.
    ========================================================================== */
 
-const APP_VERSION = '1.2.1';
+const APP_VERSION = '1.2.2';
 const APP_BUILD = '2026.09.22';
 const PAGE_SIZE = 10;
 const AUDIT_PAGE_SIZE = 20;
@@ -8494,16 +8494,18 @@ function paletteActivate() {
   }
 })();
 
-/* Debounced filter for oninput (keeps direct calls synchronous) */
+/* Debounced filter for oninput (keeps direct calls synchronous).
+   Named distinctly from filterCommands: this bundle concatenates every
+   module into one scope, so a second `function filterCommands` declaration
+   would hoist over the original and capture itself (infinite recursion). */
 var _filterTimer = null;
-var _origFilterCommands = filterCommands;
-function filterCommands(query) {
+function filterCommandsDebounced_(query) {
   if (document.activeElement && document.activeElement.id === 'commandInput') {
     if (_filterTimer) clearTimeout(_filterTimer);
-    _filterTimer = setTimeout(function () { _origFilterCommands(query); }, 120);
+    _filterTimer = setTimeout(function () { filterCommands(query); }, 120);
     return;
   }
-  _origFilterCommands(query);
+  filterCommands(query);
 }
 
 /* ---------------------------------- Edit modal ---------------------------------- */

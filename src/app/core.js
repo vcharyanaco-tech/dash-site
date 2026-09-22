@@ -6,7 +6,7 @@
    onclick handlers referenced by index.html are defined here.
    ========================================================================== */
 
-const APP_VERSION = '1.2.1';
+const APP_VERSION = '1.2.2';
 const APP_BUILD = '2026.09.22';
 const PAGE_SIZE = 10;
 const AUDIT_PAGE_SIZE = 20;

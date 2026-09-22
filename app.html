@@ -81,7 +81,7 @@
       </nav>
 
       <div class="sidebar-footer">
-        <div class="version-chip" id="versionChip" title="App version">v1.2.1</div>
+        <div class="version-chip" id="versionChip" title="App version">v1.2.2</div>
         <div class="sidebar-credit" data-i18n="about.designedBy">Designed &amp; maintained by Circle Office, Haryana</div>
       </div>
     </aside>
@@ -686,7 +686,7 @@
         <div class="footer-brand-line">
           <span class="footer-title">India Post Dashboard</span>
           <span class="footer-dot" aria-hidden="true">•</span>
-          <span class="footer-version" id="footerVersion">v1.2.1</span>
+          <span class="footer-version" id="footerVersion">v1.2.2</span>
         </div>
         <div class="footer-credit">Designed, developed and maintained by <span class="footer-credit-org">Circle Office, Haryana</span></div>
       </footer>
@@ -956,7 +956,7 @@
         <div class="about-title">India Post Dashboard</div>
         <div class="about-subtitle">Circle Office Haryana — Operations &amp; Compliance Tracker</div>
         <div class="about-rows">
-          <div class="about-row"><span>Version</span><strong id="aboutVersion">1.2.1</strong></div>
+          <div class="about-row"><span>Version</span><strong id="aboutVersion">1.2.2</strong></div>
           <div class="about-row"><span>Build</span><strong id="aboutBuild">—</strong></div>
         </div>
         <p class="about-note">Built for the Department of Posts, Government of India.</p>
@@ -1390,7 +1390,7 @@
         <div class="command-search-icon" aria-hidden="true">⌘</div>
         <div class="command-search-wrap">
           <label id="commandPaletteTitle" class="sr-only" for="commandInput">Command palette</label>
-          <input id="commandInput" type="text" class="input command-input" aria-label="Search commands, records, tasks and documents" aria-controls="commandList" aria-autocomplete="list" placeholder="Search commands, records, tasks…" autocomplete="off" oninput="filterCommands(this.value)">
+          <input id="commandInput" type="text" class="input command-input" aria-label="Search commands, records, tasks and documents" aria-controls="commandList" aria-autocomplete="list" placeholder="Search commands, records, tasks…" autocomplete="off" oninput="filterCommandsDebounced_(this.value)">
           <div class="command-palette-hint"><kbd>↑</kbd><kbd>↓</kbd> navigate <kbd>Enter</kbd> open <kbd>Esc</kbd> close</div>
         </div>
         <button class="icon-btn" type="button" onclick="closeCommandPalette()" aria-label="Close command palette">

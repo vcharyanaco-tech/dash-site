@@ -94,3 +94,28 @@ test('dashboard table supports editor multi-select', function () {
   assert.ok(appJs.indexOf('selectedDashRows_') !== -1, 'selection state missing');
   assert.ok(appJs.indexOf('visibleDashColumnCount()') !== -1, 'computed colspan missing');
 });
+
+test('no top-level function name is declared twice (bundle scope collision)', function () {
+  // The build concatenates every module into a single global scope, so a
+  // second top-level `function X` hoists over the first. That produced an
+  // infinite recursion in the command palette when studio.js's debounce
+  // wrapper (also named filterCommands) captured itself via _origFilterCommands.
+  const dupes = {};
+  const lines = appJs.split('\n');
+  lines.forEach(function (line) {
+    const m = /^function\s+([A-Za-z_$][\w$]*)\s*\(/.exec(line);
+    if (m) dupes[m[1]] = (dupes[m[1]] || 0) + 1;
+  });
+  const conflicts = Object.keys(dupes).filter(function (name) { return dupes[name] > 1; });
+  assert.deepStrictEqual(conflicts, [],
+    'duplicate top-level function declarations collide across bundled modules: ' + conflicts.join(', '));
+});
+
+test('command palette input debounces through a distinct helper name', function () {
+  assert.ok(html.indexOf('oninput="filterCommandsDebounced_(this.value)"') !== -1,
+    'app.html command input must call the debounced palette helper');
+  assert.ok(appJs.indexOf('function filterCommandsDebounced_(query)') !== -1,
+    'debounced palette helper not bundled');
+  assert.ok(appJs.indexOf('_origFilterCommands') === -1,
+    'self-capturing filterCommands wrapper must stay removed');
+});
