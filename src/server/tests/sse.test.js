@@ -54,8 +54,9 @@ async function post(fn, args) {
   return body.result;
 }
 
-/** Open an SSE connection using an explicit session cookie. */
-function openSse(sessionToken) {
+/** Open an SSE connection using an explicit session cookie. Extra headers (e.g.
+ *  Last-Event-ID) can be supplied for resume tests. */
+function openSse(sessionToken, extraHeaders) {
   const state = { events: [], closed: false, done: null, req: null };
   state.req = http.request({
     host: '127.0.0.1',
@@ -63,10 +64,10 @@ function openSse(sessionToken) {
     path: '/api/events',
     method: 'GET',
     agent: false,
-    headers: {
+    headers: Object.assign({
       Accept: 'text/event-stream',
       Cookie: sessionToken ? 'dash_session=' + sessionToken : ''
-    }
+    }, extraHeaders || {})
   });
 
   state.done = new Promise(function (resolve, reject) {
@@ -202,4 +203,59 @@ test('sse: reconnect after close picks up a fresh connection', async function ()
   } finally {
     s2.close();
   }
+});
+
+test('sse: Last-Event-ID resumes dataChanged missed while disconnected', async function () {
+  const s1 = openSse(adminToken);
+  const c1 = await waitForEvent(s1, 'connected');
+  const lastId = Number(c1[0].id);
+  s1.close();
+
+  // Mutate while disconnected — the broadcast is logged server-side.
+  await post('setRecordDisplay', [firstRecordRow, true, adminToken]);
+
+  // Reconnect with Last-Event-ID: the missed dataChanged must be replayed.
+  const s2 = openSse(adminToken, { 'Last-Event-ID': String(lastId) });
+  try {
+    const events = await waitForEvent(s2, 'dataChanged');
+    assert.ok(events.length >= 1, 'missed dataChanged replayed after reconnect');
+    assert.ok(Number(events[0].id) > lastId, 'replayed event id is newer than the last seen one');
+  } finally {
+    s2.close();
+  }
+});
+
+test('sse: a gap older than the resume log sends outOfSync', async function () {
+  const eventsMod = require('../events');
+  eventsMod._resetForTest();
+
+  const s1 = openSse(adminToken);
+  await waitForEvent(s1, 'connected'); // id 1 lives at the bottom of the log
+  s1.close();
+
+  // Roll the bounded resume log (limit 64) far past id 1.
+  for (let i = 0; i < 70; i++) eventsMod.broadcast('noop' + i, {});
+
+  const s2 = openSse(adminToken, { 'Last-Event-ID': '1' });
+  try {
+    const events = await waitForEvent(s2, 'outOfSync');
+    assert.ok(events.length >= 1, 'outOfSync sent when the gap exceeds the resume log');
+  } finally {
+    s2.close();
+  }
+});
+
+test('sse: burst of dataChanged broadcasts coalesces into one', async function () {
+  const stream = openSse(adminToken);
+  await waitForEvent(stream, 'connected');
+  const marker = stream.events.length;
+
+  await post('setRecordDisplay', [firstRecordRow, true, adminToken]);
+  await post('setRecordDisplay', [firstRecordRow, false, adminToken]);
+  await post('setRecordDisplay', [firstRecordRow, true, adminToken]);
+
+  // Give the 80ms coalesce window + flush time to elapse.
+  await new Promise(function (resolve) { setTimeout(resolve, 300); });
+  const dataChanges = stream.events.slice(marker).filter(function (e) { return e.event === 'dataChanged'; });
+  assert.strictEqual(dataChanges.length, 1, 'a rapid burst coalesces into a single dataChanged');
 });

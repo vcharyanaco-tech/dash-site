@@ -218,13 +218,30 @@ async function cleanupOrphanedKeys_() {
     const l1 = r1.ok ? await r1.json() : { files: [] };
     const l2 = r2.ok ? await r2.json() : { files: [] };
     const dels = [];
-    (l1.files || []).forEach(function (f) { if (!local.has('uploads/' + f)) dels.push('/uploads/' + encodeURIComponent(f)); });
+    let referencedNotLocal = 0;
+    // Only delete a remote upload whose local copy is absent AND which no
+    // documents row references. A file that is referenced but missing locally
+    // (e.g. a restore where the file fetch failed) MUST keep its KV copy —
+    // deleting it would break the attachment permanently on the next redeploy.
+    (l1.files || []).forEach(function (f) {
+      if (local.has('uploads/' + f)) return;
+      const referenced = (function () {
+        try {
+          return !!require('./db').db.prepare('SELECT 1 FROM documents WHERE file_key = ?').get(String(f));
+        } catch (e) { return false; }
+      })();
+      if (referenced) { referencedNotLocal++; return; }
+      dels.push('/uploads/' + encodeURIComponent(f));
+    });
     (l2.files || []).forEach(function (f) { if (!local.has('meetings/' + f)) dels.push('/meetings/' + encodeURIComponent(f)); });
     for (const u of dels.slice(0, 200)) {
       await fetchWithTimeout_(BASE + u, { method: 'DELETE', headers: authHeaders() });
       stats.deletesToday++;
     }
-    if (dels.length) console.log('[data-sync] cleaned ' + dels.length + ' orphaned KV key(s)');
+    if (dels.length || referencedNotLocal) {
+      console.log('[data-sync] cleaned ' + dels.length + ' orphaned KV key(s)' +
+        (referencedNotLocal ? ', kept ' + referencedNotLocal + ' referenced-but-locally-missing upload(s)' : ''));
+    }
   } catch (err) {
     console.error('[data-sync] cleanup failed: ' + (err && err.message));
   }
@@ -344,18 +361,18 @@ async function backupData() {
     const buf = fs.readFileSync(tmp);
     try { fs.unlinkSync(tmp); } catch (e) {}
     if (!ok) { out.backedUp = false; out.error = 'snapshot failed integrity check'; return out; }
-    if (!(await putBufCounted_(BASE + '/db', buf))) {
-      out.backedUp = false;
-      out.reason = 'budget';
-      out.error = 'daily KV write budget exhausted (backups paused for today)';
-      return out;
-    }
-    out.dbBytes = buf.length;
 
+    // Files FIRST, DB LAST. The /db put is the commit point of a snapshot: an
+    // upload that reaches KV but whose DB never arrives is a harmless orphan the
+    // sweep removes; a DB that arrives while its files are still uploading means
+    // documents rows reference keys the snapshot doesn't carry — broken
+    // attachments after the next redeploy. Every file loop also reserves one
+    // write so the /db commit always gets the final budget slot.
     let names = [];
     try { names = fs.readdirSync(UPLOAD_DIR); } catch (e) {}
     for (const name of names) {
       if (name.indexOf('.') === 0) continue;
+      if (budgetLeft() <= 1) break;
       const p = path.join(UPLOAD_DIR, name);
       let st;
       try { st = fs.statSync(p); } catch (e) { continue; }
@@ -367,6 +384,7 @@ async function backupData() {
     try { meetNames = fs.readdirSync(MEETINGS_DIR); } catch (e) {}
     for (const name of meetNames) {
       if (name.indexOf('.') === 0) continue;
+      if (budgetLeft() <= 1) break;
       const p = path.join(MEETINGS_DIR, name);
       let st;
       try { st = fs.statSync(p); } catch (e) { continue; }
@@ -374,6 +392,14 @@ async function backupData() {
       if (!(await putBufCounted_(BASE + '/meetings/' + encodeURIComponent(name), fs.readFileSync(p)))) break;
       out.meetings++;
     }
+
+    if (!(await putBufCounted_(BASE + '/db', buf))) {
+      out.backedUp = false;
+      out.reason = 'budget';
+      out.error = 'daily KV write budget exhausted (backups paused for today)';
+      return out;
+    }
+    out.dbBytes = buf.length;
 
     await cleanupOrphanedKeys_();
     await enforceRetention_();
@@ -498,4 +524,11 @@ function startAutoSync() {
   });
 }
 
-module.exports = { enabled, restoreData, backupData, startAutoSync, requestBackup, getBackupStatus, deleteRemoteFile, enforceRetention_, retentionCutoff_, RETENTION_DAYS };
+module.exports = {
+  enabled, restoreData, backupData, startAutoSync, requestBackup, getBackupStatus, deleteRemoteFile, enforceRetention_, retentionCutoff_, RETENTION_DAYS,
+  // Test hook: run the orphan sweep regardless of its hourly throttle.
+  async _runCleanupOrphanedKeysForTest() {
+    lastCleanupAt = 0;
+    await cleanupOrphanedKeys_();
+  }
+};

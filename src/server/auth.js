@@ -83,17 +83,36 @@ function userRecordFromRow_(row) {
   };
 }
 
+// Indexed lookups: a user's email column holds the primary address in the
+// common case (single address), where the unique index serves the query in
+// O(log n). The O(n) scan survives only as a fallback for legacy comma-separated
+// alias cells, which cannot be addressed by an exact indexed match.
+function getUserRowByEmail_(email) {
+  const addrs = emailList_(email);
+  for (let i = 0; i < addrs.length; i++) {
+    const row = db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(addrs[i]);
+    if (row) return row;
+  }
+  return null;
+}
+
+function userFromRow_(row) {
+  const rec = userRecordFromRow_(row);
+  rec.id = row.id;
+  rec.rawEmail = String(row.email || '').trim();
+  rec.email = primaryEmail_(row.email);
+  return rec;
+}
+
 function findUserRecord_(email) {
   if (!emailList_(email).length) return null;
+  const row = getUserRowByEmail_(email);
+  if (row) return userFromRow_(row);
+  // Multi-address cells (comma-separated aliases) live on one row: fall back
+  // to the scan so aliases keep resolving exactly as before.
   const rows = db.prepare('SELECT * FROM users').all();
   for (let i = 0; i < rows.length; i++) {
-    if (emailsMatch_(rows[i].email, email)) {
-      const rec = userRecordFromRow_(rows[i]);
-      rec.id = rows[i].id;
-      rec.rawEmail = String(rows[i].email || '').trim();
-      rec.email = primaryEmail_(rows[i].email);
-      return rec;
-    }
+    if (emailsMatch_(rows[i].email, email)) return userFromRow_(rows[i]);
   }
   return null;
 }
@@ -105,15 +124,11 @@ function findUserRecord(email) {
 function findUserByUsername_(username) {
   username = String(username || '').toLowerCase().trim();
   if (!username) return null;
+  const row = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(username);
+  if (row) return userFromRow_(row);
   const rows = db.prepare('SELECT * FROM users').all();
   for (let i = 0; i < rows.length; i++) {
-    if (String(rows[i].username || '').toLowerCase().trim() === username) {
-      const rec = userRecordFromRow_(rows[i]);
-      rec.id = rows[i].id;
-      rec.rawEmail = String(rows[i].email || '').trim();
-      rec.email = primaryEmail_(rows[i].email);
-      return rec;
-    }
+    if (String(rows[i].username || '').toLowerCase().trim() === username) return userFromRow_(rows[i]);
   }
   return null;
 }
@@ -121,15 +136,17 @@ function findUserByUsername_(username) {
 function resolveUserByIdentifier_(identifier) {
   identifier = String(identifier || '').toLowerCase().trim();
   if (!identifier) return null;
+  if (isValidEmail_(identifier)) {
+    const row = getUserRowByEmail_(identifier);
+    if (row) return userFromRow_(row);
+  }
+  const byUsername = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(identifier);
+  if (byUsername) return userFromRow_(byUsername);
   const rows = db.prepare('SELECT * FROM users').all();
   for (let i = 0; i < rows.length; i++) {
     const rowUsername = String(rows[i].username || '').toLowerCase().trim();
     if (emailsMatch_(rows[i].email, identifier) || (rowUsername && rowUsername === identifier)) {
-      const rec = userRecordFromRow_(rows[i]);
-      rec.id = rows[i].id;
-      rec.rawEmail = String(rows[i].email || '').trim();
-      rec.email = primaryEmail_(rows[i].email);
-      return rec;
+      return userFromRow_(rows[i]);
     }
   }
   return null;
