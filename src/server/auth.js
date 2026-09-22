@@ -727,6 +727,10 @@ function setMyDivisionalDashboard(url, token) {
 
 function getDivisionalDashboardLinks(token) {
   requireLogin_(token);
+  return listDivisionalDashboardLinks_();
+}
+
+function listDivisionalDashboardLinks_() {
   return listUserRecords_()
     .filter(function (u) { return /^((do_)|(rms_))/i.test(String(u.username || '')); })
     .map(function (u) {
@@ -739,6 +743,20 @@ function getDivisionalDashboardLinks(token) {
         url: u.divisionalDashboardUrl || ''
       };
     });
+}
+
+/* Admin: update (or, with an empty url, remove) the divisional dashboard
+   link any DO/RMS user has provided. Admin-only by design — a normal user
+   can still manage their own link with setMyDivisionalDashboard. */
+function adminSetDivisionalDashboard(email, url, token) {
+  const admin = requireAdmin_(token);
+  const rec = findUserRecord_(email);
+  if (!rec) throw new Error('No user found for that email address.');
+  const value = String(url || '').trim();
+  if (value && !isValidDashboardUrl_(value)) throw new Error('Enter a valid http:// or https:// dashboard URL.');
+  db.prepare('UPDATE users SET divisional_dashboard_url = ? WHERE lower(trim(email)) = lower(trim(?))').run(value, rec.email);
+  try { logAudit_(require('./audit'), 'DIVISIONAL_DASHBOARD_LINK_ADMIN_UPDATE', '', { username: rec.username || '', url: value, by: admin.email }, admin.email); } catch (err) {}
+  return { success: true, username: rec.username || '', url: value, rows: listDivisionalDashboardLinks_() };
 }
 
 function adminGetUsers(token) {
@@ -1213,6 +1231,7 @@ module.exports = {
   getMyDivisionalDashboard,
   setMyDivisionalDashboard,
   getDivisionalDashboardLinks,
+  adminSetDivisionalDashboard,
   getAssignableUsers,
   adminAddUser,
   adminUpdateUser,

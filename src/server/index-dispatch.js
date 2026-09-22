@@ -48,6 +48,7 @@ const dispatch = {
   getMyDivisionalDashboard: function (args) { return auth.getMyDivisionalDashboard(A(args, 0)); },
   setMyDivisionalDashboard: function (args) { return auth.setMyDivisionalDashboard(A(args, 0), A(args, 1)); },
   getDivisionalDashboardLinks: function (args) { return auth.getDivisionalDashboardLinks(A(args, 0)); },
+  adminSetDivisionalDashboard: function (args) { return auth.adminSetDivisionalDashboard(A(args, 0), A(args, 1), A(args, 2)); },
   adminGetUsers: function (args) { return auth.adminGetUsers(A(args, 0)); },
   adminAddUser: function (args) { return auth.adminAddUser(A(args, 0), A(args, 1), A(args, 2), A(args, 3), A(args, 4), A(args, 5), A(args, 6), A(args, 7)); },
   adminUpdateUser: function (args) { return auth.adminUpdateUser(A(args, 0), A(args, 1), A(args, 2)); },

@@ -213,16 +213,97 @@ function loadDivisionalDashboardLinks() {
   const body = getEl('divisionalDashboardLinksBody');
   if (!body) return;
   ApiService.getDivisionalDashboardLinks().then(function (rows) {
-    rows = rows || [];
-    if (!rows.length) { body.innerHTML = '<div class="form-status">No DO/RMS users found.</div>'; return; }
-    body.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr><th>Designation / username</th><th>Office</th><th>Dashboard</th></tr></thead><tbody>' + rows.map(function (r) {
-      const dashHref = linkableHref(r.url || '');
-      const link = dashHref ? '<a href="' + escAttr(dashHref) + '" target="_blank" rel="noopener noreferrer">Open dashboard</a>' : '<span class="form-status">Not provided</span>';
-      return '<tr><td><strong>' + escapeHtml(r.designation || r.username || '—') + '</strong></td><td>' + escapeHtml(r.office || r.department || '—') + '</td><td>' + link + '</td></tr>';
-    }).join('') + '</tbody></table></div>';
+    renderDivisionalDashboardRows(rows || []);
   }).catch(function (err) {
     if (handleServerFailure(err)) return;
     body.innerHTML = '<div class="form-status error">Could not load dashboard links.</div>';
+  });
+}
+
+function renderDivisionalDashboardRows(rows) {
+  const body = getEl('divisionalDashboardLinksBody');
+  if (!body) return;
+  if (!rows.length) { body.innerHTML = '<div class="form-status">No DO/RMS users found.</div>'; return; }
+  const actionsHead = appState.isAdmin ? '<th>Actions</th>' : '';
+  body.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr><th>Designation / username</th><th>Office</th><th>Dashboard</th>' + actionsHead + '</tr></thead><tbody>' + rows.map(function (r) {
+    const dashHref = linkableHref(r.url || '');
+    const link = dashHref ? '<a href="' + escAttr(dashHref) + '" target="_blank" rel="noopener noreferrer">Open dashboard</a>' : '<span class="form-status">Not provided</span>';
+    const actions = appState.isAdmin
+      ? '<button class="btn btn-secondary btn-small" type="button" onclick="openAdminEditDivisionalDashboard(this)" data-email="' + escAttr(r.email) + '" data-username="' + escAttr(r.username || '') + '" data-url="' + escAttr(r.url || '') + '">Edit</button>'
+      : '';
+    return '<tr><td><strong>' + escapeHtml(r.designation || r.username || '—') + '</strong></td><td>' + escapeHtml(r.office || r.department || '—') + '</td><td>' + link + '</td>' + (appState.isAdmin ? '<td>' + actions + '</td>' : '') + '</tr>';
+  }).join('') + '</tbody></table></div>';
+}
+
+let adminEditDivisionalDashboardEmail = '';
+
+function openAdminEditDivisionalDashboard(btn) {
+  const modal = getEl('adminEditDivisionalDashboardModal');
+  if (!modal) return;
+  const email = (btn && btn.dataset && btn.dataset.email) || '';
+  const username = (btn && btn.dataset && btn.dataset.username) || '';
+  const currentUrl = (btn && btn.dataset && btn.dataset.url) || '';
+  adminEditDivisionalDashboardEmail = email;
+  const userEl = getEl('adminEditDivisionalDashboardUser');
+  if (userEl) userEl.textContent = (username || email) + ' (' + email + ')';
+  const urlEl = getEl('adminEditDivisionalDashboardUrl');
+  if (urlEl) urlEl.value = String(currentUrl || '');
+  const statusEl = getEl('adminEditDivisionalDashboardStatus');
+  if (statusEl) { statusEl.textContent = ''; statusEl.className = 'form-status'; }
+  const removeBtn = getEl('adminEditDivisionalDashboardRemove');
+  if (removeBtn) removeBtn.style.display = String(currentUrl || '').trim() ? '' : 'none';
+  openDialog('adminEditDivisionalDashboardModal');
+}
+
+function closeAdminEditDivisionalDashboard() {
+  closeDialog('adminEditDivisionalDashboardModal');
+}
+
+function saveAdminEditDivisionalDashboard() {
+  if (!appState.isAdmin) { showToast('Admin access required', 'warning'); return; }
+  const urlEl = getEl('adminEditDivisionalDashboardUrl');
+  const statusEl = getEl('adminEditDivisionalDashboardStatus');
+  const url = urlEl ? String(urlEl.value || '').trim() : '';
+  if (!url) {
+    if (statusEl) { statusEl.textContent = 'Enter a URL, or use Remove link to clear it.'; statusEl.className = 'form-status error'; }
+    return;
+  }
+  if (!/^https?:\/\//i.test(url)) {
+    if (statusEl) { statusEl.textContent = 'Enter a valid http:// or https:// URL.'; statusEl.className = 'form-status error'; }
+    return;
+  }
+  if (statusEl) { statusEl.textContent = 'Saving…'; statusEl.className = 'form-status'; }
+  ApiService.adminSetDivisionalDashboard(adminEditDivisionalDashboardEmail, url).then(function (res) {
+    if (res && res.success) {
+      closeAdminEditDivisionalDashboard();
+      renderDivisionalDashboardRows((res && res.rows) || []);
+      showToast('Dashboard link updated.', 'success');
+    } else {
+      if (statusEl) { statusEl.textContent = (res && res.message) || 'Could not update the link.'; statusEl.className = 'form-status error'; }
+    }
+  }).catch(function (err) {
+    if (handleServerFailure(err)) return;
+    if (statusEl) { statusEl.textContent = 'Update failed: ' + (err.message || err); statusEl.className = 'form-status error'; }
+  });
+}
+
+function removeAdminEditDivisionalDashboard() {
+  if (!appState.isAdmin) { showToast('Admin access required', 'warning'); return; }
+  showConfirm({
+    title: 'Remove dashboard link',
+    message: 'Remove the dashboard link for ' + adminEditDivisionalDashboardEmail + '?',
+    okLabel: 'Remove',
+    danger: true
+  }).then(function (ok) {
+    if (!ok) return;
+    ApiService.adminSetDivisionalDashboard(adminEditDivisionalDashboardEmail, '').then(function (res) {
+      closeAdminEditDivisionalDashboard();
+      renderDivisionalDashboardRows((res && res.rows) || []);
+      showToast('Dashboard link removed.', 'success');
+    }).catch(function (err) {
+      if (handleServerFailure(err)) return;
+      showToast('Remove failed: ' + (err.message || err), 'error');
+    });
   });
 }
 

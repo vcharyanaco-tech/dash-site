@@ -53,7 +53,8 @@ const VALUE = {
   rowNumbers: [], recipient: 'a@x.com', templateKey: 'x', docId: 'x',
   keep: true, recordId: 'R1', fileName: 'f.txt', fileBytes: 'Yg==',
   mimeType: 'text/plain', submissionId: '1', apiKey: 'k', opts: undefined,
-  recordingId: 'r', question: 'summarize', payload: {}, history: []
+  recordingId: 'r', question: 'summarize', payload: {}, history: [],
+  url: 'https://dash.example.com'
 };
 
 // These hit external services / heavy I/O; they are exercised by their own

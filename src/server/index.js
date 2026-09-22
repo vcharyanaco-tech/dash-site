@@ -33,6 +33,7 @@ const AUTH_ARG_INDEX = Object.freeze({
   adminGetUserActivity: 0, adminDeleteUser: 1, adminResetPassword: 2,
   adminEmailAllUsers: 2, getAssignableUsers: 0, getMyNotifications: 0,
   getMyDivisionalDashboard: 0, setMyDivisionalDashboard: 1, getDivisionalDashboardLinks: 0,
+  adminSetDivisionalDashboard: 2,
   getNotificationPrefs: 0, setNotificationPrefs: 1,
   markNotificationsRead: 1, clearMyNotifications: 0, updateNotificationState: 2, snoozeNotification: 2, dismissNotification: 1, restoreNotification: 1, getNotificationDigest: 0, getTaskCounts: 0,
   createTask: 1, getTasks: 1, getMyTasks: 0, updateTask: 2, deleteTask: 1,
@@ -786,6 +787,10 @@ const VALIDATORS = {
   },
   getDivisionalDashboardLinks: function (args) {
     if (args.length < 1) return 'getDivisionalDashboardLinks requires (token)';
+    return null;
+  },
+  adminSetDivisionalDashboard: function (args) {
+    if (args.length < 3) return 'adminSetDivisionalDashboard requires (email, url, token)';
     return null;
   },
   adminGetUsers: function (args) {

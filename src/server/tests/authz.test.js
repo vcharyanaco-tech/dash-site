@@ -29,7 +29,7 @@ before(async function () {
 
 after(function () {
   server.close();
-  db.prepare("DELETE FROM users WHERE email IN ('authz_viewer_e2e@test.com','authz_editor_e2e@test.com')").run();
+  db.prepare("DELETE FROM users WHERE email IN ('authz_viewer_e2e@test.com','authz_editor_e2e@test.com','authz_do_e2e@test.com')").run();
 });
 
 async function post(fn, args) {
@@ -201,6 +201,59 @@ test('viewer rejected: installEnterpriseTriggers', async function () {
     post('installEnterpriseTriggers', [viewerToken]),
     /admin permission required/i
   );
+});
+
+// ------------------------------------------------------------------
+// adminSetDivisionalDashboard: admin required (viewer/editor rejected)
+// ------------------------------------------------------------------
+
+test('viewer rejected: adminSetDivisionalDashboard', async function () {
+  await assert.rejects(
+    post('adminSetDivisionalDashboard', ['authz_do_e2e@test.com', 'https://dash.example.com/do', viewerToken]),
+    /admin permission required/i
+  );
+});
+
+test('editor rejected: adminSetDivisionalDashboard', async function () {
+  await assert.rejects(
+    post('adminSetDivisionalDashboard', ['authz_do_e2e@test.com', 'https://dash.example.com/do', editorToken]),
+    /admin permission required/i
+  );
+});
+
+test('admin: adminSetDivisionalDashboard updates then removes a DO dashboard link', async function () {
+  await post('adminAddUser', ['authz_do_e2e@test.com', 'do_authz_test', 'VIEWER', 'AuthzDo123!', '', '', '', adminToken]);
+
+  await assert.rejects(
+    post('adminSetDivisionalDashboard', ['nobody@test.com', 'https://dash.example.com/do', adminToken]),
+    /no user found/i
+  );
+
+  await assert.rejects(
+    post('adminSetDivisionalDashboard', ['authz_do_e2e@test.com', 'not-a-url', adminToken]),
+    /valid http/i
+  );
+
+  const set = await post('adminSetDivisionalDashboard', ['authz_do_e2e@test.com', 'https://dash.example.com/do', adminToken]);
+  assert.strictEqual(set.success, true);
+  assert.strictEqual(set.url, 'https://dash.example.com/do');
+  let rows = await post('getDivisionalDashboardLinks', [adminToken]);
+  const row = rows.find(function (r) { return String(r.email).toLowerCase() === 'authz_do_e2e@test.com'; });
+  assert.ok(row, 'DO user appears in the divisional dashboard links list');
+  assert.strictEqual(row.url, 'https://dash.example.com/do');
+
+  const update = await post('adminSetDivisionalDashboard', ['authz_do_e2e@test.com', 'https://dash.example.com/rms', adminToken]);
+  assert.strictEqual(update.url, 'https://dash.example.com/rms');
+  rows = await post('getDivisionalDashboardLinks', [adminToken]);
+  assert.strictEqual(rows.find(function (r) { return String(r.email).toLowerCase() === 'authz_do_e2e@test.com'; }).url, 'https://dash.example.com/rms');
+
+  const cleared = await post('adminSetDivisionalDashboard', ['authz_do_e2e@test.com', '', adminToken]);
+  assert.strictEqual(cleared.success, true);
+  assert.strictEqual(cleared.url, '');
+  rows = await post('getDivisionalDashboardLinks', [adminToken]);
+  const clearRow = rows.find(function (r) { return String(r.email).toLowerCase() === 'authz_do_e2e@test.com'; });
+  assert.ok(clearRow, 'DO user still listed after link removal');
+  assert.strictEqual(clearRow.url, '');
 });
 
 test('admin: setupEnterpriseAddons allowed (no-op when disabled)', async function () {
