@@ -9969,7 +9969,7 @@ function askDashAi(){
   var input=getEl('dashAiInput'); if(!input)return; var q=input.value.trim(); if(!q)return;
   addDashAiMessage_('user',q); input.value=''; var box=getEl('dashAiMessages'); var loading=document.createElement('div');loading.className='workspace-ai-message assistant workspace-ai-loading';loading.textContent='Thinking…';box.appendChild(loading);box.scrollTop=box.scrollHeight;
   if(!ApiService.askDashboardAi){loading.textContent='Dash AI is not available in this build.';return;}
-  ApiService.askDashboardAi(q,buildDashAiContext_()).then(function(r){loading.remove();addDashAiMessage_('assistant',r&&r.success?r.text||r.answer||'No answer returned.':(r&&r.message)||'AI could not answer right now.');}).catch(function(e){loading.remove();addDashAiMessage_('assistant','AI request failed: '+(e&&e.message?e.message:'Please try again.'));});
+  ApiService.askDashboardAi(q,buildDashAiContext_()).then(function(r){loading.remove();addDashAiMessage_('assistant',r&&r.success?r.text||r.answer||r.insights||'No answer returned.':(r&&r.message)||'AI could not answer right now.');}).catch(function(e){loading.remove();addDashAiMessage_('assistant','AI request failed: '+(e&&e.message?e.message:'Please try again.'));});
 }
 
 function toggleMobileOperatingMode(force){
