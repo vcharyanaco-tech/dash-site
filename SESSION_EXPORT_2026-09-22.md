@@ -128,12 +128,39 @@ touched file, app.js round-trip byte-exact (22 modules, 11802 lines).
 - Full objective is complete; nothing from the 23-item list remains except the
   excluded #13.
 
+## Deploy verification + post-release fixes (same day, pushed to `main`)
+- Pushed `af712bf`..`1bd82f6` (`3559b06`, then `0b27dac`, `1a37c85`, `1bd82f6`).
+- **CI LF extraction bug** (batch E suite failed on GitHub's LF checkout):
+  `extractFunction` never skipped `//` and `/* */` comments, so a `/` inside a
+  comment pushed it into regex mode and swallowed ~26 KB of following source
+  (masked locally by CRLF). Both `client-behavior-contract.test.js` and
+  `frontend-xss-hardening.test.js` now skip comments; CI recovered (510/510).
+- **deploy-worker 0-job rejection**: `if: ${{ secrets.X != '' }}` is illegal —
+  GitHub rejects workflows whose `if:` references the `secrets` context (no
+  jobs, run failure, logs 404). Reworked to job-level `env: CF_TOKEN` +
+  step `if: env.CF_TOKEN != ''`. Worker workflow now runs and is green; the
+  Deploy step is skipped because `CLOUDFLARE_API_TOKEN` is not in repo secrets.
+- **Command palette / global search / modal-✕ breakage** (reported live):
+  duplicate top-level `function filterCommands` in studio.js (original line 228
+  + debounce wrapper line 485). Both hoist into the single concatenated scope,
+  so `var _origFilterCommands = filterCommands` captured the wrapper **itself**
+  → infinite recursion (RangeError), dead palette, runaway 120 ms filter loop
+  that froze interactions (felt like close buttons dead). Fixed by renaming the
+  wrapper to `filterCommandsDebounced_` and calling it from app.html's input
+  `oninput`. Guard tests added to `frontend-contract.test.js`: no duplicate
+  top-level function names allowed across the bundle; palette helper name
+  enforced; `_origFilterCommands` absent.
+- Version bumped **1.2.1 → 1.2.2** (bump sources first, then rebuild).
+- Verified: CI success, Pages deploy success, Worker success(skip); live
+  `app.js` serves `APP_VERSION = '1.2.2'` (521828 bytes); `live-check.cjs`
+  3/3 PASSED. Suite is 512/512 on Node 24 and Node 22 (CI mode).
+
 ## Session state for the next agent
 - **Strays:** `VS tools.code-workspace`, `dash-site-presentation-mode-big-pickle.md`
   untracked — never stage/commit.
 - Rebuild chain: edit `src/app/*.js`/`src/i18n.js` → `node build/build-app.js`
   → `node build/split-app.js` (must be byte-exact). `app.js` is currently in
   sync with the sources.
-- Version is now **1.2.1**; `bump-version.ps1` is safe to re-run (String.Replace).
-- Working tree is clean after `af712bf`; **not pushed** — awaiting the user's
-  go-ahead before `git push origin main`.
+- Version is now **1.2.2**; `bump-version.ps1` is safe to re-run (String.Replace).
+- To actually deploy the Cloudflare worker, set `CLOUDFLARE_API_TOKEN` in repo
+  secrets (the workflow currently runs its graceful skip branch).
