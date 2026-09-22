@@ -8850,9 +8850,21 @@ function renderMyDay() {
     loadNotifications(true).catch(function () { /* badge still shows */ })
   ]).then(function (results) {
     var myTasks = results[0] || [];
+
+    // Records (== the ones My Day turns into reviews/submissions counts) may
+    // not have been applied on a cold boot — a user can land here via the
+    // `goto-myday` command or a PWA shortcut before the first getAppData
+    // resolves. Painting "All clear" from an empty appState.items would be a
+    // false negative that hides overdue work. Wait for the first
+    // DataRefreshed instead of guessing.
+    if (!appState.lastUpdated) {
+      waitForMyDayData_(panel);
+      return;
+    }
+
     var data = buildMyDayData_(myTasks);
     renderMyDayContent_(panel, data);
-  }).catch(function () {
+  })  .catch(function () {
     panel.innerHTML =
       '<div class="empty-state">' +
       '<div class="empty-state-icon">' + svgIcon('alert') + '</div>' +
@@ -8860,6 +8872,28 @@ function renderMyDay() {
       '<div class="empty-state-subtitle">Please try again later.</div>' +
       '</div>';
   });
+}
+
+/* Cold-boot guard: My Day's records (reviews/overdue work/submissions) come
+   from appState.items, which starts empty and is only filled after the first
+   getAppData resolves. If the user lands here before that (PWA shortcut,
+   command palette, or a deep link straight to My Day), painting the summary
+   now would show a misleading "All clear". Instead hold a quiet "Preparing
+   your day…" state and re-render the moment the first refresh lands —
+   one-shot, so we never hot-replace My Day while a later refresh is also
+   in flight. */
+function waitForMyDayData_(panel) {
+  var shown = false;
+  var retry = function () {
+    if (!shown) {
+      panel.innerHTML =
+        '<div class="myday-loading"><div class="spinner"></div><span>Preparing your day…</span></div>';
+      shown = true;
+    }
+    EventBus.off('DataRefreshed', retry);
+    renderMyDay();
+  };
+  EventBus.on('DataRefreshed', retry);
 }
 
 /* ---------------------------------- Data ---------------------------------- */
