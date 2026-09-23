@@ -97,7 +97,7 @@
           </button>
           <div class="topbar-search">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <input id="searchInput" type="search" placeholder="Search records..." aria-label="Global search" autocomplete="off">
+            <input id="searchInput" type="search" placeholder="Search records..." aria-label="Global search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" name="">
             <kbd class="search-kbd" aria-hidden="true">Ctrl K</kbd>
           </div>
           <div class="live-clock" id="liveClock" title="Live time (12-hour)" aria-hidden="true">--:--:-- --</div>
@@ -1353,7 +1353,7 @@
           <span id="fathomStatus" style="color:var(--muted);font-size:13px;"></span>
         </div>
         <div class="form-row">
-          <input id="fathomSearchInput" class="input" type="search" aria-label="Search Fathom meetings" placeholder="Search Fathom meetings…" autocomplete="off" onkeydown="if(event.key==='Enter') searchFathomMeetings()">
+          <input id="fathomSearchInput" class="input" type="search" aria-label="Search Fathom meetings" placeholder="Search Fathom meetings…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" name="" onkeydown="if(event.key==='Enter') searchFathomMeetings()">
           <button class="btn btn-ghost" type="button" onclick="searchFathomMeetings()">Search</button>
         </div>
         <div id="fathomKeyRow" class="form-row hidden">
@@ -1368,7 +1368,7 @@
         <div id="meetingNotesResult"></div>
         <div class="meeting-divider"><span>previous recordings &amp; notes</span></div>
         <div class="form-row meeting-search-row">
-          <input id="meetingsSearchInput" class="input" type="search" aria-label="Search previous recordings and notes" placeholder="Search by title or date…" autocomplete="off" oninput="filterPreviousMeetings()">
+          <input id="meetingsSearchInput" class="input" type="search" aria-label="Search previous recordings and notes" placeholder="Search by title or date…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" name="" oninput="filterPreviousMeetings()">
           <button id="meetingsRefreshBtn" class="btn btn-ghost" type="button" onclick="loadPreviousMeetings()">Refresh</button>
         </div>
         <div id="previousMeetingsList" class="meeting-notes-list"></div>
@@ -1390,7 +1390,7 @@
         <div class="command-search-icon" aria-hidden="true">⌘</div>
         <div class="command-search-wrap">
           <label id="commandPaletteTitle" class="sr-only" for="commandInput">Command palette</label>
-          <input id="commandInput" type="text" class="input command-input" aria-label="Search commands, records, tasks and documents" aria-controls="commandList" aria-autocomplete="list" placeholder="Search commands, records, tasks…" autocomplete="off" oninput="filterCommandsDebounced_(this.value)">
+          <input id="commandInput" type="text" class="input command-input" aria-label="Search commands, records, tasks and documents" aria-controls="commandList" aria-autocomplete="list" placeholder="Search commands, records, tasks…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" name="" oninput="filterCommandsDebounced_(this.value)">>
           <div class="command-palette-hint"><kbd>↑</kbd><kbd>↓</kbd> navigate <kbd>Enter</kbd> open <kbd>Esc</kbd> close</div>
         </div>
         <button class="icon-btn" type="button" onclick="closeCommandPalette()" aria-label="Close command palette">
