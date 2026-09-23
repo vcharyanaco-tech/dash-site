@@ -119,3 +119,13 @@ test('command palette input debounces through a distinct helper name', function 
   assert.ok(appJs.indexOf('_origFilterCommands') === -1,
     'self-capturing filterCommands wrapper must stay removed');
 });
+
+test('Dash AI ask path reads the server-stamped r.insights (regression guard: ec98110)', function () {
+  assert.ok(appJs.indexOf('r.text||r.answer||r.insights||') !== -1 ||
+            appJs.indexOf('r.text || r.answer || r.insights ||') !== -1,
+    'workspace ask fallback must read server-stamped r.insights');
+  assert.ok(appJs.indexOf('r.text||r.answer||') !== -1 ||
+            appJs.indexOf('r.text || r.answer ||') !== -1,
+    'workspace ask fallback must keep the legacy text/answer fallback');
+});
+
