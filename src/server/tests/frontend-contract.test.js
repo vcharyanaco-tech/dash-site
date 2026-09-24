@@ -129,3 +129,16 @@ test('Dash AI ask path reads the server-stamped r.insights (regression guard: ec
     'workspace ask fallback must keep the legacy text/answer fallback');
 });
 
+test('global search modal input repaints results on typing', function () {
+  // v1.2.2 repurposed the topbar #searchInput into a launcher for the Global
+  // Search modal and moved focus to #globalSearchInput, but nothing listened
+  // for input on that field — so typing in the search bar did nothing
+  // (the old dashboard-filter path in init.js is bypassed while
+  // handleWorkspaceSearchInput_ exists). Every keystroke must re-run
+  // renderGlobalSearch_.
+  assert.ok(appJs.indexOf("gsi.addEventListener('input'") !== -1,
+    'global search input must repaint results on every keystroke');
+  assert.ok(appJs.indexOf('renderGlobalSearch_(gsi.value)') !== -1,
+    'global search input must re-run renderGlobalSearch_ with its value');
+});
+
