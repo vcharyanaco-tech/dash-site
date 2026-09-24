@@ -11,6 +11,7 @@ material is organised under `src/`.
 | --- | --- |
 | `index.html` | Public landing page |
 | `app.html` | The dashboard app (SPA) |
+| `aadhar.html` | Aadhaar MIS Reporting dashboard — Haryana Circle (PIN-gated login, served at `/aadhar.html`; source lives in the separate `aadhar-dashboard` repo) |
 | `app.js` | App bundle (talks to the GAS/Worker API) |
 | `offline-queue.js` | Offline request queue for the app |
 | `sw.js` / `manifest.json` | PWA service worker + manifest |
