@@ -3303,7 +3303,7 @@ body.modal-open { overflow: hidden; }
 .sidebar-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 35; /* below sidebar drawer (var(--z-sidebar) = 40); media query overrides to var(--z-backdrop) */
+  z-index: calc(var(--z-sidebar) - 1); /* below the drawer layer (--z-sidebar = 40) */
   background: var(--overlay);
   opacity: 0;
   visibility: hidden;
@@ -3395,8 +3395,10 @@ body.sidebar-open .sidebar-backdrop {
   /* Modals: full-screen on very small screens */
   .modal-card { max-width: 100%; margin: var(--sp-1); border-radius: 8px; }
 
-  /* Sidebar backdrop */
-  .sidebar-backdrop { position: fixed; inset: 0; background: var(--overlay); z-index: var(--z-backdrop); }
+  /* Sidebar backdrop: stays below the drawer (--z-sidebar = 40) so nav items
+     remain tappable. Base rule already fixes/insets it; only the z-index was
+     wrongly elevated here to var(--z-backdrop) = 90, covering the sidebar. */
+  .sidebar-backdrop { position: fixed; inset: 0; background: var(--overlay); z-index: calc(var(--z-sidebar) - 1); }
 
   /* Auth screen adjustments */
   .auth-screen { padding: var(--sp-2); }
