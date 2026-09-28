@@ -30,5 +30,5 @@
   Node/Express backend in `src/server` (SQLite via better-sqlite3, SSE + cookie
   sessions), `src/worker` Cloudflare Worker sidecar.
 - Every session progress is captured in `SESSION_EXPORT_YYYY-MM-DD.md`.
-- Verification: `src/server/tests` via `node src/server/tests/run-tests.cjs`;
+- Verification: `src/server/tests` via `node src/server/run-tests.cjs`;
   `node --check` on touched JS.

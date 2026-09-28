@@ -1,4 +1,18 @@
-# Session export — 2026-09-25
+# Session export — 2026-09-25 (deployed 2026-09-28)
+
+## Deployment
+- `aadhar-dashboard` is live on Render at `https://aadhar-dashboard-5i4x.onrender.com`
+  (service `srv-dasvqh8473hc73e53a3g`, blueprint `exs-dasvkr60tbcc7399igbg`).
+- Plan `free`, region `oregon`, native Python runtime, `PYTHON_VERSION=3.14.3`,
+  `numInstances=1`, autoDeploy on commit, **no persistent disk** (Render only offers
+  disks on paid plans, and the user accepted the data loss).
+- `ADMIN_USERNAME` and `ADMIN_PASSWORD` set as Render env vars, not committed.
+- Cloudflare secret `AADHAR_ORIGIN` set on worker `dashv1-proxy`, not committed.
+- Health check `/aadhar-dashboard/_stcore/health` returns `200 ok`; the app page
+  serves at `/aadhar-dashboard/`.
+- **Local data was not migrated.** `data/aadhaar.db` is not on the service, and on
+  the free plan it would be discarded on the next deploy anyway. The service starts
+  with an empty database bootstrapped from the admin credentials.
 
 ## Sync
 - `git fetch origin` on 2026-09-28 found a new upstream commit `a60c8c9` ("Delete
@@ -7,9 +21,9 @@
 - Both repos had no git identity configured; set `vcharyanaco-tech
   <vcharyanaco@gmail.com>` as a repo-local identity in `dash-site` and
   `aadhar-dashboard` to match existing history.
-- 19 untracked scraped/support files remain intentionally unstaged.
-- `AGENTS.md` lists the test runner as `src/server/tests/run-tests.cjs`; the real
-  path is `src/server/run-tests.cjs`. Worth correcting in `AGENTS.md`.
+- 20 untracked scraped/support files remain intentionally unstaged.
+- Corrected the test-runner path in `AGENTS.md`: the real path is
+  `src/server/run-tests.cjs`, not `src/server/tests/run-tests.cjs`.
 
 ## Work completed
 - Hardened the Aadhaar Streamlit app authentication, database initialization, backup validation, admin restore flow, and deployment data directory.
@@ -51,16 +65,20 @@
   still handled by the 308 redirect in `worker.js`.
 
 ## Commits
-- `a18ce19` (aadhar-dashboard) `feat: replace React SPA with hardened Streamlit Aadhaar MIS dashboard`
+- `a18ce19`, `a58b907`, `234d152` (aadhar-dashboard): Streamlit migration, README, and the
+  switch to the free Render plan in `oregon` with no disk.
 - `92debba` (dash-site) `feat: proxy /aadhar-dashboard/ to the Streamlit origin; drop legacy aadhar.html`
-- Neither repo is pushed yet; see Pending Tasks.
+- Both repos pushed to `origin/main`.
 
 ## Pending Tasks
-- Obtain `RENDER_API_KEY` securely or create the Render Blueprint manually.
-- Set Render secrets `ADMIN_USERNAME` and `ADMIN_PASSWORD` without committing them.
-- Push the Aadhaar repository first (`a18ce19`), provision Render, and capture its origin URL.
-- Set Cloudflare `AADHAR_ORIGIN`, then push `dash-site` (`92debba`) and deploy the Worker.
-  Pushing `dash-site` before `AADHAR_ORIGIN` is set is safe but the route will 503.
-- Migrate `data/aadhaar.db` through the admin backup/restore flow and verify canonical HTTP/WebSocket behavior.
-- Optional: fix the stale test-runner path in `AGENTS.md`.
+- Verify the canonical route end to end at `https://dashboardharyana.site/aadhar-dashboard/`
+  after this push deploys the Worker, including a WebSocket connection.
+- Sign in at the canonical URL with the admin credentials and confirm the app is
+  usable with an empty database.
+- Decide how real data reaches the service. Options: re-upload the source
+  spreadsheets after each deploy, attach a disk on a paid plan, or move to
+  Render Postgres.
+- Rotate the Render API key. It was shared in a chat transcript, so treat it as
+  exposed. The Render admin password was also shared in plaintext and is weak;
+  consider replacing it.
 - Never stage unrelated scraped/support files or commit `data/aadhaar.db`.
