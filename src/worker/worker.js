@@ -334,6 +334,22 @@ export default {
     } catch (err) {
       // Transient failure — the next tick retries.
     }
+
+    // Same treatment for the Aadhaar Streamlit service, which is also on the
+    // Render free plan and would otherwise sleep after 15 min idle. Ping
+    // Streamlit's own health endpoint (not the app root) so the wake-up does
+    // not run the script. Already covered by the 21:00-06:00 IST return above.
+    const aadhar = env.AADHAR_ORIGIN;
+    if (aadhar) {
+      try {
+        await fetch(aadhar.replace(/\/+$/, '') + '/aadhar-dashboard/_stcore/health', {
+          method: 'GET',
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; dashv1-aadhar-keepalive)' },
+        });
+      } catch (err) {
+        // Transient failure — the next tick retries.
+      }
+    }
   },
 };
 
@@ -810,7 +826,14 @@ async function handleEnterpriseRoute(request, env, url, ctx) {
   }
 
   const token = bearerToken(request);
-  if (!token || token !== (env.WORKER_API_TOKEN || '')) {
+  // The Aadhaar Streamlit service gets its own token so it can reach only its
+  // single-key bridge endpoint, not the enterprise routes (AI, email, WhatsApp)
+  // that WORKER_API_TOKEN unlocks. The Node service keeps using
+  // WORKER_API_TOKEN for every /api/backup path, unchanged.
+  const aadharSyncOnly = url.pathname === '/api/backup/aadhaar-db';
+  const authorized = !!token && (token === (env.WORKER_API_TOKEN || '')
+    || (aadharSyncOnly && token === (env.AADHAR_SYNC_TOKEN || '')));
+  if (!authorized) {
     return jsonResponse({ error: 'unauthorized' }, 401);
   }
 
@@ -914,6 +937,11 @@ function hashText(str) {
 const BACKUP_DB_KEY = 'backup:db.sqlite';
 const BACKUP_UPLOAD_PREFIX = 'backup:uploads/';
 const BACKUP_MEETING_PREFIX = 'backup:meetings/';
+/* The Aadhaar Streamlit service (aadhar-dashboard repo) uses the same
+ * namespace as a single-key bridge. Its state is one SQLite file — uploads
+ * are parsed in memory, so no file blobs are mirrored. Deliberately a
+ * different key so the two services never overwrite each other. */
+const BACKUP_AADHAR_KEY = 'backup:aadhaar.sqlite';
 
 async function handleBackup(request, env, url) {
   const kv = env.DATA_BACKUP_KV;
@@ -937,6 +965,28 @@ async function handleBackup(request, env, url) {
     }
     if (request.method === 'DELETE') {
       await kv.delete(BACKUP_DB_KEY);
+      return jsonResponse({ ok: true });
+    }
+    return jsonResponse({ error: 'method not allowed' }, 405);
+  }
+
+  // GET/PUT/DELETE /api/backup/aadhaar-db — the Aadhaar Streamlit service's
+  // whole state is one SQLite file, so this is a single key rather than the
+  // db + uploads + meetings layout used by the Node service.
+  if (rest === '/aadhaar-db') {
+    if (request.method === 'GET') {
+      const v = await kv.get(BACKUP_AADHAR_KEY, 'arrayBuffer');
+      if (v === null) return jsonResponse({ error: 'no backup yet' }, 404);
+      // no-store: a restore must never receive a CDN-cached stale snapshot.
+      return new Response(v, { headers: { ...COMMON_HEADERS, 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' } });
+    }
+    if (request.method === 'PUT') {
+      const buf = await request.arrayBuffer();
+      await kv.put(BACKUP_AADHAR_KEY, buf);
+      return jsonResponse({ ok: true, bytes: buf.byteLength });
+    }
+    if (request.method === 'DELETE') {
+      await kv.delete(BACKUP_AADHAR_KEY);
       return jsonResponse({ ok: true });
     }
     return jsonResponse({ error: 'method not allowed' }, 405);
