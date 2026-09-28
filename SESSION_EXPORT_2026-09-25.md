@@ -10,9 +10,43 @@
 - Cloudflare secret `AADHAR_ORIGIN` set on worker `dashv1-proxy`, not committed.
 - Health check `/aadhar-dashboard/_stcore/health` returns `200 ok`; the app page
   serves at `/aadhar-dashboard/`.
+- Verified through the Worker at the canonical URL:
+  - `/aadhar-dashboard/index.html`, `/aadhar-dashboard` and `/aadhar.html` all `308`
+    to `/aadhar-dashboard/`.
+  - `/aadhar-dashboard/` serves the Streamlit app (`<title>Streamlit</title>`).
+  - `/aadhar-dashboard/_stcore/health` returns `200 ok`.
+  - WebSocket `/aadhar-dashboard/_stcore/stream` returns `101` with
+    `Origin: https://dashboardharyana.site`, and `403` for an untrusted origin.
 - **Local data was not migrated.** `data/aadhaar.db` is not on the service, and on
   the free plan it would be discarded on the next deploy anyway. The service starts
   with an empty database bootstrapped from the admin credentials.
+
+## Important: the Worker deploy workflow does not deploy
+
+`.github/workflows/deploy-worker.yml` guards the real deploy with
+`if: env.CF_TOKEN != ''`, where `CF_TOKEN` is the repository secret
+`CLOUDFLARE_API_TOKEN`. That secret is **not set** on the repository, so every push
+takes the "Skip" step, which still reports the job as `success`. A green
+"Deploy dashv1-proxy to Cloudflare" therefore does **not** mean the Worker was
+updated.
+
+Symptom seen on 2026-09-28: after a successful push, `/aadhar-dashboard/index.html`
+returned `200` with the old static landing page instead of `308`, and
+`/api/health` still showed `cfWorker` timings, proving the request reached the
+Worker but ran stale code.
+
+Fix options: add `CLOUDFLARE_API_TOKEN` to the repository secrets, or deploy
+manually. For this session the Worker was deployed manually with
+`npx wrangler@4.118.0 deploy` from `src/worker` (version
+`8eaac846-c84a-4ef3-915a-7ee3c98dfc5c`).
+
+Two further gotchas when deploying by hand:
+- Use the bundled `wrangler deploy`. `--no-bundle` fails with
+  `No such module "worker-enterprise-routes.js"` because `worker.js` imports it.
+- Re-apply the secrets after deploying. `wrangler deploy` warns
+  "Edits that have been made via the script API will be overridden by your local
+  code and config", so confirm `AADHAR_ORIGIN` with `wrangler secret list` and
+  re-run `wrangler secret put AADHAR_ORIGIN` if it is missing.
 
 ## Sync
 - `git fetch origin` on 2026-09-28 found a new upstream commit `a60c8c9` ("Delete
@@ -71,14 +105,15 @@
 - Both repos pushed to `origin/main`.
 
 ## Pending Tasks
-- Verify the canonical route end to end at `https://dashboardharyana.site/aadhar-dashboard/`
-  after this push deploys the Worker, including a WebSocket connection.
-- Sign in at the canonical URL with the admin credentials and confirm the app is
-  usable with an empty database.
+- Add `CLOUDFLARE_API_TOKEN` to the repository secrets, or accept manual
+  `wrangler deploy` from `src/worker` for every change. Until then the Worker
+  silently does not update on push.
+- Sign in at `https://dashboardharyana.site/aadhar-dashboard/` with the admin
+  credentials and confirm the app is usable with an empty database.
 - Decide how real data reaches the service. Options: re-upload the source
   spreadsheets after each deploy, attach a disk on a paid plan, or move to
   Render Postgres.
 - Rotate the Render API key. It was shared in a chat transcript, so treat it as
-  exposed. The Render admin password was also shared in plaintext and is weak;
-  consider replacing it.
+  exposed. The Render admin password was also shared in plaintext and is weak
+  (`Dop@12345`); consider replacing it.
 - Never stage unrelated scraped/support files or commit `data/aadhaar.db`.
