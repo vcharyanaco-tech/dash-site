@@ -1,7 +1,8 @@
 name = "dashv1-proxy"
 main = "worker.js"
 account_id = "a01eb877733d755cb57e25827a9c52fe"
-compatibility_date = "2026-08-04"
+compatibility_date = "2026-08-06"
+compatibility_flags = ["nodejs_compat"]
 
 # Routes: serve the Worker at dashboardharyana.site
 # Requires the domain to be active on Cloudflare (nameservers pointing to Cloudflare)

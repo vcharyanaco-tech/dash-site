@@ -141,6 +141,14 @@ function applySecurityHeaders(response, request) {
   // Enforce HTTPS for a year (no includeSubDomains: dashboardharyana.site may
   // still be reached on a cleartext alias and we don't force subdomains).
   headers.set('Strict-Transport-Security', 'max-age=31536000');
+  if (response.webSocket) {
+    return new Response(null, {
+      status: 101,
+      statusText: response.statusText,
+      headers,
+      webSocket: response.webSocket,
+    });
+  }
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
@@ -187,6 +195,22 @@ export default {
   },
 
   async route_(request, env, ctx, url, path) {
+
+    if (path === '/aadhar.html' || path === '/aadhar-dashboard' || path === '/aadhar-dashboard/index.html') {
+      const canonical = new URL(url);
+      canonical.pathname = '/aadhar-dashboard/';
+      return Response.redirect(canonical.toString(), 308);
+    }
+
+    if (path.startsWith('/aadhar-dashboard/')) {
+      if (!env.AADHAR_ORIGIN) {
+        return new Response('Aadhaar dashboard is temporarily unavailable.', {
+          status: 503,
+          headers: { ...COMMON_HEADERS, 'Retry-After': '60' },
+        });
+      }
+      return forwardToStreamlit(request, url, env.AADHAR_ORIGIN);
+    }
 
     // ── Route: /api/* ───────────────────────────────────────────────────────
     // Enterprise routes (AI insights, WhatsApp) use Worker-only secrets and are
@@ -705,6 +729,61 @@ async function forwardToServer(request, url, serverOrigin) {
   // plan limit) and add latency before the first byte; pass-through keeps
   // bounded JSON and document/file streaming off the isolate heap.
   return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: newHeaders });
+}
+
+async function forwardToStreamlit(request, url, origin) {
+  const base = String(origin).replace(/\/+$/, '');
+  const target = new URL(base + url.pathname + (url.search || ''));
+  const headers = new Headers(request.headers);
+  headers.delete('Host');
+  headers.set('X-Forwarded-Host', url.host);
+  headers.set('X-Forwarded-Proto', url.protocol.replace(':', ''));
+  headers.set('X-Forwarded-Prefix', '/aadhar-dashboard');
+  const clientIp = request.headers.get('cf-connecting-ip');
+  if (clientIp) {
+    const forwardedFor = request.headers.get('x-forwarded-for');
+    headers.set('X-Forwarded-For', forwardedFor ? forwardedFor + ', ' + clientIp : clientIp);
+  }
+
+  const isWebSocket = String(request.headers.get('Upgrade') || '').toLowerCase() === 'websocket';
+  if (isWebSocket) headers.set('Upgrade', 'websocket');
+  const isBodyless = request.method === 'GET' || request.method === 'HEAD';
+
+  let resp;
+  try {
+    resp = await fetch(target.toString(), {
+      method: request.method,
+      headers,
+      body: isBodyless ? undefined : request.body,
+      redirect: 'manual',
+      signal: isWebSocket ? undefined : AbortSignal.timeout(300000),
+    });
+  } catch (err) {
+    return maintenanceResponse_(err && err.message);
+  }
+
+  if (resp.webSocket) return resp;
+  if (resp.status === 101) return maintenanceResponse_('upstream returned an invalid WebSocket response');
+  if (resp.status === 502 || resp.status === 503 || resp.status === 504) {
+    return maintenanceResponse_('Aadhaar dashboard unavailable (HTTP ' + resp.status + ')');
+  }
+
+  const headersOut = new Headers(resp.headers);
+  const location = headersOut.get('Location');
+  if (location && [301, 302, 303, 307, 308].indexOf(resp.status) !== -1) {
+    try {
+      const upstreamRedirect = new URL(location, target);
+      if (upstreamRedirect.origin === target.origin) {
+        headersOut.set('Location', upstreamRedirect.pathname + upstreamRedirect.search + upstreamRedirect.hash);
+      }
+    } catch (err) {
+    }
+  }
+  return new Response(resp.body, {
+    status: resp.status,
+    statusText: resp.statusText,
+    headers: headersOut,
+  });
 }
 
 /** Clean 503 while the backend is restarting. The dashboard frontend sees the
