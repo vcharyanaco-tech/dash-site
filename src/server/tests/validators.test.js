@@ -214,6 +214,8 @@ const validatorCases = [
   { fn: 'getCardAiInsight', goodArgs: [adminToken, 1], badArgs: [adminToken, null], msg: /row is required/ },
   { fn: 'getLinkContentAiInsight', goodArgs: [adminToken, 1], badArgs: [], msg: /getLinkContentAiInsight requires/ },
   { fn: 'getLinkContentAiInsight', goodArgs: [adminToken, 1], badArgs: [adminToken, null], msg: /row is required/ },
+  { fn: 'getLinkPrintContent', goodArgs: [adminToken, 1], badArgs: [], msg: /getLinkPrintContent requires/ },
+  { fn: 'getLinkPrintContent', goodArgs: [adminToken, 1], badArgs: [adminToken, null], msg: /row is required/ },
   { fn: 'askLinkAi', goodArgs: [adminToken, 1, 'q'], badArgs: [], msg: /askLinkAi requires/ },
   { fn: 'askLinkAi', goodArgs: [adminToken, 1, 'q'], badArgs: [adminToken, 1, ''], msg: /question is required/ },
   { fn: 'saveAskLinkHistory', goodArgs: [adminToken, 1, []], badArgs: [], msg: /saveAskLinkHistory requires/ },

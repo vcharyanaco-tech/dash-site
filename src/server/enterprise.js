@@ -36,7 +36,11 @@ const {
   ENTERPRISE_AI_LINK_MAX_CHARS,
   ENTERPRISE_AI_PREVIEW_MAX_ROWS,
   ENTERPRISE_AI_PREVIEW_MAX_CELLS,
-  ENTERPRISE_AI_PREVIEW_MAX_CELL_CHARS
+  ENTERPRISE_AI_PREVIEW_MAX_CELL_CHARS,
+  LINK_PRINT_MAX_ROWS,
+  LINK_PRINT_MAX_COLS,
+  LINK_PRINT_MAX_CELL_CHARS,
+  LINK_PRINT_CACHE_TTL_MS
 } = require('./config');
 const helpers = require('./helpers');
 const auth = require('./auth');
@@ -720,6 +724,100 @@ async function getLinkContentAiInsight(token, row) {
     }
   }
   return result;
+}
+
+/* In-process cache of fetched linked-sheet tables, keyed by URL.
+   Printing a wide report fetches one sheet per record; without this, printing
+   the same report twice re-fetches every sheet and hits Google's export
+   endpoint again. Entries expire so edits to a sheet are eventually picked up.
+   Only successful reads are cached, so a sheet that was private becomes
+   readable as soon as it is shared. */
+const linkPrintTableCache_ = new Map();
+
+function linkPrintCacheGet_(key) {
+  const hit = linkPrintTableCache_.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > LINK_PRINT_CACHE_TTL_MS) {
+    linkPrintTableCache_.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+function linkPrintCacheSet_(key, value) {
+  linkPrintTableCache_.set(key, { at: Date.now(), value: value });
+  // Bound the map so a long-lived process cannot grow it without limit.
+  if (linkPrintTableCache_.size > 200) {
+    const oldest = Array.from(linkPrintTableCache_.entries())
+      .sort(function (a, b) { return a[1].at - b[1].at; })
+      .slice(0, linkPrintTableCache_.size - 200);
+    oldest.forEach(function (e) { linkPrintTableCache_.delete(e[0]); });
+  }
+}
+
+function capSheetRows_(rows) {
+  const trimmed = rows.map(function (r) {
+    return r.slice(0, LINK_PRINT_MAX_COLS).map(function (c) {
+      const s = String(c === null || c === undefined ? '' : c).replace(/\s+/g, ' ').trim();
+      return s.length > LINK_PRINT_MAX_CELL_CHARS ? s.substring(0, LINK_PRINT_MAX_CELL_CHARS) + '\u2026' : s;
+    });
+  });
+  return {
+    rows: trimmed.slice(0, LINK_PRINT_MAX_ROWS),
+    rowTotal: trimmed.length,
+    cols: Math.min.apply(null, trimmed.map(function (r) { return r.length; }).concat([0]))
+  };
+}
+
+/* Any logged-in user: returns the real table behind a record's linked Google
+   Sheet so a printed report can embed it beside the record.
+
+   This deliberately does NOT touch the AI provider. The rows are the sheet's
+   actual CSV export, so there is nothing for a model to generate - and an
+   official report must never show model-written content as if it were the
+   sheet's data. AI-synthesised tables would be fabrication.
+
+   Only sheets shared "anyone with the link" resolve: the export endpoint is
+   fetched anonymously because this app holds no per-user Google OAuth for
+   arbitrary user-linked sheets (src/server/sync-sheet.js credentials cover the
+   dashboard's own backing sheet only). A private sheet returns a Google
+   interstitial, which is reported as unreadable rather than silently dropped. */
+async function getLinkPrintContent(token, row) {
+  auth.requireLogin(token);
+  const item = findItemByRow_(row);
+  if (!item) return { success: false, message: 'Record not found.' };
+  const url = firstLinkUrl_(item);
+  if (!url) return { success: true, available: false, reason: 'no-link', row: item.row, id: item.id };
+  if (!isSheetsLink_(url)) {
+    return { success: true, available: false, reason: 'not-a-sheet', row: item.row, id: item.id, url: url };
+  }
+  if (!helpers.isSafeLinkUrl_(url)) {
+    return { success: false, message: 'Unsafe link rejected.' };
+  }
+
+  const cached = linkPrintCacheGet_(url);
+  if (cached) {
+    return {
+      success: true, available: true, cached: true, row: item.row, id: item.id,
+      url: url, format: 'table', rows: cached.rows, rowTotal: cached.rowTotal,
+      cols: cached.cols, truncated: cached.rowTotal > cached.rows.length
+    };
+  }
+
+  const table = await fetchLinkTable_(url);
+  if (!table.rows.length) {
+    return {
+      success: true, available: false, reason: 'unreadable', row: item.row, id: item.id, url: url,
+      hint: 'Sheet could not be read. It may be private - linked sheets must be shared "anyone with the link".'
+    };
+  }
+  const capped = capSheetRows_(table.rows);
+  linkPrintCacheSet_(url, capped);
+  return {
+    success: true, available: true, cached: false, row: item.row, id: item.id,
+    url: url, format: 'table', rows: capped.rows, rowTotal: capped.rowTotal,
+    cols: capped.cols, truncated: capped.rowTotal > capped.rows.length
+  };
 }
 
 /* Editor/admin-gated: answers a user's question about a record and its
@@ -1656,6 +1754,7 @@ module.exports = {
   getAIInsights,
   getCardAiInsight,
   getLinkContentAiInsight,
+  getLinkPrintContent,
   askLinkAi,
   askDashboardAi,
   getAllAskLinkHistory,

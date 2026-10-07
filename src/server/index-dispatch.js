@@ -120,6 +120,7 @@ const dispatch = {
   },
   getCardAiInsight: function (args) { return enterprise.getCardAiInsight(A(args, 0), A(args, 1)); },
   getLinkContentAiInsight: function (args) { return enterprise.getLinkContentAiInsight(A(args, 0), A(args, 1)); },
+  getLinkPrintContent: function (args) { return enterprise.getLinkPrintContent(A(args, 0), A(args, 1)); },
   askLinkAi: function (args) { return enterprise.askLinkAi(A(args, 0), A(args, 1), A(args, 2)); },
   askDashboardAi: function (args) { return enterprise.askDashboardAi(A(args, 0), A(args, 1), A(args, 2)); },
   getAllAskLinkHistory: function (args) { return enterprise.getAllAskLinkHistory(A(args, 0)); },
