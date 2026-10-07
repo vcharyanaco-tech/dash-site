@@ -211,3 +211,49 @@ test('the endpoint does not call the AI provider', async function () {
   assert.ok(body.indexOf('fetchLinkTable_') !== -1,
     'getLinkPrintContent must read the real sheet via fetchLinkTable_');
 });
+
+// ------------------------------------------------------------------
+// Regression: the uncached return path
+//
+// The row cap was removed in 64ebc48 but the return statement kept reading
+// `capped.rows` / `capped.rowTotal` from the removed variable. Every uncached
+// fetch therefore threw a ReferenceError, which the client's .catch swallows,
+// so a record's sheet table silently went missing from the FIRST print and
+// only appeared on a later print once the URL cache had been populated.
+// `node --check` cannot see it (it is not a syntax error) and the endpoint
+// tests above all short-circuit before the fetch, so it shipped. This test
+// asserts on the source because the failure needs a live Google fetch to
+// reproduce; a real one is not acceptable in the unit suite.
+// ------------------------------------------------------------------
+
+test('the uncached return path has no stale reference to the removed row cap', function () {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'enterprise.js'), 'utf8');
+
+  const start = src.indexOf('async function getLinkPrintContent');
+  assert.notStrictEqual(start, -1, 'getLinkPrintContent not found in enterprise.js');
+  const open = src.indexOf('{', start);
+  let depth = 0;
+  let end = -1;
+  for (let i = open; i < src.length; i++) {
+    if (src.charAt(i) === '{') depth++;
+    else if (src.charAt(i) === '}') {
+      depth--;
+      if (depth === 0) { end = i; break; }
+    }
+  }
+  assert.notStrictEqual(end, -1, 'could not find the end of getLinkPrintContent');
+  const body = src.slice(start, end);
+
+  assert.strictEqual(/\bcapped\b/.test(body), false,
+    'getLinkPrintContent still references "capped", the row-cap variable removed in 64ebc48. '
+    + 'An uncached sheet fetch throws a ReferenceError and the sheet table is dropped from the print.');
+
+  // The row cap is gone, so the returned rows must come from the guard that
+  // replaced it.
+  assert.ok(/rows:\s*guarded\.rows/.test(body),
+    'the uncached path must return the guarded rows');
+  assert.ok(/rowTotal:\s*guarded\.rowTotal/.test(body),
+    'the uncached path must return the guarded rowTotal');
+});

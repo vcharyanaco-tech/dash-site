@@ -828,7 +828,7 @@ async function getLinkPrintContent(token, row) {
   linkPrintCacheSet_(url, guarded);
   return {
     success: true, available: true, cached: false, row: item.row, id: item.id,
-    url: url, format: 'table', rows: capped.rows, rowTotal: capped.rowTotal,
+    url: url, format: 'table', rows: guarded.rows, rowTotal: guarded.rowTotal,
     cols: guarded.cols, truncated: guarded.truncated
   };
 }
