@@ -87,6 +87,24 @@ function buildPrintPage(opts) {
   th { background: #1f5c2e; color: #fff; font-weight: 600; white-space: nowrap; font-size: 13.5px; letter-spacing: 0.2px; }
   td.num { white-space: nowrap; }
   tr:nth-child(even) td { background: #f9fafb; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  /* A 7-column grid has no usable room on a 210mm portrait page, so portrait
+     restacks each record into a label/value card rather than squeezing columns.
+     The wide table keeps its natural grid in landscape. */
+  body.portrait .wide-report thead { display: none; }
+  body.portrait .wide-report, body.portrait .wide-report tbody { display: block; width: 100%; }
+  body.portrait .wide-report tr {
+    display: block; border: 1px solid #d1d5db; border-radius: 8px;
+    padding: 4px 12px; margin: 0 0 12px; background: #fff;
+  }
+  body.portrait .wide-report td {
+    display: grid; grid-template-columns: 32% 1fr; gap: 10px;
+    border: none; border-bottom: 1px dotted #d1d5db;
+    padding: 6px 0; background: none;
+  }
+  body.portrait .wide-report tr td:last-child { border-bottom: none; }
+  body.portrait .wide-report td::before { content: attr(data-label); font-weight: 600; color: #1f5c2e; }
   .empty { text-align: center; color: #6b7280; padding: 28px 16px; font-size: 14px; }
   .sub-block { background: #f3f7f4; border-left: 4px solid #1f5c2e; margin-top: 10px; padding: 14px 16px; }
   .record-print-block { border: 1px solid #d1d5db; border-radius: 8px; padding: 14px 16px; margin: 0 0 14px; break-inside: avoid; page-break-inside: avoid; }
@@ -100,7 +118,7 @@ function buildPrintPage(opts) {
   #pageRule { display: none; }
 </style>
 </head>
-<body>
+<body class="${initialOrient}">
   <div class="print-toolbar">
     <span class="toolbar-title">Print layout</span>
     <button type="button" id="btnOrientV" class="${initialOrient === 'portrait' ? 'active' : ''}" onclick="setOrient('portrait')">Vertical</button>
@@ -108,7 +126,7 @@ function buildPrintPage(opts) {
     <label class="print-toggle" title="Include the hyperlink data table on each record"><input type="checkbox" id="toggleLinks" checked onchange="toggleLinks(this.checked)"> Include hyperlink data</label>
     <button type="button" class="print-btn" onclick="doPrint()">Print</button>
   </div>
-  <style id="pageRule">@page { size: ${opts.landscape ? 'A4 landscape' : 'A4 portrait'}; margin: 16mm; }</style>
+  <style id="pageRule">@page { size: ${opts.landscape ? '297mm 210mm' : '210mm 297mm'}; margin: 16mm; }</style>
   <div class="report-header">
     <h1>${escapeHtml(title)}</h1>
     <div class="meta">Generated ${escapeHtml(now)}${subtitle}</div>
@@ -117,8 +135,13 @@ function buildPrintPage(opts) {
   <div class="report-footer">India Post Dashboard &middot; Circle Office Haryana</div>
   <script${scriptNonce}>
     function setOrient(o) {
-      var rule = '@page { size: ' + (o === 'landscape' ? 'A4 landscape' : 'A4 portrait') + '; margin: 16mm; }';
-      document.getElementById('pageRule').textContent = rule;
+      // Explicit dimensions rather than the "A4 landscape" keyword: only
+      // Chromium honours the named+orientation form, whereas <length>{2} is
+      // portable. 297mm x 210mm is A4 landscape, 210mm x 297mm is A4 portrait.
+      var dims = o === 'landscape' ? '297mm 210mm' : '210mm 297mm';
+      document.getElementById('pageRule').textContent = '@page { size: ' + dims + '; margin: 16mm; }';
+      document.body.classList.toggle('portrait', o === 'portrait');
+      document.body.classList.toggle('landscape', o === 'landscape');
       document.getElementById('btnOrientV').classList.toggle('active', o === 'portrait');
       document.getElementById('btnOrientH').classList.toggle('active', o === 'landscape');
     }
@@ -275,9 +298,9 @@ function printReport(scope, includeSubmissions) {
       }).join('');
     } else {
       const rowsHtml = items.map(function (item) {
-        return `<tr><td class="num">${escapeHtml(item.id)}</td><td>${escapeHtml(item.sector)}</td><td>${escapeHtml(item.description)}</td><td class="preserve-whitespace">${item.actionHtml || renderLinkableText(item.action || '')}</td><td class="preserve-whitespace">${escapeHtml(item.lastMeetingInstructions || '')}</td><td>${escapeHtml(item.responsibility)}</td><td>${escapeHtml(item.reviewDate)}</td></tr>`;
+        return `<tr><td class="num" data-label="#">${escapeHtml(item.id)}</td><td data-label="Sector">${escapeHtml(item.sector)}</td><td data-label="Description">${escapeHtml(item.description)}</td><td class="preserve-whitespace" data-label="Action">${item.actionHtml || renderLinkableText(item.action || '')}</td><td class="preserve-whitespace" data-label="Last Meeting Instructions">${escapeHtml(item.lastMeetingInstructions || '')}</td><td data-label="Responsibility">${escapeHtml(item.responsibility)}</td><td data-label="Review">${escapeHtml(item.reviewDate)}</td></tr>`;
       }).join('');
-      bodyHtml = `<table><thead><tr><th>#</th><th>Sector</th><th>Description</th><th>Action</th><th>Last Meeting Instructions</th><th>Responsibility</th><th>Review</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
+      bodyHtml = `<table class="wide-report"><thead><tr><th>#</th><th>Sector</th><th>Description</th><th>Action</th><th>Last Meeting Instructions</th><th>Responsibility</th><th>Review</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
     }
     const count = items.length;
     const subCount = useSubs ? countSubmissions_(subMap) : 0;

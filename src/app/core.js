@@ -493,10 +493,15 @@ function debounce(fn, ms) {
  * about:blank documents that inherit this page's CSP — including its nonce —
  * so document.write() builders must re-stamp the same value onto their own
  * inline <script> blocks or they'll be refused. Returns '' when no nonce is
- * present (e.g. file:// or a non-nonce environment). */
+ * present (e.g. file:// or a non-nonce environment).
+ *
+ * Must read the IDL `nonce` property, NOT getAttribute('nonce'): browsers hide
+ * the content attribute after parsing (so CSS attribute selectors cannot exfiltrate
+ * it), which makes getAttribute return '' and silently strips the nonce from
+ * every dynamically written print page. */
 function pageCspNonce() {
   const el = document.querySelector('script[nonce]');
-  return el ? (el.getAttribute('nonce') || '') : '';
+  return el ? (el.nonce || '') : '';
 }
 
 function svgIcon(name) {
