@@ -207,30 +207,86 @@ Two independent deploy targets, and they behave differently:
 
 ## Pending tasks
 
-1. **Verify the page count.** The whole point of the densification was
-   16 pages → 5–6. Never measured against the real dataset. Check both
-   orientations.
-2. **Reconcile the two print goals.** Printing full sheet tables *reverses* the
-   density win. A report where every record carries a complete sheet table will
-   be much longer than 5–6 pages. The cap was removed at the user's request, so
-   this tension is now deliberate. Decide whether the density target still holds
-   when the checkbox is ticked, or whether the two modes should be separate.
+> **Resume session (same day, after re-sync from origin):** tasks 1, 2 and 5
+> below are now closed; the Housekeeping item is moot. See "Resume session" at
+> the end of this file.
+
+1. ~~**Verify the page count.**~~ **Done** — user checked the compact report and
+   confirmed it is acceptable as-is.
+2. ~~**Reconcile the two print goals.**~~ **Resolved by splitting the modes**
+   (see "Resume session" below).
 3. **Orientation is Chromium-only.** The Vertical/Horizontal buttons restack the
    layout everywhere, but the paper only actually flips in Chrome/Edge. On
    Firefox/Safari the print dialog's own orientation setting wins. There is no JS
    API to force print orientation — this is a browser limit, not a code gap.
+   Explained to the user; nothing to implement.
 4. **Decide on private sheets.** Currently a printed note. If staff need it,
-   that is a Google OAuth project (Drive/Sheets read scope).
-5. **`gh` CLI is not installed** on this machine. Workflow status was checked via
-   the GitHub REST API with `Invoke-RestMethod`. Installing `gh` would simplify
-   this.
+   that is a Google OAuth project (Drive/Sheets read scope). **Still open —
+   user's answer needed.**
+5. ~~**`gh` CLI is not installed.**~~ **Done** — `gh 2.97.0` is present at
+   `C:\Program Files\GitHub CLI\gh.exe` and authenticated as `vcharyanaco-tech`.
 6. **Optional, declined this session:** disabling hibernation frees 3.1 GB
    (`hiberfil.sys`) at the cost of Hibernate and Fast Startup; a DISM component
    cleanup was also declined. C: has room now, so this is low priority.
 
 ## Housekeeping
 
-23 untracked files in the repo root (Apple page clones `ipad_*.html`,
-`support_*.html`, `*.py`, `images/`, `ref_pdf_content.txt`) were left untracked
-and uncommitted throughout, per AGENTS.md. They remain untracked — decide
-whether to gitignore or delete them.
+The 23 untracked files noted earlier (Apple page clones `ipad_*.html`,
+`support_*.html`, `*.py`, `images/`, `ref_pdf_content.txt`) are **gone** — the
+working tree is clean as of the resume session. Nothing to gitignore or delete.
+
+---
+
+# Resume session — 2026-10-07 (after re-sync)
+
+Re-synced with origin: local was behind 10 commits (`a60c8c9 → 4d5021f`),
+fast-forwarded; nothing local ahead, push was up-to-date.
+
+## What was done
+
+1. **Pending #1 closed** — user verified the compact print's page count; OK as-is.
+2. **Pending #2 closed — the two print modes are now explicit.** Decision: they
+   are separate modes, not one compromise.
+   - **Tick "Include linked sheet data" → FULL:** every linked sheet fetched and
+     printed complete (no row cap — the only limits left are the runaway guards
+     in `config.js`: 10 000 rows / 40 columns / 4 000 chars per cell, which
+     always announce themselves in the printout). Report length is not a target.
+   - **Unticked → COMPACT:** nothing is fetched; the densified layout is the
+     whole point and the 5–6 page target belongs to this mode only.
+   - `sheetTablesEnabled_()` / `printMode_()` in `src/app/reports.js` are now
+     the single source of truth for the mode (the fetch guard and the label read
+     the same helper).
+   - The print window shows the mode: a chip in the toolbar
+     (`Full · sheets complete` / `Compact`) and the same label at the front of
+     the header subtitle; `<body>` carries `mode-full` / `mode-compact`.
+   - The density rules stay in **both** modes — they shorten the full report
+     too and cost nothing.
+3. **Pending #3** — explained to the user (Chromium-only paper rotation; no JS
+   API exists). Nothing to implement.
+4. **Pending #4** — clarification given, awaiting the user's decision.
+5. **Pending #5 closed** — `gh 2.97.0` already installed and authenticated.
+6. **Housekeeping closed** — untracked files no longer exist.
+
+## Files changed
+
+```
+app.html            +1/-1   checkbox title now documents both modes
+app.js              rebuilt (22 modules, 11989 lines)
+src/app/reports.js  +31/-10 sheetTablesEnabled_/printMode_, mode chip,
+                            body class, subtitle prefix
+```
+
+## Verification
+
+- `node --check src/app/reports.js` clean.
+- `node build/build-app.js` — bundle rebuilt.
+- `node scripts/check-bundle-size.cjs` — OK (530.4/550 KB raw, 124.0/150 KB gzip).
+- `node scripts/secret-scan.cjs` — passed (220 tracked files).
+- **526/526 server tests pass**, 0 fail.
+
+## Pending tasks (carry forward)
+
+1. **Private sheets (pending #4)** — decide: keep the printed note, or build
+   Google OAuth (Drive/Sheets read scope) so staff can print sheets that are not
+   shared "anyone with the link".
+2. **Pending #6** (hibernation / DISM cleanup) — declined, low priority.

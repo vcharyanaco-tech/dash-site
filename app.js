@@ -5490,6 +5490,11 @@ function buildPrintPage(opts) {
   .print-toolbar button.active { background: #1f5c2e; color: #fff; }
   .print-toolbar .print-btn { background: #1f5c2e; color: #fff; margin-left: auto; }
   .print-toolbar label.print-toggle { color: #1f5c2e; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  /* Mode chip: which of the two print modes produced this window (see
+     sheetTablesEnabled_ in the app source). */
+  .print-toolbar .mode-chip { font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 10px; }
+  .print-toolbar .mode-chip-full { background: #1f5c2e; color: #fff; }
+  .print-toolbar .mode-chip-compact { background: #e3ece6; color: #1f5c2e; border: 1px solid #1f5c2e; }
   /* A fetched sheet table can be taller than a page, so this block must be
      allowed to break. Rows are kept atomic instead (see tr below). */
   .print-links-block { break-inside: auto; page-break-inside: auto; }
@@ -5549,9 +5554,14 @@ function buildPrintPage(opts) {
   #pageRule { display: none; }
 </style>
 </head>
-<body class="${initialOrient}">
+<body class="${initialOrient}${opts.mode ? ' mode-' + opts.mode : ''}">
   <div class="print-toolbar">
     <span class="toolbar-title">Print layout</span>
+    ${opts.mode === 'full'
+      ? '<span class="mode-chip mode-chip-full" title="Linked sheets are printed complete - report length is not limited">Full &middot; sheets complete</span>'
+      : opts.mode === 'compact'
+        ? '<span class="mode-chip mode-chip-compact" title="Densified short report, no linked sheet data">Compact</span>'
+        : ''}
     <button type="button" id="btnOrientV" class="${initialOrient === 'portrait' ? 'active' : ''}" onclick="setOrient('portrait')">Vertical</button>
     <button type="button" id="btnOrientH" class="${initialOrient === 'landscape' ? 'active' : ''}" onclick="setOrient('landscape')">Horizontal</button>
     <label class="print-toggle" title="Include the hyperlink data table on each record"><input type="checkbox" id="toggleLinks" checked onchange="toggleLinks(this.checked)"> Include hyperlink data</label>
@@ -5699,6 +5709,7 @@ function printCard(row, includeSubmissions) {
 
     openPrintWindow(buildPrintPage({
       title: (appState.settings.appName || 'India Post Dashboard') + ' - Record #' + item.id,
+      mode: printMode_(),
       subtitle: (useSubs ? 'with submissions' : 'without submissions') + ' &middot; Record #' + item.id + (item.sector ? ' &middot; ' + item.sector : ''),
       body: `<div class="record-print-block"><table class="fields-table">
         <tbody>${fields || '<tr><td colspan="2" class="empty">No details available.</td></tr>'}</tbody>
@@ -5748,15 +5759,28 @@ function itemHasLinks_(item) {
   return Object.keys(item.linkUrls || {}).length > 0;
 }
 
+/* The report-level "Include linked sheet data" checkbox selects the print mode:
+   ticked  -> FULL mode, every linked sheet is fetched and printed complete
+              (no row cap), and report length is not a target.
+   unticked -> COMPACT mode, nothing is fetched and the densified layout is
+              the whole point (the 5-6 page target belongs to this mode only). */
+function sheetTablesEnabled_() {
+  const box = getEl('includeSheetTables');
+  return !!(box && box.checked === true);
+}
+
+function printMode_() {
+  return sheetTablesEnabled_() ? 'full' : 'compact';
+}
+
 /* Fetches the real table behind each record's linked Google Sheet, for records
    that have one, at bounded concurrency. Resolves to a map row -> sheet data,
-   or null when the report-level "include linked sheet data" box is unticked.
+   or null in COMPACT mode (checkbox unticked).
 
    A sheet that is private or unreachable resolves to available:false rather
    than throwing, and a single failed request never sinks the whole report. */
 function fetchSheetTablesForPrint_(items) {
-  const box = getEl('includeSheetTables');
-  if (!box || box.checked !== true) return Promise.resolve(null);
+  if (!sheetTablesEnabled_()) return Promise.resolve(null);
   const targets = (items || []).filter(function (i) { return itemHasLinks_(i); });
   const map = {};
   if (!targets.length) return Promise.resolve(map);
@@ -5824,13 +5848,20 @@ function printReport(scope, includeSubmissions) {
     }
     const count = items.length;
     const subCount = useSubs ? countSubmissions_(subMap) : 0;
-    const subtitle = (scopeLabel + ' &middot; ' + (useSubs
+    // The two print modes are deliberately separate: FULL prints linked sheets
+    // complete with no page target, COMPACT is the densified short report.
+    const mode = printMode_();
+    const modeLabel = mode === 'full'
+      ? 'Full &middot; linked sheets in full, no length limit'
+      : 'Compact &middot; no linked sheet data';
+    const subtitle = (modeLabel + ' &middot; ' + scopeLabel + ' &middot; ' + (useSubs
       ? count + ' record' + (count === 1 ? '' : 's') + ' with submissions (' + subCount + ')'
       : count + ' record' + (count === 1 ? '' : 's') + ' without submissions'));
 
     openPrintWindow(buildPrintPage({
       title: (appState.settings.appName || 'India Post Dashboard') + ' - Report',
       landscape: true,
+      mode: mode,
       subtitle: subtitle,
       body: bodyHtml
     }));
