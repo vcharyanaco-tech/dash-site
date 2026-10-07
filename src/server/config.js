@@ -430,12 +430,14 @@ const ENTERPRISE_AI_LINK_MAX_CHARS = 25000;
 const ENTERPRISE_AI_PREVIEW_MAX_ROWS = 50;
 const ENTERPRISE_AI_PREVIEW_MAX_CELLS = 30;
 const ENTERPRISE_AI_PREVIEW_MAX_CELL_CHARS = 300;
-// Caps for linked-sheet tables embedded in a PRINTED report. Deliberately far
-// tighter than the on-screen AI preview: a print block is emitted per record,
-// so an uncapped sheet would dominate the report's page budget.
-const LINK_PRINT_MAX_ROWS = 15;
-const LINK_PRINT_MAX_COLS = 8;
-const LINK_PRINT_MAX_CELL_CHARS = 160;
+// "Include linked sheet data" prints the linked sheet IN FULL: no row cap and
+// no per-cell truncation. Silently dropping a row or clipping a cell would
+// misrepresent the sheet's contents in an official report, so the only limits
+// here are runaway guards against a pathological sheet exhausting memory --
+// deliberately sized far above any real dashboard sheet.
+const LINK_PRINT_GUARD_MAX_ROWS = 10000;
+const LINK_PRINT_GUARD_MAX_COLS = 40;
+const LINK_PRINT_GUARD_MAX_CELL_CHARS = 4000;
 // How long a fetched sheet table stays in the in-process cache. Printing a
 // wide report fetches one sheet per record; without this the second print of
 // the same report re-fetches every one of them.
@@ -502,9 +504,9 @@ module.exports = {
   ENTERPRISE_AI_PREVIEW_MAX_ROWS,
   ENTERPRISE_AI_PREVIEW_MAX_CELLS,
 ENTERPRISE_AI_PREVIEW_MAX_CELL_CHARS,
-  LINK_PRINT_MAX_ROWS,
-  LINK_PRINT_MAX_COLS,
-  LINK_PRINT_MAX_CELL_CHARS,
+  LINK_PRINT_GUARD_MAX_ROWS,
+  LINK_PRINT_GUARD_MAX_COLS,
+  LINK_PRINT_GUARD_MAX_CELL_CHARS,
   LINK_PRINT_CACHE_TTL_MS,
   LINK_PRINT_FETCH_CONCURRENCY
 };

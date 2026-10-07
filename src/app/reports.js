@@ -1,10 +1,6 @@
 
 /* ---------------------------------- Reports ---------------------------------- */
 
-// Must match LINK_PRINT_MAX_ROWS in src/server/config.js. Used only to word the
-// "showing first N rows" note; the server is what actually truncates.
-const LINK_PRINT_ROWS_SHOWN = 15;
-
 function renderReportPreview() {
   const wrap = getEl('reportPreview');
   if (!wrap) return;
@@ -219,13 +215,13 @@ function printLinksHtml_(item, sheetData) {
       }).join('') + '</' + tag + '>';
     };
     sheetHtml = `<h4>Linked sheet contents</h4>
-      <p class="sheet-note">${cols} column${cols === 1 ? '' : 's'} &middot; from the record's linked Google Sheet` +
-      (sheetData.truncated ? ` &middot; showing first ${LINK_PRINT_ROWS_SHOWN} of ${escapeHtml(String(sheetData.rowTotal))} rows` : '') +
+      <p class="sheet-note">${cols} column${cols === 1 ? '' : 's'} &middot; ${escapeHtml(String(sheetData.rowTotal))} row${sheetData.rowTotal === 1 ? '' : 's'} &middot; complete contents of the record's linked Google Sheet` +
+      (sheetData.truncated ? ' &middot; this sheet exceeded the printable size guard, so it was clipped' : '') +
       `</p>
       <table class="sheet-table"><thead>${grid(header, 'tr')}</thead><tbody>${
         body.length ? body.map(function (r) { return grid(r, 'tr'); }).join('') : '<tr><td colspan="' + cols + '">No data rows.</td></tr>'
       }</tbody></table>
-      ${sheetData.truncated ? '<p class="sheet-note">Remaining rows are not shown &mdash; open the linked sheet for the full table.</p>' : ''}`;
+      ${sheetData.truncated ? '<p class="sheet-note">This sheet exceeded the printable size guard and was clipped &mdash; open the linked sheet for the complete table.</p>' : ''}`;
   } else if (sheetData && sheetData.available === false && sheetData.reason === 'unreadable') {
     sheetHtml = '<h4>Linked sheet contents</h4><p class="sheet-note">Not printed: the linked sheet could not be read. Sheets must be shared &ldquo;anyone with the link&rdquo;.</p>';
   } else if (sheetData && sheetData.available === false && sheetData.reason === 'not-a-sheet') {

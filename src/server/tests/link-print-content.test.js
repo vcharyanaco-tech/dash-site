@@ -16,7 +16,12 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert');
 const { password } = require('./test-bootstrap');
 const { server } = require('../index');
-const { LINK_PRINT_MAX_ROWS, LINK_PRINT_MAX_COLS, LINK_PRINT_MAX_CELL_CHARS } = require('../config');
+const enterprise = require('../enterprise');
+const {
+  LINK_PRINT_GUARD_MAX_ROWS,
+  LINK_PRINT_GUARD_MAX_COLS,
+  LINK_PRINT_GUARD_MAX_CELL_CHARS
+} = require('../config');
 
 let port;
 let adminToken;
@@ -127,15 +132,49 @@ test('a record with no link reports no-link and fetches nothing', async function
 // Cap logic
 // ------------------------------------------------------------------
 
-test('print caps are tighter than the on-screen AI preview caps', async function () {
-  // If these ever drift so that printing is not actually tighter, a report
-  // with many linked records will silently balloon past its page budget.
+test('the printed sheet is not row-capped', async function () {
+  // "Include linked sheet data" must print the whole sheet: dropping rows would
+  // misrepresent it. The remaining limits are runaway guards only, so they must
+  // sit far above any realistic sheet.
   const { ENTERPRISE_AI_PREVIEW_MAX_ROWS, ENTERPRISE_AI_PREVIEW_MAX_CELLS } = require('../config');
-  assert.ok(LINK_PRINT_MAX_ROWS < ENTERPRISE_AI_PREVIEW_MAX_ROWS,
-    'printed row cap must be tighter than the AI preview row cap');
-  assert.ok(LINK_PRINT_MAX_COLS < ENTERPRISE_AI_PREVIEW_MAX_CELLS,
-    'printed column cap must be tighter than the AI preview column cap');
-  assert.ok(LINK_PRINT_MAX_CELL_CHARS > 0, 'cell cap must be positive');
+  assert.ok(LINK_PRINT_GUARD_MAX_ROWS > ENTERPRISE_AI_PREVIEW_MAX_ROWS,
+    'printed row guard must be far above the AI preview row cap (no row capping)');
+  assert.ok(LINK_PRINT_GUARD_MAX_COLS > ENTERPRISE_AI_PREVIEW_MAX_CELLS,
+    'printed column guard must be above the AI preview column cap');
+  assert.ok(LINK_PRINT_GUARD_MAX_CELL_CHARS > 1000,
+    'cells must not be clipped at a length that would alter real data');
+});
+
+test('guardSheetRows_ keeps every row of a realistic sheet intact', function () {
+  // 500 rows x 6 cols, comfortably inside the guards: nothing may be dropped.
+  const rows = [];
+  for (let i = 0; i < 500; i++) rows.push(['h' + i, 'Sector ' + i, 'Desc', 'Act', 'Own', 'Review']);
+  const out = enterprise.__testGuardSheetRows(rows);
+  assert.strictEqual(out.rows.length, 500, 'every row must survive');
+  assert.strictEqual(out.rowTotal, 500);
+  assert.strictEqual(out.truncated, false, 'a realistic sheet must not report truncation');
+  assert.deepStrictEqual(out.rows[7], ['h7', 'Sector 7', 'Desc', 'Act', 'Own', 'Review']);
+});
+
+test('guardSheetRows_ reports truncation when a guard does fire', function () {
+  // Beyond the guard it must clip AND say so, so a clipped print is disclosed
+  // rather than silently looking complete.
+  const many = [];
+  for (let i = 0; i <= LINK_PRINT_GUARD_MAX_ROWS; i++) many.push(['r' + i]);
+  const out = enterprise.__testGuardSheetRows(many);
+  assert.strictEqual(out.rows.length, LINK_PRINT_GUARD_MAX_ROWS);
+  assert.strictEqual(out.rowTotal, LINK_PRINT_GUARD_MAX_ROWS + 1);
+  assert.strictEqual(out.truncated, true);
+});
+
+test('guardSheetRows_ collapses whitespace inside a cell but keeps the text', function () {
+  const out = enterprise.__testGuardSheetRows([
+    ['a', 'line one\nline two\tindented'],
+    ['b', 'value']
+  ]);
+  assert.strictEqual(out.rows[0][1], 'line one line two indented',
+    'newlines collapse for table layout but no words are lost');
+  assert.strictEqual(out.truncated, false);
 });
 
 // ------------------------------------------------------------------

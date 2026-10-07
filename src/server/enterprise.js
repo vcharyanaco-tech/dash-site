@@ -37,9 +37,9 @@ const {
   ENTERPRISE_AI_PREVIEW_MAX_ROWS,
   ENTERPRISE_AI_PREVIEW_MAX_CELLS,
   ENTERPRISE_AI_PREVIEW_MAX_CELL_CHARS,
-  LINK_PRINT_MAX_ROWS,
-  LINK_PRINT_MAX_COLS,
-  LINK_PRINT_MAX_CELL_CHARS,
+  LINK_PRINT_GUARD_MAX_ROWS,
+  LINK_PRINT_GUARD_MAX_COLS,
+  LINK_PRINT_GUARD_MAX_CELL_CHARS,
   LINK_PRINT_CACHE_TTL_MS
 } = require('./config');
 const helpers = require('./helpers');
@@ -755,17 +755,30 @@ function linkPrintCacheSet_(key, value) {
   }
 }
 
-function capSheetRows_(rows) {
-  const trimmed = rows.map(function (r) {
-    return r.slice(0, LINK_PRINT_MAX_COLS).map(function (c) {
+/* Normalises a fetched sheet for printing WITHOUT discarding data: every row
+   and every cell is kept. Whitespace is collapsed per cell (a printed table has
+   no use for a cell's embedded newlines) and the guards only bite on a
+   pathological sheet. `truncated` is surfaced to the client so a guard firing is
+   disclosed in the printed output rather than being silent. */
+function guardSheetRows_(rows) {
+  const total = rows.length;
+  const kept = rows.slice(0, LINK_PRINT_GUARD_MAX_ROWS);
+  let clippedCell = false;
+  const trimmed = kept.map(function (r) {
+    return r.slice(0, LINK_PRINT_GUARD_MAX_COLS).map(function (c) {
       const s = String(c === null || c === undefined ? '' : c).replace(/\s+/g, ' ').trim();
-      return s.length > LINK_PRINT_MAX_CELL_CHARS ? s.substring(0, LINK_PRINT_MAX_CELL_CHARS) + '\u2026' : s;
+      if (s.length > LINK_PRINT_GUARD_MAX_CELL_CHARS) {
+        clippedCell = true;
+        return s.substring(0, LINK_PRINT_GUARD_MAX_CELL_CHARS) + '\u2026';
+      }
+      return s;
     });
   });
   return {
-    rows: trimmed.slice(0, LINK_PRINT_MAX_ROWS),
-    rowTotal: trimmed.length,
-    cols: Math.min.apply(null, trimmed.map(function (r) { return r.length; }).concat([0]))
+    rows: trimmed,
+    rowTotal: total,
+    cols: Math.min.apply(null, trimmed.map(function (r) { return r.length; }).concat([0])),
+    truncated: total > kept.length || clippedCell
   };
 }
 
@@ -800,7 +813,7 @@ async function getLinkPrintContent(token, row) {
     return {
       success: true, available: true, cached: true, row: item.row, id: item.id,
       url: url, format: 'table', rows: cached.rows, rowTotal: cached.rowTotal,
-      cols: cached.cols, truncated: cached.rowTotal > cached.rows.length
+      cols: cached.cols, truncated: cached.truncated === true
     };
   }
 
@@ -811,12 +824,12 @@ async function getLinkPrintContent(token, row) {
       hint: 'Sheet could not be read. It may be private - linked sheets must be shared "anyone with the link".'
     };
   }
-  const capped = capSheetRows_(table.rows);
-  linkPrintCacheSet_(url, capped);
+  const guarded = guardSheetRows_(table.rows);
+  linkPrintCacheSet_(url, guarded);
   return {
     success: true, available: true, cached: false, row: item.row, id: item.id,
     url: url, format: 'table', rows: capped.rows, rowTotal: capped.rowTotal,
-    cols: capped.cols, truncated: capped.rowTotal > capped.rows.length
+    cols: guarded.cols, truncated: guarded.truncated
   };
 }
 
@@ -1755,6 +1768,9 @@ module.exports = {
   getCardAiInsight,
   getLinkContentAiInsight,
   getLinkPrintContent,
+  // Exported for tests only: the sheet guard is the one piece of this feature
+  // that is not reachable through the HTTP surface without a live sheet fetch.
+  __testGuardSheetRows: guardSheetRows_,
   askLinkAi,
   askDashboardAi,
   getAllAskLinkHistory,
