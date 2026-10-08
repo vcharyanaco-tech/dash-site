@@ -4,17 +4,6 @@
 function openEditModal() {
   openDialog('editModal');
   const modal = getEl('editModal');
-  // A non-approver's edits are requests, not saves: label the dialog and its
-  // button honestly so nobody believes they have already changed the record.
-  const isEditor = !!appState.isEditor;
-  const title = getEl('editModalTitle');
-  if (title) title.textContent = appState.editMode === 'add'
-    ? (isEditor ? 'Add record' : 'Admin/editor access required')
-    : (isEditor ? 'Edit record' : 'Request a change');
-  const submit = getEl('editSubmitBtn');
-  if (submit) submit.textContent = isEditor ? 'Save changes' : 'Request change';
-  const notice = getEl('editRequestNotice');
-  if (notice) notice.classList.toggle('hidden', isEditor);
   const firstInput = modal.querySelector('input:not([type=hidden]):not([readonly])');
   if (firstInput) firstInput.focus();
 }
@@ -228,6 +217,7 @@ function editItem(row) {
 
 function saveEditModal(e) {
   e.preventDefault();
+  if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
 
   const sectorEl = getEl('editSector');
   const descEl = getEl('editDescription');
@@ -253,16 +243,8 @@ function saveEditModal(e) {
   };
 
   if (appState.editMode === 'add') {
-    if (!appState.isEditor) { showToast('Admin/editor access required', 'warning'); return; }
     submitNewItem(item);
   } else if (item.row) {
-    if (!appState.isEditor) {
-      // A non-approver cannot write to the record. Their edit becomes a change
-      // request that an admin/editor approves; nothing is saved now.
-      const reason = window.prompt('Why should this change be made? (optional — shown to the approver)') || '';
-      submitChangeRequests(item, reason);
-      return;
-    }
     saveItem(item);
   }
 }

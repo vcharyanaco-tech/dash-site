@@ -49,7 +49,7 @@ const AUTH_ARG_INDEX = Object.freeze({
   exportReviewCalendarIcs: 0, sendWhatsAppReviewReminders: 0,
   getAiInsights: 0, getCardAiInsight: 0, getLinkContentAiInsight: 0, getLinkPrintContent: 0,
   listChangeRequests: 0, createChangeRequest: 1, previewChangeRequest: 1,
-  approveChangeRequest: 1, rejectChangeRequest: 1,
+  approveChangeRequest: 1, rejectChangeRequest: 1, getLinkSheetStructure: 0,
   askLinkAi: 0, askDashboardAi: 0, getAllAskLinkHistory: 0, saveAskLinkHistory: 0,
   processMeetingRecording: 1, transcribeMeetingSegment: 1,
   generateMeetingMinutes: 1, listMeetingFiles: 0, getMeetingFile: 0,
@@ -932,6 +932,11 @@ getTaskCounts: function (args) {
     if (args.length < 2) return 'createChangeRequest requires (payload, token)';
     if (args[0] === undefined || args[0] === null) return 'payload is required';
     if (typeof args[0] !== 'object') return 'payload is required';
+    return null;
+  },
+  getLinkSheetStructure: function (args) {
+    if (args.length < 2) return 'getLinkSheetStructure requires (token, row)';
+    if (args[1] === undefined || args[1] === null) return 'row is required';
     return null;
   },
   previewChangeRequest: function (args) {

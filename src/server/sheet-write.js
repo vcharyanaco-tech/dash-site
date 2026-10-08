@@ -175,6 +175,7 @@ async function resolveTarget(opts) {
     columnLetter: finalCell.columnLetter,
     columnIndex: finalCell.columnIndex,
     tab: tab,
+    headerName: String(opts.headerName || '').trim(),
     row: row,
     spreadsheetId: spreadsheetId,
     currentValue: await readCellValue_(spreadsheetId, tab, row, finalCell.columnIndex, token)
@@ -247,12 +248,46 @@ async function writeCell(opts) {
   return { ok: true, dryRun: false, range: range, spreadsheetId: spreadsheetId, value: value };
 }
 
+/**
+ * Describe a record's linked sheet so the request form can offer real choices
+ * instead of asking a user to type a tab name and a column header from memory:
+ * every tab with its header row and its current extent.
+ *
+ * Read-only. Needs the write credential because it authenticates with the same
+ * token the write does.
+ */
+async function getSheetStructure(sheetUrl) {
+  const spreadsheetId = sheetIdFromUrl_(sheetUrl);
+  if (!spreadsheetId) return { ok: false, reason: 'That link is not a Google Sheets URL.' };
+  if (!writeCredentialPresent_()) {
+    return { ok: false, reason: 'No Google credential is configured on the server, so linked sheets cannot be read or changed.' };
+  }
+  const token = await require('./sync-sheet').accessToken_();
+  if (!token) return { ok: false, reason: 'No Google credential is configured on the server.' };
+
+  const tabs = [];
+  const titles = await listTabs_(spreadsheetId, token);
+  for (let i = 0; i < titles.length; i++) {
+    let headers = [];
+    let rowCount = 0;
+    try { headers = await readHeaderRow_(spreadsheetId, titles[i], token); } catch (e) { headers = []; }
+    try { rowCount = await readRowCount_(spreadsheetId, titles[i], token); } catch (e) { rowCount = 0; }
+    tabs.push({
+      title: titles[i],
+      headers: headers.filter(function (h) { return String(h || '').trim() !== ''; }),
+      rowCount: rowCount
+    });
+  }
+  return { ok: true, spreadsheetId: spreadsheetId, tabs: tabs };
+}
+
 function dryRunEnabled() { return DRY_RUN; }
 
 module.exports = {
   sheetIdFromUrl: sheetIdFromUrl_,
   writeCredentialPresent: writeCredentialPresent_,
   dryRunEnabled: dryRunEnabled,
+  getSheetStructure: getSheetStructure,
   resolveTarget: resolveTarget,
   writeCell: writeCell,
   __test: { listTabs: listTabs_, matchTab: matchTab_, sheetIdFromUrl: sheetIdFromUrl_ }

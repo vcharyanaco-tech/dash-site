@@ -2,23 +2,27 @@
  * ============================================================
  * India Post Dashboard — Node port
  * change-requests.js
- * The approval queue for record edits.
+ * The approval queue for changes to a record's LINKED Google Sheet.
  *
- * Any logged-in user may RAISE a change request. Only an admin or editor may
- * APPROVE one. Nothing in this module writes to `records` or to a Google Sheet
- * when a request is raised — a pending request is inert by construction, so a
- * user who never gets approved simply loses their request, never corrupts data.
+ * Any logged-in user may RAISE a request to change a cell in a record's linked
+ * sheet. Only an admin or editor may APPROVE it. Nothing here writes to a sheet
+ * or to `records` when a request is raised — a pending request is inert by
+ * construction, so a request that is never approved simply expires, and a
+ * request that is approved writes exactly the one cell it named.
  *
- * Two scopes:
- *   'record' - one dashboard field of one record.
- *   'sheet'  - one named cell in the record's linked Google Sheet (tab name +
- *              header name + row). The column is resolved at APPROVAL time, not
- *              when the request is raised, so a column inserted or reordered in
- *              the meantime cannot make the write land in the wrong cell.
+ * This is deliberately the ONLY kind of request. Dashboard record fields are
+ * not requestable: they are edited directly by admins/editors as before. The
+ * gate exists because record-linked spreadsheets are the shared source of truth
+ * that staff were editing by hand, with nobody reviewing what changed.
  *
- * Conflict safety: `old_value` is captured at raise time and re-checked at
- * approval. If the record field (or the sheet cell) changed underneath, the
- * request goes to CONFLICT and is NOT applied — an approval must never
+ * Targets are NAMED, never coordinates: a request names a tab and a column
+ * header, and the column is resolved from the sheet's own header row at
+ * APPROVAL time. A raw "C42" captured when the request was raised would write to
+ * whatever later moved into column C.
+ *
+ * Conflict safety: the cell's current value is re-read at approval and compared
+ * with the value captured when the request was raised. If it moved underneath,
+ * the request becomes CONFLICT and is NOT applied, so an approval can never
  * silently overwrite a newer edit by someone else.
  * ============================================================
  */
@@ -38,19 +42,6 @@ const STATUS = Object.freeze({
   CONFLICT: 'CONFLICT'
 });
 
-/* The dashboard fields a request may propose to change. Kept as an explicit
-   allow-list rather than "any key the client sends" so a request cannot target
-   a column that is not a user-editable field (row, source, displayed, ...). */
-const EDITABLE_FIELDS = Object.freeze({
-  sector: 'Sector',
-  description: 'Description',
-  entryDate: 'Entry Date',
-  action: 'Action',
-  lastMeetingInstructions: 'Last meeting instructions',
-  responsibility: 'Responsibility',
-  reviewDate: 'Review Date'
-});
-
 const MAX_NEW_VALUE_CHARS = 5000;
 const MAX_REASON_CHARS = 1000;
 const MAX_REVIEW_NOTE_CHARS = 1000;
@@ -60,22 +51,17 @@ function canApprove_(email) {
 }
 
 function recordFromRow_(row) {
-  const scope = String(row.scope || 'record');
   return {
     id: String(row.id || ''),
     recordRow: Number(row.record_row) || 0,
     recordId: String(row.record_id || ''),
-    scope: scope,
-    field: String(row.field || ''),
-    fieldLabel: EDITABLE_FIELDS[String(row.field || '')] || String(row.field || ''),
-    oldValue: String(row.old_value || ''),
-    newValue: String(row.new_value || ''),
-    reason: String(row.reason || ''),
     sheetUrl: String(row.sheet_url || ''),
     sheetTab: String(row.sheet_tab || ''),
     sheetHeader: String(row.sheet_header || ''),
     sheetRow: Number(row.sheet_row) || 0,
     sheetCurrentValue: String(row.sheet_current_value || ''),
+    newValue: String(row.new_value || ''),
+    reason: String(row.reason || ''),
     status: String(row.status || STATUS.PENDING),
     requestedBy: String(row.requested_by || ''),
     requestedAt: Number(row.requested_at) || 0,
@@ -92,8 +78,8 @@ function findRequest_(id) {
   return row ? recordFromRow_(row) : null;
 }
 
-/** Requests the given user is allowed to see: a requester sees their own,
- *  an approver sees everything. */
+/** Requests the given user may see: a requester sees their own, an approver
+ *  sees everything. */
 function listChangeRequests(token, opts) {
   const user = auth.requireLogin(token);
   opts = opts || {};
@@ -129,80 +115,6 @@ function recordByRow_(row) {
   return records.resolveRecord_(row);
 }
 
-/**
- * Raise a change request. Any logged-in user.
- *
- * args: (payload, token) where payload is
- *   { recordRow, scope, field, newValue, reason,
- *     sheetTab, sheetHeader, sheetRow }
- */
-function createChangeRequest(payload, token) {
-  const user = auth.requireLogin(token);
-  payload = payload || {};
-
-  const row = Number(payload.recordRow);
-  const rec = isFinite(row) ? recordByRow_(row) : null;
-  if (!rec) return { success: false, message: 'Record not found.' };
-
-  const scope = String(payload.scope || 'record') === 'sheet' ? 'sheet' : 'record';
-  const newValue = String(payload.newValue == null ? '' : payload.newValue);
-  const reason = String(payload.reason || '').trim().slice(0, MAX_REASON_CHARS);
-
-  if (!newValue.trim()) return { success: false, message: 'Enter the new value you are proposing.' };
-  if (newValue.length > MAX_NEW_VALUE_CHARS) {
-    return { success: false, message: 'The proposed value is too long (limit ' + MAX_NEW_VALUE_CHARS + ' characters).' };
-  }
-
-  let field = '';
-  let oldValue = '';
-  let sheetUrl = '';
-  let sheetTab = '';
-  let sheetHeader = '';
-  let sheetRow = 0;
-  let sheetCurrentValue = '';
-
-  if (scope === 'record') {
-    field = String(payload.field || '');
-    if (!EDITABLE_FIELDS[field]) {
-      return { success: false, message: 'That field cannot be changed through a change request.' };
-    }
-    oldValue = String(rec[field] == null ? '' : rec[field]);
-    if (oldValue === newValue) {
-      return { success: false, message: 'That is already the current value — nothing to request.' };
-    }
-  } else {
-    // 'sheet' scope: capture the linked sheet URL from the record itself, never
-    // from the client, so a request cannot redirect the write to another sheet.
-    const links = safeParseLinks_(rec.links);
-    sheetUrl = firstSheetLink_(links);
-    if (!sheetUrl) {
-      return { success: false, message: 'This record has no linked Google Sheet to change.' };
-    }
-    sheetTab = String(payload.sheetTab || '').trim();
-    sheetHeader = String(payload.sheetHeader || '').trim();
-    sheetRow = Math.floor(Number(payload.sheetRow));
-    if (!sheetTab) return { success: false, message: 'Name the tab that holds the cell.' };
-    if (!sheetHeader) return { success: false, message: 'Name the column header of the cell.' };
-    if (!isFinite(sheetRow) || sheetRow < 1) return { success: false, message: 'Enter the row number of the cell.' };
-    oldValue = '';
-  }
-
-  const id = uuid_();
-  db.prepare(
-    'INSERT INTO change_requests (id, record_row, record_id, scope, field, old_value, new_value, reason, ' +
-    'sheet_url, sheet_tab, sheet_header, sheet_row, sheet_current_value, status, requested_by, requested_at) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(
-    id, Number(rec.row) || 0, String(rec.record_id || ''), scope, field, oldValue, newValue, reason,
-    sheetUrl, sheetTab, sheetHeader, sheetRow, sheetCurrentValue, STATUS.PENDING,
-    String(user.email || '').toLowerCase(), Date.now()
-  );
-
-  notifyApprovers_(rec, field, oldValue, newValue, scope, sheetTab, sheetHeader, sheetRow, user.email);
-
-  return { success: true, id: id, status: STATUS.PENDING, request: findRequest_(id) };
-}
-
 function safeParseLinks_(raw) {
   try {
     const parsed = JSON.parse(String(raw || '{}'));
@@ -210,6 +122,8 @@ function safeParseLinks_(raw) {
   } catch (e) { return {}; }
 }
 
+/* The record's own linked Google Sheet. Taken from the record, never from the
+   client, so a request cannot redirect the write to a different sheet. */
 function firstSheetLink_(links) {
   const keys = Object.keys(links || {});
   for (let i = 0; i < keys.length; i++) {
@@ -220,6 +134,13 @@ function firstSheetLink_(links) {
   return '';
 }
 
+/** The linked sheet URL for a record row, or '' when it has none. */
+function linkedSheetUrl_(recordRow) {
+  const rec = recordByRow_(recordRow);
+  if (!rec) return '';
+  return firstSheetLink_(safeParseLinks_(rec.links));
+}
+
 function recordLabel_(rec) {
   if (!rec) return 'a record';
   const id = Number(rec.row) - Number(config.CONFIG.SHEET.START_ROW) + 1;
@@ -227,11 +148,93 @@ function recordLabel_(rec) {
   return '#' + id + (desc ? ' — ' + (desc.length > 60 ? desc.slice(0, 60) + '…' : desc) : '');
 }
 
-function describeChange_(req) {
-  if (req.scope === 'sheet') {
-    return 'sheet cell "' + req.sheetHeader + '" (tab ' + req.sheetTab + ', row ' + req.sheetRow + ')';
+function truncate_(text, max) {
+  const s = String(text == null ? '' : text);
+  return s.length > max ? s.slice(0, max) + '…' : s;
+}
+
+/**
+ * Describe a record's linked sheet so the request form can offer the real tabs
+ * and column headers instead of asking a user to type them from memory.
+ * Read-only; available to any logged-in user.
+ */
+async function getLinkSheetStructure(token, row) {
+  auth.requireLogin(token);
+  const url = linkedSheetUrl_(row);
+  if (!url) return { success: true, available: false, reason: 'no-link' };
+  try {
+    const structure = await sheetWrite.getSheetStructure(url);
+    if (!structure.ok) return { success: true, available: false, reason: 'unavailable', detail: structure.reason };
+    return { success: true, available: true, tabs: structure.tabs, dryRun: sheetWrite.dryRunEnabled() };
+  } catch (err) {
+    return { success: true, available: false, reason: 'unavailable', detail: (err && err.message) || String(err) };
   }
-  return req.fieldLabel;
+}
+
+/**
+ * Raise a request to change one named cell in a record's linked sheet.
+ *
+ * args: (payload, token) where payload is
+ *   { recordRow, sheetTab, sheetHeader, sheetRow, newValue, reason }
+ */
+async function createChangeRequest(payload, token) {
+  const user = auth.requireLogin(token);
+  payload = payload || {};
+
+  const rec = recordByRow_(Number(payload.recordRow));
+  if (!rec) return { success: false, message: 'Record not found.' };
+
+  const sheetUrl = firstSheetLink_(safeParseLinks_(rec.links));
+  if (!sheetUrl) {
+    return { success: false, message: 'This record has no linked Google Sheet to change.' };
+  }
+
+  const newValue = String(payload.newValue == null ? '' : payload.newValue);
+  const reason = String(payload.reason || '').trim().slice(0, MAX_REASON_CHARS);
+  const sheetTab = String(payload.sheetTab || '').trim();
+  const sheetHeader = String(payload.sheetHeader || '').trim();
+  const sheetRow = Math.floor(Number(payload.sheetRow));
+
+  if (!sheetTab) return { success: false, message: 'Choose the tab that holds the cell.' };
+  if (!sheetHeader) return { success: false, message: 'Choose the column of the cell.' };
+  if (!isFinite(sheetRow) || sheetRow < 1) return { success: false, message: 'Enter the row number of the cell.' };
+  if (!newValue.trim()) return { success: false, message: 'Enter the value you want this cell to contain.' };
+  if (newValue.length > MAX_NEW_VALUE_CHARS) {
+    return { success: false, message: 'The proposed value is too long (limit ' + MAX_NEW_VALUE_CHARS + ' characters).' };
+  }
+
+  // Resolve now so the requester is told immediately if the target is wrong,
+  // rather than at approval time by an approver. The value captured here is
+  // only used for the conflict check; approval re-reads it.
+  let resolved = null;
+  try {
+    resolved = await sheetWrite.resolveTarget({
+      sheetUrl: sheetUrl,
+      tabName: sheetTab,
+      headerName: sheetHeader,
+      oneBasedRow: sheetRow
+    });
+  } catch (err) {
+    return { success: false, message: 'Could not reach the linked sheet: ' + ((err && err.message) || err) };
+  }
+  if (!resolved || !resolved.ok) {
+    return { success: false, message: (resolved && resolved.reason) || 'That cell could not be located in the sheet.' };
+  }
+
+  const id = uuid_();
+  db.prepare(
+    'INSERT INTO change_requests (id, record_row, record_id, scope, field, old_value, new_value, reason, ' +
+    'sheet_url, sheet_tab, sheet_header, sheet_row, sheet_current_value, status, requested_by, requested_at) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(
+    id, Number(rec.row) || 0, String(rec.record_id || ''), 'sheet', '', String(resolved.currentValue || ''), newValue, reason,
+    sheetUrl, resolved.tab, sheetHeader, resolved.row, String(resolved.currentValue || ''), STATUS.PENDING,
+    String(user.email || '').toLowerCase(), Date.now()
+  );
+
+  notifyApprovers_(rec, resolved, newValue, user.email);
+
+  return { success: true, id: id, status: STATUS.PENDING, resolved: { range: resolved.range, currentValue: resolved.currentValue }, request: findRequest_(id) };
 }
 
 /* Everyone who can approve: the admins/editors from config plus anyone the
@@ -257,16 +260,14 @@ function approverEmails_() {
   return out;
 }
 
-function notifyApprovers_(rec, field, oldValue, newValue, scope, sheetTab, sheetHeader, sheetRow, requester) {
+function notifyApprovers_(rec, resolved, newValue, requester) {
   let notifications;
   try { notifications = require('./notifications'); } catch (e) { return; }
 
-  const title = 'Change request: ' + (scope === 'sheet' ? 'linked sheet cell' : (EDITABLE_FIELDS[field] || field));
-  const target = scope === 'sheet'
-    ? sheetHeader + ' · ' + sheetTab + ' row ' + sheetRow
-    : (EDITABLE_FIELDS[field] || field);
-  const body = requester + ' wants to change ' + target + ' on ' + recordLabel_(rec) +
-    '\nCurrent: ' + truncate_(scope === 'sheet' ? '(read on approval)' : oldValue, 160) +
+  const title = 'Sheet change request: ' + resolved.cell;
+  const body = requester + ' wants to change ' + resolved.cell + ' on ' + recordLabel_(rec) +
+    '\nSheet: ' + resolved.tab + ' · column "' + resolved.headerName + '" · row ' + resolved.row +
+    '\nCurrent: ' + truncate_(resolved.currentValue, 160) +
     '\nProposed: ' + truncate_(newValue, 160);
 
   approverEmails_().forEach(function (email) {
@@ -281,34 +282,14 @@ function notifyApprovers_(rec, field, oldValue, newValue, scope, sheetTab, sheet
   });
 }
 
-function truncate_(text, max) {
-  const s = String(text == null ? '' : text);
-  return s.length > max ? s.slice(0, max) + '…' : s;
-}
-
 /**
  * Preview what approving a request would do, including the exact sheet cell it
- * resolved to. Read-only, so it is safe for an approver to call repeatedly.
+ * resolves to right now. Read-only, so an approver can check safely.
  */
 async function previewChangeRequest(id, token) {
   auth.requireLogin(token);
   const req = findRequest_(id);
   if (!req) return { success: false, message: 'Change request not found.' };
-
-  if (req.scope === 'record') {
-    const rec = recordByRow_(req.recordRow);
-    if (!rec) return { success: false, message: 'The record for this request no longer exists.' };
-    const current = String(rec[req.field] == null ? '' : rec[req.field]);
-    return {
-      success: true,
-      request: req,
-      scope: 'record',
-      fieldLabel: req.fieldLabel,
-      currentValue: current,
-      proposedValue: req.newValue,
-      conflict: current !== req.oldValue
-    };
-  }
 
   let resolved = null;
   let reason = '';
@@ -326,7 +307,6 @@ async function previewChangeRequest(id, token) {
     return {
       success: true,
       request: req,
-      scope: 'sheet',
       resolvable: false,
       reason: (resolved && resolved.reason) || reason || 'Could not resolve the target cell.',
       conflict: false
@@ -335,7 +315,6 @@ async function previewChangeRequest(id, token) {
   return {
     success: true,
     request: req,
-    scope: 'sheet',
     resolvable: true,
     range: resolved.range,
     cell: resolved.cell,
@@ -343,17 +322,15 @@ async function previewChangeRequest(id, token) {
     tab: resolved.tab,
     currentValue: resolved.currentValue,
     proposedValue: req.newValue,
-    conflict: resolved.currentValue !== req.sheetCurrentValue && !!req.sheetCurrentValue,
+    conflict: String(resolved.currentValue) !== String(req.sheetCurrentValue),
     dryRun: sheetWrite.dryRunEnabled()
   };
 }
 
 /**
- * Approve a request: admin/editor only.
- *
- * The record write reuses records.updateItem, so validation, notifications,
- * history and the existing lock behaviour all apply as they do to a direct
- * edit — there is no second, weaker write path.
+ * Approve a request: admin/editor only. Resolves the named cell again at this
+ * moment (the column may have moved since it was raised), checks it has not
+ * changed underneath, then writes that one cell.
  */
 async function approveChangeRequest(id, token, note) {
   const user = auth.requireEditor(token); // throws for non-approvers
@@ -365,54 +342,6 @@ async function approveChangeRequest(id, token, note) {
 
   const reviewNote = String(note || '').trim().slice(0, MAX_REVIEW_NOTE_CHARS);
 
-  if (req.scope === 'record') {
-    const rec = recordByRow_(req.recordRow);
-    if (!rec) return { success: false, message: 'The record for this request no longer exists.' };
-    const current = String(rec[req.field] == null ? '' : rec[req.field]);
-    if (current !== req.oldValue) {
-      mark_(id, STATUS.CONFLICT, user.email, reviewNote);
-      notifyRequester_(req, 'Change request could not be applied',
-        'The ' + req.fieldLabel + ' changed since this was requested, so the request was not applied. '
-        + 'Current value: ' + truncate_(current, 200), req.status);
-      return {
-        success: false,
-        conflict: true,
-        message: 'This field changed since the request was raised, so nothing was applied. '
-          + 'Current value: ' + truncate_(current, 120)
-      };
-    }
-
-    const item = {
-      id: String(rec.record_id || rec.row),
-      row: Number(rec.row),
-      recordId: String(rec.record_id || ''),
-      sector: rec.sector,
-      description: rec.description,
-      entryDate: rec.entry_date,
-      action: rec.action,
-      lastMeetingInstructions: rec.last_meeting_instructions,
-      responsibility: rec.responsibility,
-      reviewDate: rec.review_date,
-      links: safeParseLinks_(rec.links)
-    };
-    item[req.field] = req.newValue;
-
-    try {
-      // No extra runWithLock_ here: updateItem already serialises its own
-      // write, and wrapping it again would only queue it twice.
-      await records.updateItem(item, token);
-    } catch (err) {
-      return { success: false, message: 'The record could not be updated: ' + ((err && err.message) || err) };
-    }
-
-    mark_(id, STATUS.APPROVED, user.email, reviewNote);
-    audit_(req, user.email, 'CHANGE_REQUEST_APPROVED', req.fieldLabel + ' updated');
-    notifyRequester_(req, 'Change request approved',
-      'Your change to ' + req.fieldLabel + ' on ' + recordLabel_(rec) + ' was approved by ' + user.email + '.', STATUS.APPROVED);
-    return { success: true, status: STATUS.APPROVED, request: findRequest_(id) };
-  }
-
-  // 'sheet' scope: resolve the column at approval time, then write that one cell.
   let resolved = null;
   try {
     resolved = await sheetWrite.resolveTarget({
@@ -428,24 +357,41 @@ async function approveChangeRequest(id, token, note) {
     return { success: false, message: (resolved && resolved.reason) || 'Could not resolve the target cell.' };
   }
 
+  // The cell moved since the request was raised: refuse rather than overwrite.
+  if (String(resolved.currentValue) !== String(req.sheetCurrentValue)) {
+    mark_(id, STATUS.CONFLICT, user.email, reviewNote);
+    audit_(req, user.email, 'SHEET_CHANGE_CONFLICT', resolved.cell + ' changed since the request');
+    notifyRequester_(req, 'Sheet change could not be applied',
+      'Cell ' + resolved.cell + ' on ' + recordLabel_(recordByRow_(req.recordRow)) +
+      ' changed since you requested it, so nothing was written. It now contains: ' +
+      truncate_(resolved.currentValue, 200));
+    return {
+      success: false,
+      conflict: true,
+      message: resolved.cell + ' changed since this was requested, so nothing was written. It now contains: ' +
+        truncate_(resolved.currentValue, 120)
+    };
+  }
+
   const written = await sheetWrite.writeCell({
     spreadsheetId: resolved.spreadsheetId,
     range: resolved.range,
     newValue: req.newValue
   });
   if (!written.ok) {
+    // Leave the request PENDING: a failed write must never look applied.
     return { success: false, message: written.message || 'The sheet write failed.' };
   }
 
   db.prepare('UPDATE change_requests SET applied_range = ?, applied_sheet = ? WHERE id = ?')
     .run(String(written.range || resolved.range), String(resolved.spreadsheetId || ''), id);
   mark_(id, STATUS.APPROVED, user.email, reviewNote);
-  audit_(req, user.email, 'CHANGE_REQUEST_APPROVED',
-    'linked sheet cell ' + resolved.range + ' set' + (written.dryRun ? ' (dry run, not written)' : ''));
-  notifyRequester_(req, 'Change request approved',
-    'Your change to ' + req.sheetHeader + ' (row ' + req.sheetRow + ', tab ' + resolved.tab + ') on '
-    + recordLabel_(recordByRow_(req.recordRow) || {}) + ' was approved by ' + user.email
-    + (written.dryRun ? '. Dry run is on, so the sheet was NOT modified.' : '.'), STATUS.APPROVED);
+  audit_(req, user.email, 'SHEET_CHANGE_APPROVED',
+    resolved.cell + ' = ' + truncate_(req.newValue, 120) + (written.dryRun ? ' (dry run, not written)' : ''));
+  notifyRequester_(req, 'Sheet change approved',
+    'Your change to ' + resolved.cell + ' (' + resolved.tab + ', column "' + req.sheetHeader + '") on ' +
+    recordLabel_(recordByRow_(req.recordRow)) + ' was approved by ' + user.email +
+    (written.dryRun ? '. Dry run is on, so the sheet was NOT modified.' : '.'), STATUS.APPROVED);
 
   return {
     success: true,
@@ -466,10 +412,10 @@ function rejectChangeRequest(id, token, note) {
   }
   const reviewNote = String(note || '').trim().slice(0, MAX_REVIEW_NOTE_CHARS);
   mark_(id, STATUS.REJECTED, user.email, reviewNote);
-  audit_(req, user.email, 'CHANGE_REQUEST_REJECTED', reviewNote ? 'reason: ' + reviewNote : '');
-  notifyRequester_(req, 'Change request rejected',
-    'Your change to ' + describeChange_(req) + ' was rejected by ' + user.email +
-    (reviewNote ? ': ' + reviewNote : '.'), STATUS.REJECTED);
+  audit_(req, user.email, 'SHEET_CHANGE_REJECTED', reviewNote ? 'reason: ' + reviewNote : '');
+  notifyRequester_(req, 'Sheet change rejected',
+    'Your change to ' + req.sheetHeader + ' (row ' + req.sheetRow + ', tab ' + req.sheetTab + ') was rejected by ' +
+    user.email + (reviewNote ? ': ' + reviewNote : '.'), STATUS.REJECTED);
   return { success: true, status: STATUS.REJECTED, request: findRequest_(id) };
 }
 
@@ -486,7 +432,7 @@ function audit_(req, who, action, details) {
   } catch (e) {}
 }
 
-function notifyRequester_(req, title, body, status) {
+function notifyRequester_(req, title, body) {
   try {
     require('./notifications').notify_(req.requestedBy, 'system', title, body, '', {
       priority: NOTIFICATION_PRIORITY ? NOTIFICATION_PRIORITY.NORMAL : 0,
@@ -497,8 +443,8 @@ function notifyRequester_(req, title, body, status) {
 
 module.exports = {
   STATUS,
-  EDITABLE_FIELDS,
   listChangeRequests,
+  getLinkSheetStructure,
   createChangeRequest,
   previewChangeRequest,
   approveChangeRequest,
@@ -507,6 +453,6 @@ module.exports = {
   __test: {
     firstSheetLink: firstSheetLink_,
     safeParseLinks: safeParseLinks_,
-    describeChange: describeChange_
+    recordLabel: recordLabel_
   }
 };

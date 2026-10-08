@@ -123,6 +123,7 @@ const dispatch = {
   getLinkContentAiInsight: function (args) { return enterprise.getLinkContentAiInsight(A(args, 0), A(args, 1)); },
   getLinkPrintContent: function (args) { return enterprise.getLinkPrintContent(A(args, 0), A(args, 1)); },
   listChangeRequests: function (args) { return changeRequests.listChangeRequests(A(args, 0), A(args, 1)); },
+  getLinkSheetStructure: function (args) { return changeRequests.getLinkSheetStructure(A(args, 0), A(args, 1)); },
   createChangeRequest: function (args) { return changeRequests.createChangeRequest(A(args, 0), A(args, 1)); },
   previewChangeRequest: function (args) { return changeRequests.previewChangeRequest(A(args, 0), A(args, 1)); },
   approveChangeRequest: function (args) { return changeRequests.approveChangeRequest(A(args, 0), A(args, 1), A(args, 2)); },

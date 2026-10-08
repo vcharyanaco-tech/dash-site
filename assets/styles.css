@@ -1216,6 +1216,7 @@ body.sidebar-collapsed .nav-item.active { box-shadow: inset 0 0 0 2px var(--seco
 .cr-preview-bad { color: var(--danger); }
 .cr-actions { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
 .cr-reviewed { color: var(--muted); font-size: 12px; }
+.cr-applied { color: var(--muted); font-weight: 400; font-size: 12px; }
 
 /* ---------------------------------- Banners ---------------------------------- */
 .banner {
