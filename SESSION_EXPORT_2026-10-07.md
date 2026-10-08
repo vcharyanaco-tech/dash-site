@@ -290,3 +290,83 @@ src/app/reports.js  +31/-10 sheetTablesEnabled_/printMode_, mode chip,
    Google OAuth (Drive/Sheets read scope) so staff can print sheets that are not
    shared "anyone with the link".
 2. **Pending #6** (hibernation / DISM cleanup) â€” declined, low priority.
+---
+
+# Resume session 2 — 2026-10-07: change-request approval queue
+
+Two units: a live bug fix, then the requested approval workflow end to end.
+
+## Unit 1 - production bug found and fixed (`4702914`)
+
+`getLinkPrintContent` returned `capped.rows` / `capped.rowTotal` from the
+variable deleted in `64ebc48` when the 15-row cap was removed. Every **uncached**
+sheet fetch threw a `ReferenceError`, which the client `.catch` swallows, so a
+record's linked sheet table was **missing from the first print of every report**
+and only appeared on a later print once the 10-minute URL cache was warm.
+`node --check` cannot see it and every endpoint test short-circuits before the
+fetch, so it shipped. Added a source-level regression test.
+
+Also worth knowing: **`git push` was rejected with HTTP 500** from GitHub on
+every attempt (including to a new branch) while reads and the REST API worked.
+Pushed via the REST git API instead. If pushes start failing with
+`Internal Server Error`, that is the signature - retry, then fall back to the API.
+
+## Unit 2 - change requests (`96bceaf`, `1d0a854`)
+
+Any logged-in user proposes a change; only an admin/editor approves it. A
+pending request is inert - nothing touches `records` or a sheet until approval.
+
+- `change_requests` table (schema.sql) with `old_value` captured at raise time
+  and **re-checked at approval**: if the value moved underneath, the request
+  becomes CONFLICT and is NOT applied.
+- `sheet-target.js` - named-cell resolution `(tab, header, row) -> A1 range`,
+  resolved at APPROVAL time so inserting/reordering a column cannot make a write
+  land in the wrong cell. Rejects duplicate headers rather than guessing.
+- `sheet-write.js` - reads tab list / header row / current cell, writes exactly
+  one cell. Never a whole-row rewrite.
+- `CHANGE_REQUEST_DRY_RUN=true` resolves and returns the exact range and payload
+  **without calling Google** - how to rehearse against production data.
+- Record changes reuse `records.updateItem`, so existing validation, history,
+  locking and notifications all apply; there is no second write path.
+- Notifications to every admin/editor on submit, back to the requester on
+  approve/reject, plus an audit row.
+- UI: non-approvers get "Request change" instead of Edit/Save (one request per
+  changed field, each reviewed on its own); admins/editors get a Change requests
+  queue with a pending badge (live via SSE), old -> new diff, and for sheet
+  requests a "Check target cell" button that shows the resolved range.
+
+### The one hard requirement, stated plainly
+
+Auto-writing to the linked sheets works **only** because the admin service
+account created those sheets, so it owns them. The credential must be present as
+`GOOGLE_SERVICE_ACCOUNT_JSON` (or `GOOGLE_OAUTH_TOKEN`) on Render. Without it,
+approval fails loudly and leaves the request PENDING - it can never look applied
+when it was not.
+
+### Tests
+
+`569/569` pass (was 527). +32 for this feature, +10 validator assertions.
+The write path has **never touched the real Google API** - no credentials on the
+dev machine. Layers used instead:
+
+1. Pure unit tests for the resolver (Z->AA, ZZ->AAA, quoted/apostrophe tab
+   names, duplicate headers, row past end refused).
+2. Integration tests over the local server with no credential present, asserting
+   the negative space hardest: after a viewer's request the record is unchanged;
+   a viewer cannot approve or reject; a conflict is detected and not applied.
+3. `CHANGE_REQUEST_DRY_RUN` for rehearsing against real records.
+
+Two real bugs the tests caught: `sheetIdFromUrl` accepted a sheet id from any
+host containing `/spreadsheets/d/` (so `https://evil.example/spreadsheets/d/<real
+id>` would have been written to - now host-checked), and a CSS token guard caught
+an invented `--surface-1`.
+
+## Pending tasks (carry forward)
+
+1. **Verify the sheet write against a real sheet** - needs the service-account
+   JSON available locally, or do one throwaway sheet on Render in dry-run first
+   (`CHANGE_REQUEST_DRY_RUN=true`), then live on a single cell.
+2. **Private sheets (earlier #4)** - still open; unchanged by this work.
+3. **Push-to-origin sheet** - `DASH_PUSH_TO_SHEET` is still off, so the origin
+   spreadsheet is NOT updated by approvals. Decide whether it should be.
+4. **Pending #6** (hibernation / DISM cleanup) - declined, low priority.
