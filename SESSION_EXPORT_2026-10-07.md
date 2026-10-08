@@ -292,7 +292,7 @@ src/app/reports.js  +31/-10 sheetTablesEnabled_/printMode_, mode chip,
 2. **Pending #6** (hibernation / DISM cleanup) â€” declined, low priority.
 ---
 
-# Resume session 2 — 2026-10-07: change-request approval queue
+# Resume session 2 ï¿½ 2026-10-07: change-request approval queue
 
 Two units: a live bug fix, then the requested approval workflow end to end.
 
@@ -316,24 +316,30 @@ Pushed via the REST git API instead. If pushes start failing with
 Any logged-in user proposes a change; only an admin/editor approves it. A
 pending request is inert - nothing touches `records` or a sheet until approval.
 
-- `change_requests` table (schema.sql) with `old_value` captured at raise time
-  and **re-checked at approval**: if the value moved underneath, the request
-  becomes CONFLICT and is NOT applied.
+**Scope: LINKED-SHEET CELLS ONLY.** The first cut of this feature also allowed
+requesting dashboard record fields, which was not what was wanted; it was
+removed in `c583d3e`. Record fields are edited directly by admins/editors as
+before. The approval gate exists for the shared linked spreadsheets, which staff
+were editing by hand with nobody reviewing what changed.
+
+- `change_requests` table (schema.sql). The cell's value at raise time is
+  **re-read and re-checked at approval**: if the cell moved underneath, the
+  request becomes CONFLICT and is NOT written.
 - `sheet-target.js` - named-cell resolution `(tab, header, row) -> A1 range`,
   resolved at APPROVAL time so inserting/reordering a column cannot make a write
   land in the wrong cell. Rejects duplicate headers rather than guessing.
 - `sheet-write.js` - reads tab list / header row / current cell, writes exactly
-  one cell. Never a whole-row rewrite.
+  one cell. Never a whole-row rewrite. Also `getSheetStructure` so the request
+  form offers the sheet's REAL tabs and column headers instead of free text.
 - `CHANGE_REQUEST_DRY_RUN=true` resolves and returns the exact range and payload
   **without calling Google** - how to rehearse against production data.
-- Record changes reuse `records.updateItem`, so existing validation, history,
-  locking and notifications all apply; there is no second write path.
 - Notifications to every admin/editor on submit, back to the requester on
   approve/reject, plus an audit row.
-- UI: non-approvers get "Request change" instead of Edit/Save (one request per
-  changed field, each reviewed on its own); admins/editors get a Change requests
-  queue with a pending badge (live via SSE), old -> new diff, and for sheet
-  requests a "Check target cell" button that shows the resolved range.
+- UI: records that hyperlink a Google Sheet get "Request sheet change" for
+  **any** signed-in user; the form picks tab/column from the sheet's own
+  headers and is bounded by the sheet's real row count. Admins/editors get a
+  Change requests queue with a live pending badge (SSE) and a "Check target
+  cell" button showing the resolved range before approving.
 
 ### The one hard requirement, stated plainly
 
@@ -345,7 +351,7 @@ when it was not.
 
 ### Tests
 
-`569/569` pass (was 527). +32 for this feature, +10 validator assertions.
+`569/569` pass (was 527). +32 for this feature, +10 validator assertions. The record-field half of the tests was replaced when the scope was narrowed to sheet cells only.
 The write path has **never touched the real Google API** - no credentials on the
 dev machine. Layers used instead:
 
