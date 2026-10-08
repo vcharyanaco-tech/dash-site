@@ -388,6 +388,12 @@
               </span>
             </div>
             <div class="field" style="min-width:auto;">
+              <button class="btn btn-secondary" type="button" onclick="openChangeRequestQueue()">
+                Change requests
+                <span id="changeRequestBadge" class="badge" data-tone="warning" style="display:none"></span>
+              </button>
+            </div>
+            <div class="field" style="min-width:auto;">
               <label class="checkbox" for="includeSheetTables" title="Two separate print modes. Ticked: FULL - each record's linked Google Sheet is fetched and printed complete beside it (no row limit, report length is not limited). Unticked: COMPACT - the densified short report, no linked sheet data. Sheets must be shared &quot;anyone with the link&quot;.">
                 <input type="checkbox" id="includeSheetTables">
                 Include linked sheet data
@@ -760,6 +766,10 @@
         </button>
       </div>
       <form id="editForm" class="form" novalidate onsubmit="saveEditModal(event)">
+        <p id="editRequestNotice" class="form-status hidden">
+          You cannot change records directly. Fill this in and choose <strong>Request change</strong> &mdash;
+          an admin or editor reviews it, and nothing is saved until they approve it.
+        </p>
         <input id="editRow" type="hidden">
         <div class="field">
           <label for="editId">ID</label>
@@ -804,7 +814,7 @@
           <label class="checkbox"><input id="editFlagged" type="checkbox"> Flagged / review due</label>
         </div>
         <div class="form-row">
-          <button class="btn btn-primary" type="submit">Save changes</button>
+          <button id="editSubmitBtn" class="btn btn-primary" type="submit">Save changes</button>
           <button class="btn btn-secondary" type="button" onclick="closeEditModal()">Cancel</button>
           <span id="editStatus" class="form-status" aria-live="polite"></span>
         </div>
@@ -1480,6 +1490,21 @@
       <div class="presentation-progress" aria-label="Presentation progress"><div id="presentationProgress" class="presentation-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div></div>
     </div>
   </div>
+
+<!-- ============================ CHANGE REQUESTS ============================ -->
+<div id="changeRequestModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="changeRequestTitle">
+  <div class="modal-card modal-card-wide">
+    <div class="modal-header">
+      <h3 class="text-subheading" id="changeRequestTitle">Change requests</h3>
+      <button class="icon-btn" type="button" onclick="closeChangeRequestQueue()" aria-label="Close dialog">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div class="cr-list">
+      <div id="changeRequestList" aria-live="polite"><p class="empty">Loading…</p></div>
+    </div>
+  </div>
+</div>
 
 <script src="app.js"></script>
 </body>

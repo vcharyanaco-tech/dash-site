@@ -83,6 +83,10 @@
       "file": "realtime.js"
     },
     {
+      "name": "changeRequests",
+      "file": "change-requests.js"
+    },
+    {
       "name": "init",
       "file": "init.js"
     },

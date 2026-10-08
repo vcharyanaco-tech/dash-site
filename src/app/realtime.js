@@ -38,7 +38,14 @@ function connectSse() {
   });
 
   sseSource.addEventListener('notificationChanged', function (e) {
-    try { JSON.parse(e.data || '{}'); loadNotifications(true); if (typeof renderAttentionCenter_ === 'function') renderAttentionCenter_(); } catch (err) {}
+    try {
+      JSON.parse(e.data || '{}');
+      loadNotifications(true);
+      if (typeof renderAttentionCenter_ === 'function') renderAttentionCenter_();
+      // Keep the pending-approval count on the Change requests button live, so
+      // an approver sees there is something waiting without opening the queue.
+      if (typeof refreshChangeRequestBadge_ === 'function') refreshChangeRequestBadge_();
+    } catch (err) {}
   });
 
   sseSource.addEventListener('userLoggedIn', function () {
