@@ -102,6 +102,7 @@ const dispatch = {
   unlockSubmission: function (args) { return submissions.unlockSubmission(A(args, 0), A(args, 1)); },
   deleteSubmission: function (args) { return submissions.deleteSubmission(A(args, 0), A(args, 1)); },
   markAllSubmissionsRead: function (args) { return submissions.markAllSubmissionsRead(A(args, 0)); },
+  clearSubmissions: function (args) { return submissions.clearSubmissions(A(args, 0), A(args, 1)); },
   toggleSubmissionDisplay: function (args) { return submissions.toggleSubmissionDisplay(A(args, 0), A(args, 1)); },
 
   getInstructionEntries: function (args) { return instructionEntries.getInstructionEntries(A(args, 0), A(args, 1)); },

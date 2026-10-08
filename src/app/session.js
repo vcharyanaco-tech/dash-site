@@ -666,6 +666,9 @@ function loadApp() {
 
     populateFilters();
     populateResponsibilitySelect();
+    // Admin-only destructive control on the homepage toolbar.
+    const clearField = getEl('clearUpdatesField');
+    if (clearField) clearField.classList.toggle('hidden', !appState.isAdmin);
   renderProfile();
     applyTheme();
     applySidebarPref();

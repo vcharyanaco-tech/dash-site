@@ -526,6 +526,7 @@ getMyNotifications: function () { return apiCall_('getMyNotifications'); },
   deleteSubmission: function (submissionId) { return apiCall_('deleteSubmission', submissionId); },
   toggleSubmissionDisplay: function (submissionId) { return apiCall_('toggleSubmissionDisplay', submissionId); },
   markAllSubmissionsRead: function () { return apiCall_('markAllSubmissionsRead'); },
+  clearSubmissions: function (mode) { return apiCall_('clearSubmissions', mode); },
   getInstructionEntries: function (cardRow) { return apiCall_('getInstructionEntries', cardRow); },
   addInstructionEntry: function (cardRow, cardId, text, attachment) { return apiCall_('addInstructionEntry', cardRow, cardId, text, attachment || null); },
   updateInstructionEntry: function (entryId, text, attachment) { return apiCall_('updateInstructionEntry', entryId, text, attachment || null); },
@@ -3748,6 +3749,9 @@ function loadApp() {
 
     populateFilters();
     populateResponsibilitySelect();
+    // Admin-only destructive control on the homepage toolbar.
+    const clearField = getEl('clearUpdatesField');
+    if (clearField) clearField.classList.toggle('hidden', !appState.isAdmin);
   renderProfile();
     applyTheme();
     applySidebarPref();
@@ -11077,6 +11081,77 @@ function submitSheetChangeRequest() {
   });
 }
 
+/* ------------------------- Clear updates (admin) ------------------------- */
+
+/* The two counts shown in the dialog, so the admin can see what each option
+   will remove before choosing. Derived from the same overview the dashboard
+   already fetches rather than a second endpoint. */
+function clearUpdatesCounts_() {
+  let total = 0;
+  let unread = 0;
+  Object.keys(appState.submissionCounts || {}).forEach(function (k) {
+    total += Number(appState.submissionCounts[k]) || 0;
+  });
+  Object.keys(appState.submissionFlash || {}).forEach(function (k) {
+    if (appState.submissionFlash[k]) unread++;
+  });
+  return { total: total, unread: unread, read: Math.max(0, total - unread) };
+}
+
+function openClearUpdatesDialog() {
+  // Defence in depth: the server refuses non-admins regardless, but the UI
+  // should not even offer a destructive control to someone who cannot use it.
+  if (!appState.isAdmin) { showToast('Admin access required', 'warning'); return; }
+  const counts = clearUpdatesCounts_();
+  const readEl = getEl('clearUpdatesReadCount');
+  const allEl = getEl('clearUpdatesAllCount');
+  if (readEl) readEl.textContent = counts.read + ' update(s) would be removed.';
+  if (allEl) allEl.textContent = counts.total + ' update(s) would be removed.';
+  getEl('clearUpdatesStatus').textContent = '';
+  openDialog('clearUpdatesModal');
+}
+
+function closeClearUpdatesDialog() {
+  closeDialog('clearUpdatesModal');
+}
+
+function runClearUpdates(mode) {
+  if (!appState.isAdmin) { showToast('Admin access required', 'warning'); return; }
+  const which = mode === 'read' ? 'read' : 'all';
+  const counts = clearUpdatesCounts_();
+  const amount = which === 'read' ? counts.read : counts.total;
+  const message = which === 'read'
+    ? 'Remove ' + amount + ' update(s) you have already read?\n\nUnread updates are kept.'
+    : 'Remove ALL ' + amount + ' update(s) from every record, including unread ones?\n\nThis cannot be undone.';
+  showConfirm({ title: which === 'read' ? 'Clear read updates' : 'Clear all updates', message: message, okLabel: 'Clear', danger: true })
+    .then(function (ok) {
+      if (!ok) return;
+      doClearUpdates_(which);
+    });
+}
+
+function doClearUpdates_(which) {
+  showOverlay('Clearing updates…');
+  ApiService.clearSubmissions(which).then(function (res) {
+    hideOverlay();
+    if (!res || res.success !== true) {
+      getEl('clearUpdatesStatus').textContent = (res && res.message) || 'Could not clear updates.';
+      return;
+    }
+    closeClearUpdatesDialog();
+    appState.submissionCounts = res.counts || {};
+    appState.submissionFlash = res.flash || {};
+    showToast('Cleared ' + res.cleared + ' update(s)' + (which === 'read' ? ' (read only)' : ''), 'success');
+    // Re-render so cards, badges and the counter reflect the new state.
+    if (typeof loadNotifications === 'function') loadNotifications(true);
+    renderDashboard(true);
+  }).catch(function (err) {
+    hideOverlay();
+    if (handleServerFailure(err)) return;
+    getEl('clearUpdatesStatus').textContent = 'Could not clear updates: ' + ((err && err.message) || err);
+  });
+}
+
 /* ---------------------------------- Approvals queue ---------------------------------- */
 
 /* Cheap pending-count fetch so the toolbar badge is right on load and after
@@ -11208,7 +11283,17 @@ function approveChangeRequestRow(id) {
 
 function rejectChangeRequestRow(id) {
   if (!changeRequestState_.canApprove) { showToast('Admin/editor access required', 'warning'); return; }
-  const note = window.prompt('Reason for rejecting (optional — shown to the requester):') || '';
+  showPrompt({
+    title: 'Reject change request',
+    message: 'Reason (optional) — shown to the requester.',
+    placeholder: 'e.g. not this quarter'
+  }).then(function (note) {
+    if (note === null || note === undefined) return; // cancelled
+    doRejectChangeRequest_(id, String(note));
+  });
+}
+
+function doRejectChangeRequest_(id, note) {
   showOverlay('Rejecting…');
   ApiService.rejectChangeRequest(id, note).then(function (res) {
     hideOverlay();

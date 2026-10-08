@@ -42,7 +42,7 @@ const AUTH_ARG_INDEX = Object.freeze({
   emailReport: 0, getAllDocuments: 0, getRecordDocuments: 1, uploadDocument: 5,
   deleteDocument: 1, setDocumentKeep: 2, getSubmissions: 0,
   addSubmission: 4, updateSubmission: 3, lockSubmission: 1,
-  unlockSubmission: 1, deleteSubmission: 1, markAllSubmissionsRead: 0,
+  unlockSubmission: 1, deleteSubmission: 1, markAllSubmissionsRead: 0, clearSubmissions: 0,
   toggleSubmissionDisplay: 1,
   getInstructionEntries: 1, addInstructionEntry: 4, updateInstructionEntry: 3, deleteInstructionEntry: 1, adminDeleteAuditRows: 1, adminClearAudit: 0,
   getAuditEntries: 1, getRecordHistory: 1,
@@ -673,6 +673,13 @@ const VALIDATORS = {
   },
   markAllSubmissionsRead: function (args) {
     if (args.length < 1) return 'markAllSubmissionsRead requires (token)';
+    return null;
+  },
+  clearSubmissions: function (args) {
+    if (args.length < 2) return 'clearSubmissions requires (token, mode)';
+    // An unset mode would silently mean "clear everything", which is the one
+    // outcome that must never be reached by accident.
+    if (args[1] !== 'all' && args[1] !== 'read') return 'mode must be "all" or "read"';
     return null;
   },
   setRecordDisplay: function (args) {

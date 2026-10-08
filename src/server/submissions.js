@@ -346,6 +346,55 @@ function markAllSubmissionsRead(token) {
   return getSubmissionOverview_(admin);
 }
 
+/* Admin-only bulk clear of card updates ("submissions").
+   mode = 'all'  -> remove every update on every record
+   mode = 'read' -> remove only the ones an admin has already read, leaving the
+                    unread ones (and their flashing badges) intact.
+   Attachments and their uploaded files are removed with the rows; an orphaned
+   file on disk is a leak, and an orphaned DB row would resurrect the update. */
+function clearSubmissions(token, mode) {
+  const admin = auth.requireAdmin(token);
+  const which = String(mode || '').toLowerCase() === 'read' ? 'read' : 'all';
+  if (String(mode || '').toLowerCase() !== '' && String(mode || '').toLowerCase() !== 'all' && which !== 'read') {
+    return { success: false, message: 'mode must be "all" or "read".' };
+  }
+
+  return runWithLock_(function () {
+    const rows = which === 'read'
+      ? db.prepare('SELECT id FROM submissions WHERE read_at > 0').all()
+      : db.prepare('SELECT id FROM submissions').all();
+    rows.forEach(function (r) { deleteSubmissionAttachments_(String(r.id || '')); });
+    const stmt = db.prepare(
+      which === 'read' ? 'DELETE FROM submissions WHERE read_at > 0' : 'DELETE FROM submissions'
+    );
+    const info = stmt.run();
+
+    const count = Number(info.changes) || 0;
+    try {
+      require('./audit').logAudit_(
+        which === 'read' ? ACTIONS.SUBMISSION_CLEAR_READ : ACTIONS.SUBMISSION_CLEAR_ALL,
+        '',
+        'Cleared ' + count + ' submission(s) across all records' + (which === 'read' ? ' (read only)' : ''),
+        admin.email
+      );
+    } catch (err) {}
+    try { require('./data-sync').requestBackup(); } catch (err) {}
+
+    const overview = getSubmissionOverview_(admin);
+    // Counted from the table, not from the overview shape: reporting "0
+    // remaining" because a field did not exist would be worse than useless.
+    const remaining = Number((db.prepare('SELECT COUNT(*) AS n FROM submissions').get() || {}).n) || 0;
+    return {
+      success: true,
+      mode: which,
+      cleared: count,
+      remaining: remaining,
+      counts: overview.counts || {},
+      flash: overview.flash || {}
+    };
+  });
+}
+
 function toggleSubmissionDisplay(submissionId, token) {
   const admin = auth.requireAdmin(token);
 
@@ -370,6 +419,7 @@ module.exports = {
   unlockSubmission,
   deleteSubmission,
   markAllSubmissionsRead,
+  clearSubmissions,
   toggleSubmissionDisplay,
   officeForEmail: officeForEmail_,
   // Persist promptly (see records.js bumpDataGeneration_): the KV snapshot is

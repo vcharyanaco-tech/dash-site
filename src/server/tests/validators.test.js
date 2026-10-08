@@ -220,6 +220,8 @@ const validatorCases = [
   { fn: 'createChangeRequest', goodArgs: [{ recordRow: 4, field: 'sector', newValue: 'x' }, adminToken], badArgs: [], msg: /createChangeRequest requires/ },
   { fn: 'createChangeRequest', goodArgs: [{ recordRow: 4, field: 'sector', newValue: 'x' }, adminToken], badArgs: [null, adminToken], msg: /payload is required/ },
   { fn: 'createChangeRequest', goodArgs: [{ recordRow: 4, field: 'sector', newValue: 'x' }, adminToken], badArgs: ['nope', adminToken], msg: /payload is required/ },
+  { fn: 'clearSubmissions', goodArgs: [adminToken, 'all'], badArgs: [], msg: /clearSubmissions requires/ },
+  { fn: 'clearSubmissions', goodArgs: [adminToken, 'all'], badArgs: [adminToken, 'everything'], msg: /mode must be/ },
   { fn: 'getLinkSheetStructure', goodArgs: [adminToken, 1], badArgs: [], msg: /getLinkSheetStructure requires/ },
   { fn: 'getLinkSheetStructure', goodArgs: [adminToken, 1], badArgs: [adminToken, null], msg: /row is required/ },
   { fn: 'previewChangeRequest', goodArgs: ['abc', adminToken], badArgs: [], msg: /previewChangeRequest requires/ },
