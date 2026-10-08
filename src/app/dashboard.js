@@ -515,7 +515,7 @@ function buildCardHtml(item) {
     ${appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="toggleCardAi('${escAttr(item.row)}', this)">AI insight</button>` : ''}
     ${appState.isEditor && itemHasLink_(item) ? `<button class="btn btn-secondary btn-small" onclick="toggleCardLink('${escAttr(item.row)}', this)">Analyze link</button>` : ''}
     ${appState.isEditor ? `<button class="btn btn-secondary btn-small" onclick="editItem('${escAttr(item.row)}')">Edit</button>` : ''}
-    ${itemHasSheetLink_(item) ? `<button class="btn btn-secondary btn-small" onclick="openSheetChangeRequest('${escAttr(item.row)}')">Request sheet change</button>` : ''}
+    ${itemHasSheetLink_(item) ? `<button class="btn btn-secondary btn-small" onmouseenter="prefetchSheetRequestStructure_('${escAttr(item.row)}')" onclick="openSheetChangeRequest('${escAttr(item.row)}')">Request sheet change</button>` : ''}
     ${appState.isEditor ? `<button class="btn btn-danger btn-small" onclick="deleteItem('${escAttr(item.row)}')">Delete</button>` : ''}`;
 
   const showId = dashboardColumnVisible_('id');

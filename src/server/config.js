@@ -448,6 +448,17 @@ const LINK_PRINT_CACHE_TTL_MS = 10 * 60 * 1000;
 const LINK_PRINT_FETCH_CONCURRENCY = 4;
 // Max Ask-AI Q&A entries kept per record (client + server cap).
 const ASK_LINK_HISTORY_MAX = 10;
+// How long a linked sheet's tab/header structure stays in the in-process cache.
+// Opening the change-request form reads the sheet to offer real tabs and column
+// names; without this every open re-reads it and the form sits on "Loading…".
+const SHEET_STRUCTURE_CACHE_TTL_MS = 10 * 60 * 1000;
+// Max tabs read at once while building that structure. The old code awaited each
+// tab in turn, so a sheet with N tabs cost 2N+1 serialized Google round trips.
+const SHEET_STRUCTURE_FETCH_CONCURRENCY = 6;
+// How long a minted Google access token is reused. The service-account assertion
+// is valid for an hour; re-minting one per request added a round trip to every
+// sheet read and write.
+const GOOGLE_TOKEN_TTL_MS = 50 * 60 * 1000;
 
 module.exports = {
   CONFIG,
@@ -510,5 +521,8 @@ ENTERPRISE_AI_PREVIEW_MAX_CELL_CHARS,
   LINK_PRINT_GUARD_MAX_COLS,
   LINK_PRINT_GUARD_MAX_CELL_CHARS,
   LINK_PRINT_CACHE_TTL_MS,
-  LINK_PRINT_FETCH_CONCURRENCY
+  LINK_PRINT_FETCH_CONCURRENCY,
+  SHEET_STRUCTURE_CACHE_TTL_MS,
+  SHEET_STRUCTURE_FETCH_CONCURRENCY,
+  GOOGLE_TOKEN_TTL_MS
 };

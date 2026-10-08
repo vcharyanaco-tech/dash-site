@@ -10,6 +10,9 @@
 
 const changeRequestState_ = { requests: [], canApprove: false, previews: {} };
 const sheetStructureCache_ = {};
+// Record row whose structure is already being prefetched, so hovering a row of
+// cards does not fire the same request once per card.
+let sheetRequestPrefetching_ = '';
 
 /* True when the record hyperlinks a Google Sheet, i.e. when there is anything
    to request a change against. */
@@ -41,6 +44,10 @@ function openSheetChangeRequest(row) {
   getEl('sheetRequestStatus').textContent = '';
   getEl('sheetRequestSubmit').disabled = true;
   openDialog('sheetRequestModal');
+  // Repaint from whatever is already known before asking the server, so a record
+  // whose sheet was read earlier opens instantly instead of showing "Loading…".
+  const cached = sheetStructureCache_[String(row)];
+  if (cached && cached.length) paintSheetRequestTabs_(Number(row), cached);
   loadSheetRequestStructure_(Number(row));
 }
 
@@ -65,22 +72,44 @@ function loadSheetRequestStructure_(row) {
       getEl('sheetRequestStatus').textContent = 'That sheet has no tabs.';
       return;
     }
-    sheetStructureCache_[String(row)] = tabs;
-    tabSel.innerHTML = tabs.map(function (t) {
-      return '<option value="' + escAttr(t.title) + '">' + escapeHtml(t.title) + '</option>';
-    }).join('');
-    if (data.dryRun) {
-      getEl('sheetRequestStatus').textContent = 'Dry run is enabled on the server: approvals resolve the cell but will not write to the sheet.';
-    } else {
-      getEl('sheetRequestStatus').textContent = '';
-    }
-    getEl('sheetRequestSubmit').disabled = false;
-    onSheetRequestTabChange_();
+    paintSheetRequestTabs_(row, tabs);
+    getEl('sheetRequestStatus').textContent = data.dryRun
+      ? 'Dry run is enabled on the server: approvals resolve the cell but will not write to the sheet.'
+      : '';
   }).catch(function (err) {
-    getEl('sheetRequestTab').innerHTML = '<option value="">Unavailable</option>';
     if (handleServerFailure(err)) return;
+    getEl('sheetRequestTab').innerHTML = '<option value="">Unavailable</option>';
     getEl('sheetRequestStatus').textContent = 'Could not read the sheet: ' + ((err && err.message) || err);
   });
+}
+
+/* Repaint the tab dropdown, and every control whose choices depend on it, from a
+   structure the server has already read. The previously selected tab is kept
+   when it still exists so a background refresh does not reset the form. */
+function paintSheetRequestTabs_(row, tabs) {
+  const tabSel = getEl('sheetRequestTab');
+  const previous = tabSel.value;
+  sheetStructureCache_[String(row)] = tabs;
+  tabSel.innerHTML = tabs.map(function (t) {
+    return '<option value="' + escAttr(t.title) + '">' + escapeHtml(t.title) + '</option>';
+  }).join('');
+  if (previous && tabs.some(function (t) { return t.title === previous; })) tabSel.value = previous;
+  getEl('sheetRequestSubmit').disabled = false;
+  onSheetRequestTabChange_();
+}
+
+/* Warms the structure while the user is still deciding, so the click that opens
+   the form finds it in the cache. Reading it is read-only and requires nothing
+   from the user, so doing it on hover costs nothing but saves the wait. */
+function prefetchSheetRequestStructure_(row) {
+  const key = String(row);
+  if (sheetStructureCache_[key] || sheetRequestPrefetching_ === key) return;
+  sheetRequestPrefetching_ = key;
+  ApiService.getLinkSheetStructure(row).then(function (data) {
+    if (!data || data.success !== true || data.available !== true) return;
+    if (data.tabs && data.tabs.length) sheetStructureCache_[key] = data.tabs;
+  }).catch(function () { /* a failed prefetch just means the open pays full price */ })
+    .then(function () { if (sheetRequestPrefetching_ === key) sheetRequestPrefetching_ = ''; });
 }
 
 function currentSheetTab_() {

@@ -30,7 +30,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { db, getAppSettings } = require('./db');
-const { CONFIG } = require('./config');
+const { CONFIG, GOOGLE_TOKEN_TTL_MS } = require('./config');
 const { parseCsv_, today_, uuid_ } = require('./helpers');
 const settings = require('./settings');
 
@@ -43,6 +43,9 @@ const START_ROW = CONFIG.SHEET.START_ROW; // 4
 const API_KEY = process.env.GOOGLE_SHEETS_API_KEY || '';
 const SERVICE_ACCOUNT_JSON = process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '';
 const OAUTH_TOKEN = process.env.GOOGLE_OAUTH_TOKEN || '';
+// The most recently minted service-account token, reused until shortly before
+// its one-hour expiry. Set lazily by accessToken_().
+let cachedToken_ = null;
 // Hard kill switch: push-back to the origin spreadsheet is DISABLED unless
 // explicitly opted in via DASH_PUSH_TO_SHEET=true. This protects the origin
 // sheet from being overwritten by stale/misaligned project data (a recurring
@@ -550,8 +553,14 @@ async function serviceAccountToken_() {
 
 async function accessToken_() {
   if (OAUTH_TOKEN) return OAUTH_TOKEN;
-  if (SERVICE_ACCOUNT_JSON) return serviceAccountToken_();
-  return null;
+  if (!SERVICE_ACCOUNT_JSON) return null;
+  // The assertion is valid for an hour, so one minted token serves every sheet
+  // read and write until it is close to expiry. Without this, each request paid
+  // an extra round trip to Google's token endpoint before doing any work.
+  if (cachedToken_ && Date.now() < cachedToken_.expiresAt) return cachedToken_.token;
+  const token = await serviceAccountToken_();
+  cachedToken_ = { token: token, expiresAt: Date.now() + GOOGLE_TOKEN_TTL_MS };
+  return token;
 }
 
 // Resolves the sheet's grid id (gid) so updateCells can target it.

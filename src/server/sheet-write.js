@@ -21,9 +21,16 @@
  */
 
 const { resolveNamedCell, clampRow_ } = require('./sheet-target');
+const {
+  SHEET_STRUCTURE_CACHE_TTL_MS,
+  SHEET_STRUCTURE_FETCH_CONCURRENCY
+} = require('./config');
 
 const DRY_RUN = String(process.env.CHANGE_REQUEST_DRY_RUN || '').toLowerCase() === 'true';
 const REQUEST_TIMEOUT_MS = 15000;
+// Rows of a tab read when hunting for the header row. Sheets commonly open with
+// a title row and a blank row before the real column names.
+const HEADER_SCAN_ROWS = 10;
 
 /* A Google Sheets URL is the only thing this module will ever be pointed at.
    The record's hyperlink is user-supplied text, so the host is checked as well
@@ -64,12 +71,24 @@ async function sheetsGet_(spreadsheetId, token, fields) {
   return json;
 }
 
+/** Tab titles and row extents in ONE call: [{ title, rowCount }].
+ *  The row extent used to be a second full metadata fetch per tab, which made
+ *  building the form's tab list cost 2N+1 serialized round trips. */
+async function readSheetMeta_(spreadsheetId, token) {
+  const meta = await sheetsGet_(spreadsheetId, token, 'sheets.properties(title,gridProperties.rowCount)');
+  return (meta.sheets || []).map(function (s) {
+    const props = (s && s.properties) || {};
+    return {
+      title: String(props.title || ''),
+      rowCount: props.gridProperties ? Number(props.gridProperties.rowCount) || 0 : 0
+    };
+  }).filter(function (t) { return !!t.title; });
+}
+
 /** List the tab titles of a spreadsheet: ['Sheet1', 'Data', ...]. */
 async function listTabs_(spreadsheetId, token) {
-  const meta = await sheetsGet_(spreadsheetId, token, 'sheets.properties(title)');
-  return (meta.sheets || []).map(function (s) {
-    return s && s.properties ? String(s.properties.title || '') : '';
-  }).filter(function (t) { return !!t; });
+  const meta = await readSheetMeta_(spreadsheetId, token);
+  return meta.map(function (t) { return t.title; });
 }
 
 /** Case-insensitive tab lookup; returns the sheet's real title (needed verbatim
@@ -78,9 +97,16 @@ function matchTab_(tabs, wanted) {
   const key = function (v) { return String(v || '').trim().toLowerCase(); };
   const want = key(wanted);
   for (let i = 0; i < tabs.length; i++) {
-    if (key(tabs[i]) === want) return tabs[i];
+    const t = typeof tabs[i] === 'string' ? tabs[i] : (tabs[i] && tabs[i].title);
+    if (key(t) === want) return typeof tabs[i] === 'string' ? tabs[i] : tabs[i].title;
   }
   return '';
+}
+
+/** Row extent of a named tab, from metadata already fetched. 0 when absent. */
+function rowCountFor_(meta, tabTitle) {
+  const hit = meta.filter(function (t) { return t.title === String(tabTitle); })[0];
+  return hit ? Number(hit.rowCount) || 0 : 0;
 }
 
 /** First row of a tab, used as the header row for column resolution. */
@@ -114,18 +140,6 @@ async function readTopRows_(spreadsheetId, tabTitle, token, maxRows) {
   });
 }
 
-/** Row extent of a tab, so a typo'd row can be refused instead of growing the
- *  sheet (Sheets accepts a write past the end and creates the row). */
-async function readRowCount_(spreadsheetId, tabTitle, token) {
-  const meta = await sheetsGet_(spreadsheetId, token, 'sheets.properties(title,gridProperties.rowCount)');
-  const hit = (meta.sheets || []).find(function (s) {
-    return s && s.properties && String(s.properties.title || '') === String(tabTitle);
-  });
-  return hit && hit.properties && hit.properties.gridProperties
-    ? Number(hit.properties.gridProperties.rowCount) || 0
-    : 0;
-}
-
 /**
  * Resolve a named cell to a concrete range and report what is currently there.
  *
@@ -144,7 +158,10 @@ async function resolveTarget(opts) {
   const token = await require('./sync-sheet').accessToken_();
   if (!token) return { ok: false, reason: 'No Google write credential is configured on the server.' };
 
-  const tabs = await listTabs_(spreadsheetId, token);
+  // One metadata call yields both the tab list and the row extent, so the tab
+  // check and the row clamp below cost nothing extra.
+  const meta = await readSheetMeta_(spreadsheetId, token);
+  const tabs = meta.map(function (t) { return t.title; });
   const tab = matchTab_(tabs, opts.tabName);
   if (!tab) {
     return {
@@ -154,8 +171,8 @@ async function resolveTarget(opts) {
     };
   }
 
-  const headerRows = await readTopRows_(spreadsheetId, tab, token, 10);
-  const located = require('./sheet-target').findHeaderInTopRows_(headerRows, opts.headerName, 10);
+  const headerRows = await readTopRows_(spreadsheetId, tab, token, HEADER_SCAN_ROWS);
+  const located = require('./sheet-target').findHeaderInTopRows_(headerRows, opts.headerName, HEADER_SCAN_ROWS);
   if (!located.found) {
     if (located.ambiguous) {
       return {
@@ -182,7 +199,7 @@ async function resolveTarget(opts) {
   });
   if (!resolved.ok) return { ok: false, reason: resolved.reason };
 
-  const rowCount = await readRowCount_(spreadsheetId, tab, token);
+  const rowCount = rowCountFor_(meta, tab);
   const row = clampRow_(opts.oneBasedRow, rowCount);
   if (!row) {
     return {
@@ -287,7 +304,56 @@ async function writeCell(opts) {
     const msg = (json && json.error && json.error.message) || ('HTTP ' + resp.status);
     return { ok: false, message: 'Sheet write failed for ' + range + ': ' + msg, range: range };
   }
+  // The sheet just changed, so any cached description of it is now suspect.
+  structureCache_.delete(spreadsheetId);
   return { ok: true, dryRun: false, range: range, spreadsheetId: spreadsheetId, value: value };
+}
+
+/* In-process cache of tab/header structure, keyed by spreadsheet id. Opening the
+   change-request form reads the sheet so the requester is offered real tabs and
+   column names; without this, every open paid for it again. Entries expire so a
+   renamed column or added tab is picked up, and a write drops the entry outright
+   because the sheet it describes has just changed. */
+const structureCache_ = new Map();
+
+function structureCacheGet_(spreadsheetId) {
+  const hit = structureCache_.get(spreadsheetId);
+  if (!hit) return null;
+  if (Date.now() - hit.at > SHEET_STRUCTURE_CACHE_TTL_MS) {
+    structureCache_.delete(spreadsheetId);
+    return null;
+  }
+  return hit.value;
+}
+
+function structureCacheSet_(spreadsheetId, value) {
+  structureCache_.set(spreadsheetId, { at: Date.now(), value: value });
+  // Bound the map so a long-lived process cannot grow it without limit.
+  if (structureCache_.size > 200) {
+    const oldest = Array.from(structureCache_.entries())
+      .sort(function (a, b) { return a[1].at - b[1].at; })
+      .slice(0, structureCache_.size - 200);
+    oldest.forEach(function (e) { structureCache_.delete(e[0]); });
+  }
+}
+
+/* Runs `fn` over `items` with at most `limit` in flight, preserving order. The
+   old sequential loop made the form's load time scale with the tab count. */
+async function mapWithConcurrency_(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i], i);
+    }
+  }
+  const n = Math.max(1, Math.min(Number(limit) || 1, items.length));
+  const workers = [];
+  for (let i = 0; i < n; i++) workers.push(worker());
+  await Promise.all(workers);
+  return out;
 }
 
 /**
@@ -297,24 +363,29 @@ async function writeCell(opts) {
  *
  * Read-only. Needs the write credential because it authenticates with the same
  * token the write does.
+ *
+ * Cost matters here: this runs the moment a user opens the form. It is one
+ * metadata call plus one header read per tab, the header reads run
+ * concurrently, and the whole answer is cached briefly, so a repeat open is
+ * instant.
  */
 async function getSheetStructure(sheetUrl) {
   const spreadsheetId = sheetIdFromUrl_(sheetUrl);
   if (!spreadsheetId) return { ok: false, reason: 'That link is not a Google Sheets URL.' };
+  const cached = structureCacheGet_(spreadsheetId);
+  if (cached) return { ok: true, spreadsheetId: spreadsheetId, tabs: cached, cached: true };
   if (!writeCredentialPresent_()) {
     return { ok: false, reason: 'No Google credential is configured on the server, so linked sheets cannot be read or changed.' };
   }
   const token = await require('./sync-sheet').accessToken_();
   if (!token) return { ok: false, reason: 'No Google credential is configured on the server.' };
 
-  const tabs = [];
-  const titles = await listTabs_(spreadsheetId, token);
-  for (let i = 0; i < titles.length; i++) {
+  const meta = await readSheetMeta_(spreadsheetId, token);
+  const scanned = await mapWithConcurrency_(meta, SHEET_STRUCTURE_FETCH_CONCURRENCY, async function (tab) {
     let headers = [];
-    let rowCount = 0;
     let headerRow = 1;
     try {
-      const top = await readTopRows_(spreadsheetId, titles[i], token, 10);
+      const top = await readTopRows_(spreadsheetId, tab.title, token, HEADER_SCAN_ROWS);
       // The header row is the first of the top rows that actually looks like
       // headers (two or more named cells). A title row has one cell and is
       // skipped, so the requester is offered real column names.
@@ -327,15 +398,16 @@ async function getSheetStructure(sheetUrl) {
         }
       }
     } catch (e) { headers = []; }
-    try { rowCount = await readRowCount_(spreadsheetId, titles[i], token); } catch (e) { rowCount = 0; }
-    tabs.push({
-      title: titles[i],
+    return {
+      title: tab.title,
       headers: headers,
       headerRow: headerRow,
-      rowCount: rowCount
-    });
-  }
-  return { ok: true, spreadsheetId: spreadsheetId, tabs: tabs };
+      rowCount: tab.rowCount
+    };
+  });
+
+  structureCacheSet_(spreadsheetId, scanned);
+  return { ok: true, spreadsheetId: spreadsheetId, tabs: scanned };
 }
 
 function dryRunEnabled() { return DRY_RUN; }
@@ -347,5 +419,12 @@ module.exports = {
   getSheetStructure: getSheetStructure,
   resolveTarget: resolveTarget,
   writeCell: writeCell,
-  __test: { listTabs: listTabs_, matchTab: matchTab_, sheetIdFromUrl: sheetIdFromUrl_ }
+  __test: {
+    listTabs: listTabs_,
+    matchTab: matchTab_,
+    sheetIdFromUrl: sheetIdFromUrl_,
+    readSheetMeta: readSheetMeta_,
+    rowCountFor: rowCountFor_,
+    mapWithConcurrency: mapWithConcurrency_
+  }
 };
