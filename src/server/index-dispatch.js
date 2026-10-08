@@ -18,6 +18,7 @@ const records = require('./records');
 const reports = require('./reports');
 const submissions = require('./submissions');
 const instructionEntries = require('./instruction-entries');
+const changeRequests = require('./change-requests');
 const tasks = require('./tasks');
 const helpers = require('./helpers');
 
@@ -121,6 +122,11 @@ const dispatch = {
   getCardAiInsight: function (args) { return enterprise.getCardAiInsight(A(args, 0), A(args, 1)); },
   getLinkContentAiInsight: function (args) { return enterprise.getLinkContentAiInsight(A(args, 0), A(args, 1)); },
   getLinkPrintContent: function (args) { return enterprise.getLinkPrintContent(A(args, 0), A(args, 1)); },
+  listChangeRequests: function (args) { return changeRequests.listChangeRequests(A(args, 0), A(args, 1)); },
+  createChangeRequest: function (args) { return changeRequests.createChangeRequest(A(args, 0), A(args, 1)); },
+  previewChangeRequest: function (args) { return changeRequests.previewChangeRequest(A(args, 0), A(args, 1)); },
+  approveChangeRequest: function (args) { return changeRequests.approveChangeRequest(A(args, 0), A(args, 1), A(args, 2)); },
+  rejectChangeRequest: function (args) { return changeRequests.rejectChangeRequest(A(args, 0), A(args, 1), A(args, 2)); },
   askLinkAi: function (args) { return enterprise.askLinkAi(A(args, 0), A(args, 1), A(args, 2)); },
   askDashboardAi: function (args) { return enterprise.askDashboardAi(A(args, 0), A(args, 1), A(args, 2)); },
   getAllAskLinkHistory: function (args) { return enterprise.getAllAskLinkHistory(A(args, 0)); },

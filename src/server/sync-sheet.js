@@ -938,6 +938,10 @@ module.exports = {
   deleteSheetRowForRecord_,
   writeCredentialConfigured,
   pushToSheetEnabled,
+  // Exposed so other modules (the change-request approval path) authenticate
+  // to Google with exactly the same credential and caching rules rather than
+  // minting a second JWT from a second copy of this logic.
+  accessToken_: accessToken_,
   _parseGviz: parseGviz,
   _gvizRows: gvizRows,
   _buildTextRuns: buildTextRuns_,

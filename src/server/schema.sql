@@ -260,3 +260,49 @@ CREATE TABLE IF NOT EXISTS record_changes (
   diff TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_record_changes_row ON record_changes(record_row);
+
+-- Change requests: the approval queue for record edits. A non-approver
+-- proposes a change instead of writing it; an admin/editor approves or
+-- rejects. Nothing here touches the records table or a Google Sheet until
+-- approval, so a pending request is inert by construction.
+--
+-- `scope` is 'record' (a dashboard field) or 'sheet' (a cell in the record's
+-- linked Google Sheet). Sheet requests target a NAMED cell rather than an
+-- A1 coordinate: `sheet_tab` names the tab and `sheet_header` the header cell,
+-- and the server resolves the column at write time from the sheet's own header
+-- row. A raw column index would silently write to the wrong cell whenever
+-- someone reorders or inserts a column.
+--
+-- `old_value` is captured when the request is raised and re-checked at
+-- approval: if the record or cell changed underneath, the request is marked
+-- CONFLICT rather than overwriting the newer value.
+CREATE TABLE IF NOT EXISTS change_requests (
+  id TEXT PRIMARY KEY,
+  record_row INTEGER NOT NULL DEFAULT 0,
+  record_id TEXT NOT NULL DEFAULT '',
+  scope TEXT NOT NULL DEFAULT 'record',
+  field TEXT NOT NULL DEFAULT '',
+  old_value TEXT NOT NULL DEFAULT '',
+  new_value TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  -- 'sheet' scope only
+  sheet_url TEXT NOT NULL DEFAULT '',
+  sheet_tab TEXT NOT NULL DEFAULT '',
+  sheet_header TEXT NOT NULL DEFAULT '',
+  sheet_row INTEGER NOT NULL DEFAULT 0,
+  -- value read from the sheet when the request was raised; shown to the
+  -- approver as the current state, and used for the conflict check
+  sheet_current_value TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'PENDING',
+  requested_by TEXT NOT NULL DEFAULT '',
+  requested_at INTEGER,
+  reviewed_by TEXT NOT NULL DEFAULT '',
+  reviewed_at INTEGER,
+  review_note TEXT NOT NULL DEFAULT '',
+  -- set when approval also had to write to a linked sheet, for the audit trail
+  applied_range TEXT NOT NULL DEFAULT '',
+  applied_sheet TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_change_requests_status ON change_requests(status, requested_at);
+CREATE INDEX IF NOT EXISTS idx_change_requests_record ON change_requests(record_row);
+CREATE INDEX IF NOT EXISTS idx_change_requests_requester ON change_requests(requested_by);
