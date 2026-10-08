@@ -75,6 +75,64 @@ function findHeaderColumn_(headerRow, headerName) {
 }
 
 /**
+ * Find a named header anywhere in the top rows of a sheet.
+ *
+ * A sheet does not have to put its headers in row 1: the dashboard's own
+ * origin sheet starts with a title row, a blank row, then the headers on row 3.
+ * Requiring row 1 would offer the requester a single meaningless "column" and
+ * make real columns unreachable. So the header is located by name across the
+ * top rows instead.
+ *
+ * If the same header appears in more than one of those rows the target is
+ * ambiguous, so it is reported rather than guessed.
+ *
+ * Returns { found, row (1-based), columnIndex, ambiguous, rowsSearched }.
+ */
+function findHeaderInTopRows_(topRows, headerName, maxRows) {
+  const wanted = headerKey_(headerName);
+  const rows = topRows || [];
+  const limit = Math.min(rows.length, Math.max(1, Number(maxRows) || rows.length));
+  const hits = [];
+  for (let r = 0; r < limit; r++) {
+    const found = findHeaderColumn_(rows[r] || [], headerName);
+    if (found.index !== -1) hits.push({ row: r + 1, columnIndex: found.index, duplicateInRow: found.duplicate });
+  }
+  if (!hits.length) {
+    return { found: false, rowsSearched: limit, ambiguous: false, seenHeaders: collectHeaders_(rows, limit) };
+  }
+  if (hits.length > 1) {
+    const letters = hits.map(function (h) { return columnLetters_(h.columnIndex) + (h.row); });
+    return { found: false, ambiguous: true, rowsSearched: limit, where: letters.join(' and ') };
+  }
+  return {
+    found: true,
+    row: hits[0].row,
+    columnIndex: hits[0].columnIndex,
+    ambiguous: false,
+    duplicateInRow: hits[0].duplicateInRow,
+    rowsSearched: limit
+  };
+}
+
+/* Distinct non-empty header names from the scanned rows, so an error message can
+   tell the requester what the sheet actually calls its columns. */
+function collectHeaders_(rows, limit) {
+  const seen = {};
+  const out = [];
+  for (let r = 0; r < Math.min(rows.length, limit); r++) {
+    (rows[r] || []).forEach(function (cell) {
+      const text = String(cell == null ? '' : cell).trim();
+      if (!text) return;
+      const key = headerKey_(text);
+      if (seen[key]) return;
+      seen[key] = true;
+      out.push(text);
+    });
+  }
+  return out;
+}
+
+/**
  * Resolve a named cell against a sheet's grid.
  *
  * opts: { tabName, headerRow, headerName, oneBasedRow }
@@ -140,12 +198,14 @@ module.exports = {
   quoteTabName_: quoteTabName_,
   headerKey_: headerKey_,
   findHeaderColumn_: findHeaderColumn_,
+  findHeaderInTopRows_: findHeaderInTopRows_,
   resolveNamedCell: resolveNamedCell,
   clampRow_: clampRow_,
   __test: {
     columnLetters: columnLetters_,
     cellA1: cellA1_,
     quoteTabName: quoteTabName_,
-    findHeaderColumn: findHeaderColumn_
+    findHeaderColumn: findHeaderColumn_,
+    findHeaderInTopRows: findHeaderInTopRows_
   }
 };

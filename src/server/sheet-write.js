@@ -85,7 +85,19 @@ function matchTab_(tabs, wanted) {
 
 /** First row of a tab, used as the header row for column resolution. */
 async function readHeaderRow_(spreadsheetId, tabTitle, token) {
-  const range = "'" + String(tabTitle).replace(/'/g, "''") + "'!1:1";
+  const rows = await readTopRows_(spreadsheetId, tabTitle, token, 1);
+  return rows[0] || [];
+}
+
+/**
+ * The top rows of a tab. The header is NOT assumed to be row 1: sheets
+ * commonly open with a title row and a blank row before the real headers (the
+ * dashboard's own origin sheet puts them on row 3), so the header has to be
+ * located by name rather than by position.
+ */
+async function readTopRows_(spreadsheetId, tabTitle, token, maxRows) {
+  const n = Math.max(1, Math.min(30, Number(maxRows) || 10));
+  const range = "'" + String(tabTitle).replace(/'/g, "''") + "'!A1:Z" + n;
   const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + spreadsheetId +
     '/values/' + encodeURIComponent(range);
   const resp = await fetch(url, {
@@ -97,8 +109,9 @@ async function readHeaderRow_(spreadsheetId, tabTitle, token) {
     const msg = (json && json.error && json.error.message) || ('HTTP ' + resp.status);
     throw new Error('sheets.values.get failed: ' + msg);
   }
-  const values = (json.values || [])[0] || [];
-  return values.map(function (v) { return String(v == null ? '' : v); });
+  return (json.values || []).map(function (row) {
+    return row.map(function (v) { return String(v == null ? '' : v); });
+  });
 }
 
 /** Row extent of a tab, so a typo'd row can be refused instead of growing the
@@ -141,7 +154,26 @@ async function resolveTarget(opts) {
     };
   }
 
-  const headerRow = await readHeaderRow_(spreadsheetId, tab, token);
+  const headerRows = await readTopRows_(spreadsheetId, tab, token, 10);
+  const located = require('./sheet-target').findHeaderInTopRows_(headerRows, opts.headerName, 10);
+  if (!located.found) {
+    if (located.ambiguous) {
+      return {
+        ok: false,
+        reason: 'Column "' + String(opts.headerName || '') + '" appears in more than one of the first ' +
+          located.rowsSearched + ' rows of "' + tab + '" (at ' + (located.where || '') +
+          '). Make the column name unique so the target is unambiguous.'
+      };
+    }
+    const seen = located.seenHeaders || [];
+    return {
+      ok: false,
+      reason: 'Column "' + String(opts.headerName || '') + '" was not found in the first ' +
+        located.rowsSearched + ' rows of "' + tab + '".' +
+        (seen.length ? ' Headings on those rows: ' + seen.slice(0, 12).join(', ') + '.' : '')
+    };
+  }
+  const headerRow = headerRows[located.row - 1] || [];
   const resolved = resolveNamedCell({
     tabName: tab,
     headerRow: headerRow,
@@ -157,6 +189,15 @@ async function resolveTarget(opts) {
       ok: false,
       reason: 'Row ' + Number(opts.oneBasedRow) + ' is past the end of "' + tab +
         '" (it has ' + (rowCount || '?') + ' rows). Refusing rather than growing the sheet.'
+    };
+  }
+  // The header row holds column NAMES, not data. Writing there would rename a
+  // column, which is never what "change this cell" means.
+  if (row <= located.row) {
+    return {
+      ok: false,
+      reason: 'Row ' + row + ' is the header row (row ' + located.row + ' holds the column names). '
+        + 'Pick a row below it.'
     };
   }
 
@@ -176,6 +217,7 @@ async function resolveTarget(opts) {
     columnIndex: finalCell.columnIndex,
     tab: tab,
     headerName: String(opts.headerName || '').trim(),
+    headerRow: located.row,
     row: row,
     spreadsheetId: spreadsheetId,
     currentValue: await readCellValue_(spreadsheetId, tab, row, finalCell.columnIndex, token)
@@ -270,11 +312,26 @@ async function getSheetStructure(sheetUrl) {
   for (let i = 0; i < titles.length; i++) {
     let headers = [];
     let rowCount = 0;
-    try { headers = await readHeaderRow_(spreadsheetId, titles[i], token); } catch (e) { headers = []; }
+    let headerRow = 1;
+    try {
+      const top = await readTopRows_(spreadsheetId, titles[i], token, 10);
+      // The header row is the first of the top rows that actually looks like
+      // headers (two or more named cells). A title row has one cell and is
+      // skipped, so the requester is offered real column names.
+      for (let r = 0; r < top.length; r++) {
+        const named = top[r].filter(function (c) { return String(c || '').trim() !== ''; });
+        if (named.length >= 2) {
+          headers = named;
+          headerRow = r + 1;
+          break;
+        }
+      }
+    } catch (e) { headers = []; }
     try { rowCount = await readRowCount_(spreadsheetId, titles[i], token); } catch (e) { rowCount = 0; }
     tabs.push({
       title: titles[i],
-      headers: headers.filter(function (h) { return String(h || '').trim() !== ''; }),
+      headers: headers,
+      headerRow: headerRow,
       rowCount: rowCount
     });
   }

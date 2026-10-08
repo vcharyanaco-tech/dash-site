@@ -11031,13 +11031,20 @@ function onSheetRequestTabChange_() {
   const tab = currentSheetTab_();
   const sel = getEl('sheetRequestHeader');
   const headers = tab && tab.headers ? tab.headers : [];
+  const note = tab && tab.headerRow && tab.headerRow > 1
+    ? ' (column names are on row ' + tab.headerRow + ')'
+    : '';
   sel.innerHTML = headers.length
-    ? headers.map(function (h) { return '<option value="' + escAttr(h) + '">' + escapeHtml(h) + '</option>'; }).join('')
-    : '<option value="">— no named columns —</option>';
+    ? headers.map(function (h) { return '<option value="' + escAttr(h) + '">' + escapeHtml(h) + note + '</option>'; }).join('')
+    : '<option value="">— no named columns found —</option>';
   const rowInput = getEl('sheetRequestRowNo');
   if (tab && tab.rowCount) {
     rowInput.setAttribute('max', String(tab.rowCount));
-    rowInput.placeholder = '1–' + tab.rowCount;
+    // Start at the first row BELOW the header: a sheet whose headers are on row
+    // 3 has data starting at row 4, and the header row itself is never a valid
+    // target (writing there would rename a column).
+    rowInput.placeholder = (tab.headerRow ? tab.headerRow + ' holds the column names — try ' + (Number(tab.headerRow) + 1) : '1') + '–' + tab.rowCount;
+    if (!rowInput.value) rowInput.placeholder = (tab.headerRow ? Number(tab.headerRow) + 1 : 1) + '–' + tab.rowCount;
   } else {
     rowInput.removeAttribute('max');
     rowInput.placeholder = 'Row number';
