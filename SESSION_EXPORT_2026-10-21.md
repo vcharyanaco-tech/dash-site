@@ -20,6 +20,9 @@ Render service is still suspended**.
 | `d5cb345` | `fix:` keep the local fallback tunnels alive |
 | `e85395f` | `fix:` wait longer for a new quick tunnel |
 | `b1c0fee` | aadhar-dashboard: cut backup egress with gzip, dedupe and a daily checkpoint |
+| `ba672a5` | `feat:` load Aadhaar bridge credentials from a local ignored file |
+| `ca06e3a` | aadhar-dashboard: distinguish an existing local db from a failed restore |
+| `6eab278` | aadhar-dashboard: explicitly ignore the local bridge env file |
 
 ---
 
@@ -207,13 +210,15 @@ checkpoint (~3.1 MB/day at 1.9x, about 93 MB/month). Changed snapshots are
 5 GB allowance even on a busy editing day.
 
 Deployment: the local dash-site backend was restarted and now serves the gzip
-build — `/api/health` reports `dbStoredBytes` 272,234 against `dbBytes`
+build — `/api/health` reports `dbStoredBytes` 272,235 against `dbBytes`
 1,380,352. The aadhar commit is pushed; Render will auto-deploy it when the
 service resumes. The dedicated aadhar Worker still needs a manual deploy from
 an account with access to `606780bc6c3ecd48289472c73d27a982`; the current token
 only sees `a01eb877733d755cb57e25827a9c52fe` and gets
 `403 ... Authentication error`. Until then the client's raw fallback keeps
-backups working, but gzip stays inactive.
+backups working, but gzip stays inactive. The local Aadhaar fallback now has
+the bridge token (section 7), so this fallback is exercised end to end: the
+fresh push at 10:39 UTC was stored raw at 5,894,144 bytes.
 
 Live check at 10:21 UTC: `skippedUnchanged` is **2**, `lastUploadAt` stayed at
 10:01 across the later checks, and `dbStoredBytes` is 272,235 against
@@ -255,6 +260,11 @@ been suspended by its owner."
 | Streamlit WebSocket `_stcore/stream` | opened, protocol `streamlit` |
 | `GET /api/health` | 200, gzip stats active |
 
+After the bridge restore and 16:08 IST restart, the public Aadhaar page and
+`_stcore/health` still returned 200, the main `POST /api` origin probe returned
+200, and the app log reported `bridge active` before pushing generation
+`1792579160976-561845` at 10:39 UTC.
+
 **Tunnel reliability:** at 09:56 UTC a network timeout killed both quick
 tunnels. `cloudflared` logged `Unauthorized: Tunnel not found` and retried
 forever; `/api/health` still answered because the Worker handles that path
@@ -270,11 +280,21 @@ to 90 s; the next watchdog tick would still have repaired it.
 
 **Caveats:**
 
-- The local Aadhaar process has **no `AADHAR_SYNC_URL` / `AADHAR_SYNC_TOKEN`**,
-  so it serves the local `data/aadhaar.db` (latest upload in it is 25 September;
-  7 uploads, 871 transactions) and does not mirror new writes. It is not the
-  newest bridge generation. Treat it as read-only until the bridge token is
-  supplied; do not enter production data that exists nowhere else.
+- **Bridge enabled.** `run-aadhar.ps1` now loads `AADHAR_SYNC_URL` and
+  `AADHAR_SYNC_TOKEN` from `E:\projects\aadhar-dashboard\.env.local`, which is
+  gitignored (`*.local` plus an explicit `.env.local` entry) and must never be
+  committed. Before enabling it, the old local DB was copied to
+  `data\aadhaar.db.pre-bridge-restore-20261021-160822.bak`, then the newest
+  valid bridge snapshot was restored: generation `1792413087806-b725b9`
+  (2026-10-19T12:31:27.806Z), **26 uploads, 3,102 transactions, 91 camps,
+  12 users**, newest upload `2026-10-14 06:21`. The next boot pushed a fresh
+  generation `1792579160976-561845` at 2026-10-21T10:39:20.976Z (5,894,144
+  bytes raw), so the bridge is current and new local writes are mirrored again.
+  The old database had 7 uploads, 871 transactions and no camps.
+- The current backup Worker build still rejects gzip (`not_sqlite`); the client
+  retried raw and paused compression for roughly six hours. Raw backups work,
+  but `last_encoding: gzip` and the compressed ratio will only appear after
+  `backup-worker/worker.js` is deployed.
 - Both quick tunnels run on this PC. They stop when the machine shuts down;
   Startup only restarts them after login, and the hostnames change. The scripts
   update both Worker secrets on every start, and the watchdog recreates a
@@ -293,9 +313,10 @@ to 90 s; the next watchdog tick would still have repaired it.
 
 ```
 dash-site/run-backend.ps1        idempotent; starts/stops Aadhaar + watchdog
-dash-site/run-aadhar.ps1         new: local Streamlit + second quick tunnel
+dash-site/run-aadhar.ps1         local Streamlit + second quick tunnel; loads
+                                  ignored bridge env; restarts app on env change
 dash-site/watch-tunnels.ps1      new: 60 s origin probe + tunnel recreation
-dash-site/README.md              documents the one-command local fallback
+dash-site/README.md              documents the fallback and bridge env file
 src/server/data-sync.js          +138/-22  gzip + content-hash dedupe,
                                            legacy restore, stats fields
 src/server/tests/backup-compression.test.js  new, 3 tests
@@ -309,6 +330,11 @@ aadhar-dashboard/backup-worker/worker.js       gzip decompress + raw storage
 aadhar-dashboard/backup-worker/worker.test.mjs new, 6 tests
 aadhar-dashboard/backup-worker/package.json    new, test script
 aadhar-dashboard/tests/test_backup_compression.py new, 7 tests
+aadhar-dashboard/boot.py         corrects the false "empty database" warning
+                                  when a populated local db already exists
+aadhar-dashboard/.gitignore      explicit .env.local entry
+aadhar-dashboard/.env.local      local only, ignored, never committed:
+                                  bridge URL + token
 ```
 
 ## Pending tasks (carry forward)
@@ -323,25 +349,25 @@ aadhar-dashboard/tests/test_backup_compression.py new, 7 tests
    only sees `a01eb877733d755cb57e25827a9c52fe` (`403 Authentication error`).
 4. **Verify aadhar gzip and checkpoint live** - after the Worker deploy and
    Render resume, confirm `last_encoding: gzip`, a 1.9x stored/raw ratio, and
-   one checkpoint upload per 24 h. The local fallback currently has no bridge
-   token, so it does not exercise these paths.
-5. **Local Aadhaar writes** - supply `AADHAR_SYNC_URL`/`AADHAR_SYNC_TOKEN` to the
-   local fallback if production writes are needed; otherwise keep it read-only
-   and copy the DB back after 1 November.
-7. **`DASH_PUSH_TO_SHEET` is off** — decide whether approvals should update the
+   one checkpoint upload per 24 h. The local fallback now has the bridge token
+   and is exercising the raw fallback; its 10:39 UTC push is current.
+5. **`DASH_PUSH_TO_SHEET` is off** — decide whether approvals should update the
    origin spreadsheet.
-8. **Private sheets** — open since 2026-09-25. Keep the printed note, or build
+6. **Private sheets** — open since 2026-09-25. Keep the printed note, or build
    Google OAuth (Drive/Sheets read scope).
-9. **`gh` CLI** — still not installed; workflow checks use the REST API.
-10. **Housekeeping** — the 23 untracked root files (`ipad_*.html`,
-    `support_*.html`, `*.py`, `images/`, `ref_pdf_content.txt`) remain untracked
-    and uncommitted per AGENTS.md.
-11. **Cut back to Render on 1 November** - after both Render services resume and
-    auto-deploy, set `SERVER_ORIGIN` and `AADHAR_ORIGIN` back to their Render
-    URLs, then stop the local fallbacks and disable the Startup entry (or keep
-    it as a standby).
-12. **Rotate the Render API key** committed in `SESSION_EXPORT_2026-08-14.md`.
-13. **Durable tunnel** - if the Cloudflare token gets `DNS:Edit` (or a record is
+7. **`gh` CLI** — still not installed; workflow checks use the REST API.
+8. **Housekeeping** — the 23 untracked root files (`ipad_*.html`,
+   `support_*.html`, `*.py`, `images/`, `ref_pdf_content.txt`) remain untracked
+   and uncommitted per AGENTS.md.
+9. **Cut back to Render on 1 November** - after both Render services resume and
+   auto-deploy, set `SERVER_ORIGIN` and `AADHAR_ORIGIN` back to their Render
+   URLs, then stop the local fallbacks and disable the Startup entry (or keep
+   it as a standby).
+10. **Rotate exposed credentials** - revoke the Render API key committed in
+    `SESSION_EXPORT_2026-08-14.md`, and rotate the Aadhaar bridge token (it was
+    pasted into chat and stored only in the ignored `.env.local`). Update that
+    file after rotating; never commit it.
+11. **Durable tunnel** - if the Cloudflare token gets `DNS:Edit` (or a record is
     added from the dashboard), create a named tunnel with stable hostnames and
     point `SERVER_ORIGIN` / `AADHAR_ORIGIN` at it. That removes the quick-tunnel
     recreation and secret churn. The current token lists tunnels and zones but
@@ -358,6 +384,10 @@ Unchanged and still true:
   starts the Aadhaar Streamlit app, opens one quick tunnel per service, and
   updates `SERVER_ORIGIN` / `AADHAR_ORIGIN`. The Worker proxies `/api/*` to the
   first and `/aadhar-dashboard/*` to the second.
+- The Aadhaar fallback loads `AADHAR_SYNC_URL` / `AADHAR_SYNC_TOKEN` from the
+  gitignored `E:\projects\aadhar-dashboard\.env.local` on every `run-aadhar.ps1`
+  start and restarts the app when that file changes. The file is not in git;
+  do not print it, commit it, or copy it into another repo.
 - Both quick tunnels run on this PC and stop when it shuts down; Startup only
   restarts them after login, and their hostnames change on every fresh start.
   `watch-tunnels.ps1` probes the real origins and recreates a dropped tunnel
