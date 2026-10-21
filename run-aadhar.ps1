@@ -11,7 +11,7 @@
 # Usage:
 #   .\run-aadhar.ps1                  # normal run (reuses a healthy run)
 #   .\run-aadhar.ps1 -SkipWrangler    # start locally, leave the secret alone
-#   .\run-aadhar.ps1 -Stop            # stop app + tunnel from a prior run
+#   .\run-aadhar.ps1 -Stop            # stop app + tunnel; restore Render origin
 #   .\run-aadhar.ps1 -Port 8502       # non-default local port
 #
 # The quick-tunnel hostname changes every time it starts, so the Worker
@@ -30,6 +30,7 @@ $repo = Split-Path -Parent $MyInvocation.MyCommand.Path
 $aadharDir = Join-Path (Split-Path -Parent $repo) 'aadhar-dashboard'
 $python = Join-Path $aadharDir '.venv\Scripts\python.exe'
 $wranglerCfg = Join-Path $repo 'src\worker\wrangler.toml'
+$renderOrigin = 'https://aadhar-dashboard-9ljo.onrender.com'
 $healthPath = '/aadhar-dashboard/_stcore/health'
 $localHealth = "http://localhost:$Port$healthPath"
 $publicHealth = "https://dashboardharyana.site$healthPath"
@@ -40,6 +41,7 @@ $logApp = Join-Path $env:TEMP 'aadhar-app.log'
 $logTunnel = Join-Path $env:TEMP 'aadhar-tunnel.log'
 $urlFile = Join-Path $env:TEMP 'aadhar-tunnel.url'
 $pidWatchdog = Join-Path $env:TEMP 'tunnel-watchdog.pid'
+$watchModeFile = Join-Path $env:TEMP 'tunnel-watchdog.mode'
 $envFile = Join-Path $aadharDir '.env.local'
 $envMarker = Join-Path $env:TEMP 'aadhar-app.envhash'
 
@@ -101,13 +103,36 @@ function Import-AadharEnv([string]$File) {
 
 # ---------- -Stop ----------
 if ($Stop) {
-  # Stop the watchdog first so it cannot restart this tunnel while stopping.
-  Stop-FromPidFile $pidWatchdog
+  # Stop a full watchdog so it cannot restart this tunnel while stopping. A
+  # main-only watchdog belongs to dash-site and must keep running.
+  if (Test-Path $pidWatchdog) {
+    $savedWatchdog = Get-Content $pidWatchdog -ErrorAction SilentlyContinue | Select-Object -First 1
+    $watchMode = Get-Content $watchModeFile -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($savedWatchdog -and $watchMode -eq 'main') {
+      Write-Host 'Leaving the main-only dash-site watchdog running.'
+    } else {
+      Stop-FromPidFile $pidWatchdog
+    }
+  }
   Stop-FromPidFile $pidApp
   Stop-FromPidFile $pidTunnel
   Remove-Item $urlFile -Force -ErrorAction SilentlyContinue
   Remove-Item $envMarker -Force -ErrorAction SilentlyContinue
   Write-Host 'Stopped the Aadhaar app and tunnel (if they were running).'
+  if ($SkipWrangler) {
+    Write-Host 'AADHAR_ORIGIN left unchanged (-SkipWrangler).'
+  } else {
+    try {
+      $renderOrigin | wrangler secret put AADHAR_ORIGIN --config $wranglerCfg 2>&1 | Out-Null
+      if ($LASTEXITCODE -eq 0) {
+        Write-Host "AADHAR_ORIGIN restored to $renderOrigin"
+      } else {
+        Write-Warning "Could not restore AADHAR_ORIGIN; set it manually to $renderOrigin."
+      }
+    } catch {
+      Write-Warning "Could not restore AADHAR_ORIGIN; set it manually to $renderOrigin."
+    }
+  }
   return
 }
 

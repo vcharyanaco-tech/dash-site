@@ -13,11 +13,16 @@
 #   5. Update the Cloudflare Worker secret SERVER_ORIGIN to that URL
 #      (wrangler secret put SERVER_ORIGIN, config: src/worker/wrangler.toml)
 #   6. Verify GET /api/health through the tunnel returns 200
+#   7. Start the tunnel watchdog for the main backend (optionally Aadhaar)
+#
+# Aadhaar is hosted on Render now, so it is no longer started by default.
+# Use -WithAadhar only as a temporary local fallback.
 #
 # Usage:
-#   .\run-backend.ps1                 # normal run (also starts the Aadhaar fallback)
+#   .\run-backend.ps1                 # main dashboard only (Aadhaar stays on Render)
+#   .\run-backend.ps1 -WithAadhar     # main + local Aadhaar fallback
 #   .\run-backend.ps1 -SkipWrangler   # skip step 5 (e.g. wrangler not logged in)
-#   .\run-backend.ps1 -SkipAadhar     # main dashboard only
+#   .\run-backend.ps1 -SkipAadhar     # compatibility alias for the default
 #   .\run-backend.ps1 -NoWatchdog     # do not start the tunnel watchdog
 #   .\run-backend.ps1 -Stop           # stop backend + tunnel from a prior run
 #
@@ -27,10 +32,13 @@
 
 param(
   [switch]$SkipWrangler,
+  [switch]$WithAadhar,
   [switch]$SkipAadhar,
   [switch]$NoWatchdog,
   [switch]$Stop
 )
+
+$manageAadhar = $WithAadhar -and -not $SkipAadhar
 
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -43,6 +51,7 @@ $logBackend = Join-Path $env:TEMP 'dash-backend.log'
 $logTunnel  = Join-Path $env:TEMP 'dash-tunnel.log'
 $urlFile    = Join-Path $env:TEMP 'dash-tunnel.url'
 $pidWatchdog = Join-Path $env:TEMP 'tunnel-watchdog.pid'
+$watchModeFile = Join-Path $env:TEMP 'tunnel-watchdog.mode'
 
 function Stop-Tree([int]$ProcessId) {
   Get-CimInstance Win32_Process -Filter "ParentProcessId=$ProcessId" -ErrorAction SilentlyContinue |
@@ -73,6 +82,7 @@ if ($Stop) {
   Stop-FromPidFile $pidTunnel
   Stop-FromPidFile $pidBackend
   Remove-Item $urlFile -Force -ErrorAction SilentlyContinue
+  Remove-Item $watchModeFile -Force -ErrorAction SilentlyContinue
   Write-Host 'Stopped backend, tunnel and watchdog (if they were running).'
   $aadharScript = Join-Path $repo 'run-aadhar.ps1'
   if (Test-Path $aadharScript) { & $aadharScript -Stop }
@@ -279,11 +289,15 @@ Write-Host " Stop later:  .\run-backend.ps1 -Stop"
 Write-Host ' Logs:        %TEMP%\dash-backend.log / %TEMP%\dash-tunnel.log'
 Write-Host '====================================================='
 
-# The Aadhaar Streamlit dashboard is a separate service and a separate tunnel.
-# Start it after the main backend is healthy so a failure there does not stop
-# the main dashboard from coming up.
-if ($SkipAadhar) {
-  Write-Host 'Aadhaar fallback skipped (-SkipAadhar).'
+# The Aadhaar Streamlit dashboard now runs on its own Render account, so this
+# script leaves AADHAR_ORIGIN alone by default. -WithAadhar is only for a
+# temporary local fallback; it starts after the main backend is healthy.
+if (-not $manageAadhar) {
+  if ($SkipAadhar) {
+    Write-Host 'Aadhaar fallback skipped (-SkipAadhar).'
+  } else {
+    Write-Host 'Aadhaar is hosted on Render; local fallback not started. Use -WithAadhar to override.'
+  }
 } else {
   $aadharScript = Join-Path $repo 'run-aadhar.ps1'
   if (Test-Path $aadharScript) {
@@ -302,28 +316,36 @@ if ($SkipAadhar) {
 
 # ---------- watchdog ----------
 # Quick tunnels cannot reconnect after Cloudflare drops them. The watchdog
-# checks both public routes and recreates whichever tunnel is down.
+# checks the main public route and recreates that tunnel if it is down. It only
+# manages Aadhaar when this script was started with -WithAadhar.
 if ($NoWatchdog) {
   Write-Host 'Tunnel watchdog skipped (-NoWatchdog).'
-} elseif ($SkipAadhar) {
-  Write-Host 'Tunnel watchdog skipped (main-only run).'
 } else {
   $watchScript = Join-Path $repo 'watch-tunnels.ps1'
   if (Test-Path $watchScript) {
+    $desiredMode = if ($manageAadhar) { 'full' } else { 'main' }
     $watchAlive = $false
     if (Test-Path $pidWatchdog) {
       $saved = Get-Content $pidWatchdog -ErrorAction SilentlyContinue | Select-Object -First 1
       if ($saved -and (Get-Process -Id ([int]$saved) -ErrorAction SilentlyContinue)) {
         $watchAlive = $true
-        Write-Host "Tunnel watchdog already running (pid $saved)."
+        $runningMode = (Get-Content $watchModeFile -ErrorAction SilentlyContinue | Select-Object -First 1)
+        if (-not $runningMode) { $runningMode = 'full' }
+        if ($runningMode -ne $desiredMode) {
+          Write-Host "Tunnel watchdog mode changed ($runningMode -> $desiredMode); restarting it."
+          Stop-FromPidFile $pidWatchdog
+          $watchAlive = $false
+        } else {
+          Write-Host "Tunnel watchdog already running (pid $saved, mode $runningMode)."
+        }
       }
     }
     if (-not $watchAlive) {
-      Start-Process powershell -WindowStyle Hidden -ArgumentList @(
-        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $watchScript
-      )
+      $watchArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $watchScript)
+      if (-not $manageAadhar) { $watchArgs += '-SkipAadhar' }
+      Start-Process powershell -WindowStyle Hidden -ArgumentList $watchArgs
       Start-Sleep -Seconds 1
-      Write-Host 'Tunnel watchdog started (log: %TEMP%\tunnel-watchdog.log).'
+      Write-Host "Tunnel watchdog started (mode $desiredMode, log: %TEMP%\tunnel-watchdog.log)."
     }
   } else {
     Write-Warning 'watch-tunnels.ps1 not found; tunnels will not be monitored.'

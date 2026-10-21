@@ -1,19 +1,28 @@
 # ============================================================
-# watch-tunnels.ps1 - Keep the two local fallback tunnels alive.
+# watch-tunnels.ps1 - Keep the local fallback tunnel(s) alive.
 #
 # Cloudflare quick tunnels have no uptime guarantee. After a network
 # interruption cloudflared cannot re-register the old hostname (the edge
 # answers "Unauthorized: Tunnel not found"), so the only recovery is a new
-# quick tunnel and a new Worker secret. This loop checks both public routes
-# every minute and invokes the idempotent setup scripts when one is down.
+# quick tunnel and a new Worker secret.
+#
+# By default only the main dash-site tunnel is monitored. Aadhaar now runs on
+# Render; pass -SkipAadhar explicitly for the main-only mode (run-backend.ps1
+# does this by default). Without -SkipAadhar, the old two-tunnel fallback mode
+# is preserved.
 #
 # Started automatically by run-backend.ps1. Stop it with:
 #   .\run-backend.ps1 -Stop
 # ============================================================
 
+param(
+  [switch]$SkipAadhar
+)
+
 $ErrorActionPreference = 'Continue'
 $repo = Split-Path -Parent $MyInvocation.MyCommand.Path
 $pidFile = Join-Path $env:TEMP 'tunnel-watchdog.pid'
+$modeFile = Join-Path $env:TEMP 'tunnel-watchdog.mode'
 $logFile = Join-Path $env:TEMP 'tunnel-watchdog.log'
 $mainProbe = 'https://dashboardharyana.site/api'
 $aadharProbe = 'https://dashboardharyana.site/aadhar-dashboard/_stcore/health'
@@ -26,6 +35,8 @@ if (Test-Path $pidFile) {
   }
 }
 $PID | Out-File $pidFile -Force
+$mode = if ($SkipAadhar) { 'main' } else { 'full' }
+Set-Content -Path $modeFile -Value $mode -NoNewline
 
 if ((Test-Path $logFile) -and ((Get-Item $logFile).Length -gt 2MB)) {
   Move-Item $logFile "$logFile.old" -Force -ErrorAction SilentlyContinue
@@ -61,7 +72,7 @@ function Test-AadharOrigin {
   }
 }
 
-Log "watchdog started (pid $PID)"
+Log "watchdog started (pid $PID, mode $mode)"
 
 while ($true) {
   if (-not (Test-MainOrigin)) {
@@ -74,7 +85,7 @@ while ($true) {
     }
   }
 
-  if (-not (Test-AadharOrigin)) {
+  if (-not $SkipAadhar -and -not (Test-AadharOrigin)) {
     Log 'Aadhaar tunnel is down; restarting it'
     try {
       & (Join-Path $repo 'run-aadhar.ps1')

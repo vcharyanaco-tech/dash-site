@@ -52,32 +52,40 @@ python -m http.server 8080
 node --test src/tests
 ```
 
-### Temporary local fallback (Render suspended)
+### Temporary local fallback (dash-site only)
 
-Until the Render services resume, run both dashboards from this machine:
+Dash-site's Render backend is still suspended until 1 November 2026, so the
+main dashboard runs from this machine. The Aadhaar dashboard is no longer part
+of this fallback: it now runs on a **separate Render account** at
+`https://aadhar-dashboard-9ljo.onrender.com`, still exposed through
+`https://dashboardharyana.site/aadhar-dashboard/`.
 
 ```powershell
 .\run-backend.ps1
 ```
 
-It starts the Node backend on port 8787 behind a Cloudflare quick tunnel and
-updates the Worker's `SERVER_ORIGIN`. It then starts the sibling
-`aadhar-dashboard` Streamlit app on port 8501 behind a second quick tunnel and
-updates `AADHAR_ORIGIN`. Use `.\run-backend.ps1 -SkipAadhar` to start only the
-main dashboard, or `.\run-backend.ps1 -Stop` to stop both.
+This starts the Node backend on port 8787 behind a Cloudflare quick tunnel,
+updates the Worker's `SERVER_ORIGIN`, and leaves `AADHAR_ORIGIN` pointed at the
+dedicated Render service. It also starts a main-only tunnel watchdog.
+
+- `.\run-backend.ps1 -WithAadhar` is the emergency local Aadhaar fallback. It
+  starts the sibling Streamlit app on port 8501 behind a second quick tunnel,
+  repoints `AADHAR_ORIGIN` at that tunnel, and monitors both routes.
+- `.\run-aadhar.ps1 -Stop` (or `.\run-backend.ps1 -Stop`) stops the local app
+  and tunnel and restores `AADHAR_ORIGIN` to the Render URL.
+- `.\run-backend.ps1 -SkipAadhar` is kept as an alias for the default
+  main-only mode. `-NoWatchdog` skips the watchdog.
 
 If `E:\projects\aadhar-dashboard\.env.local` exists, `run-aadhar.ps1` loads its
 `AADHAR_SYNC_URL` / `AADHAR_SYNC_TOKEN` into the Streamlit process so the local
-app can restore and upload snapshots through its backup Worker. That file is
-gitignored and must never be committed.
+fallback can restore and upload snapshots through its backup Worker. That file
+is gitignored and must never be committed.
 
-Both tunnels run on this PC. They stop when the machine shuts down, and
-Startup-folder launches only bring them back after login; a quick-tunnel
-hostname also changes on restart, but the scripts update the Worker secrets.
-A watchdog starts with the backend and checks both public routes every minute.
-If Cloudflare drops a quick tunnel, it recreates that tunnel and updates the
-matching Worker secret; see `%TEMP%\tunnel-watchdog.log`. Use
-`.\run-backend.ps1 -NoWatchdog` to skip it. Quick tunnels still have no uptime
-guarantee; a named Cloudflare tunnel is the durable fix, but the current API
-token cannot edit DNS. The permanent fix is the Render deployment resuming with
-the committed code.
+The main quick tunnel runs on this PC. It stops when the machine shuts down, and
+Startup-folder launches only bring it back after login; the hostname changes on
+restart, but the script updates the Worker secret. The watchdog checks the main
+public route every minute and recreates a dropped tunnel; see
+`%TEMP%\tunnel-watchdog.log`. Quick tunnels still have no uptime guarantee; a
+named Cloudflare tunnel is the durable fix for dash-site, but the current API
+token cannot edit DNS. The permanent fix is the dash-site Render deployment
+resuming with the committed code.
