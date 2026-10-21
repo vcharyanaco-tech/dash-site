@@ -62,33 +62,97 @@ no `node` or `cloudflared` process was alive.
   `C:\Program Files (x86)\cloudflared\cloudflared.exe` without installing
   anything.
 - `git diff --check` clean; `node scripts/secret-scan.cjs` passed (230 files).
-- **Not run end-to-end.** A full run starts the backend and a public quick
-  tunnel and rewrites the Worker `SERVER_ORIGIN` secret; that is deliberately
-  left for a supervised run.
+- **End-to-end run completed** (see below); the first tunnel check returned 530,
+  which is why step 6 now retries.
+
+## 4. End-to-end run (2026-10-21 ~13:57 IST)
+
+`.\run-backend.ps1` ran clean:
+
+| Step | Result |
+|---|---|
+| backend | healthy on `http://localhost:8787/api/health` |
+| tunnel | `https://favorites-boulder-fallen-polyphonic.trycloudflare.com` |
+| Worker secret | `SERVER_ORIGIN` uploaded to `dashv1-proxy` |
+| tunnel health | 530 on the first probe, **200 after ~10 s** |
+| Worker health | `https://dashboardharyana.site/api/health` → 200 |
+| Worker → backend | `POST /api` probe returns the backend's `Unknown function` JSON through both the tunnel and the Worker |
+| data sync | enabled; `lastBackupAt` advancing, `writesToday` 2/400 |
+
+The 530 was the expected race documented above, not a failure. Step 6 now polls
+12 × 5 s before warning, so the script's own output matches reality.
+
+## 5. Why the Render bandwidth limit was exhausted
+
+**The limit is 5 GB/month, not 100 GB.** The Hobby workspace includes
+**5 GB** of outbound bandwidth; without a payment method Render suspends every
+Free service for the remainder of the month once it is exceeded. Both services
+are currently `suspended` (confirmed via `GET /v1/services`).
+
+Render's own metrics (`GET /v1/metrics/bandwidth` and
+`/v1/metrics/bandwidth-sources`), **1–21 October 2026**:
+
+| Service | Total | HTTP | WebSocket | Service-initiated (NAT) |
+|---|---:|---:|---:|---:|
+| dash-site (`srv-d9uq…`) | 3,074.9 MB | 49.6 MB | 0 | **3,025.3 MB (98.4%)** |
+| aadhar-dashboard (`srv-dasv…`) | 2,452.3 MB | 66.9 MB | 75.4 MB | **2,309.9 MB (94.2%)** |
+| **workspace total** | **5,527.2 MB** | 116.5 MB | 75.4 MB | **5,335.2 MB (96.5%)** |
+
+**Verdict: neither dashboard's UI is the culprit.** 96.5% of the usage is
+service-initiated traffic, and the volume matches the full-database snapshot
+backups sent to Cloudflare KV on a timer:
+
+- `dash-site` uploads its whole SQLite DB (1.32 MB) **every 10 minutes**
+  (`DATA_SYNC_INTERVAL_MS` unset) → ~190 MB/day, measured ~144 MB/day.
+- `aadhar-dashboard` uploads its whole DB (5.62 MB) **every hour**
+  (`AADHAR_SYNC_INTERVAL_MS=3600000`) → ~135 MB/day, measured ~110 MB/day.
+- Browser-facing HTTP + WebSocket is only ~192 MB over 21 days (3.5%).
+
+Both loops push even when nothing changed: no content hash, no compression.
+`dash-site` is the larger single consumer (56% of the total), but the shared
+root cause is the unconditional snapshot uploads.
+
+Cheap remediation (not yet implemented):
+
+1. Hash the snapshot and skip the PUT when unchanged (removes most uploads).
+2. gzip before PUT — measured ratios: dash-site **5.1×**, aadhaar **1.9×**.
+3. Raise `DATA_SYNC_INTERVAL_MS` to 1 h; aadhaar already runs hourly.
+4. Keep write-triggered snapshots; they cover the "edit then crash" window.
+
+Interim env-only mitigation (no code): `DATA_SYNC_INTERVAL_MS=3600000` on
+dash-site and `AADHAR_SYNC_INTERVAL_MS=21600000` on aadhaar → ~55 MB/day total
+(~1.7 GB/month), comfortably inside 5 GB.
+
+**Security note:** a live Render API key is committed in
+`SESSION_EXPORT_2026-08-14.md` (tracked). It was used read-only for this
+investigation and should be revoked and scrubbed from history.
 
 ## Files changed
 
 ```
-run-backend.ps1   +76/-11   env loading, DASH_DATA_DIR default, PATH append,
-                            winget guard + cloudflared install fallback
+run-backend.ps1   +87/-11   env loading, DASH_DATA_DIR default, PATH append,
+                            winget guard + cloudflared install fallback,
+                            step-6 tunnel health retry
 ```
 
 ## Pending tasks (carry forward)
 
-0. **Run `.\run-backend.ps1` end-to-end** — confirm the tunnel URL appears and
-   `/api/health` is 200 through it, then decide whether to keep it running.
 1. **Verify a sheet write against a real sheet** — credential exists; rehearse
    with `CHANGE_REQUEST_DRY_RUN=true`, then write one throwaway cell.
 2. **Bundle headroom** — 552.4 of 575 KB raw consumed; next `app.js` change
    will trip it. Trim rather than raise a third time.
-3. **`DASH_PUSH_TO_SHEET` is off** — decide whether approvals should update the
+3. **Decide the bandwidth fix** — dedupe/compress the KV snapshots in
+   `src/server/data-sync.js` (and mirror it in `aadhar-dashboard`), or apply
+   the env-only interim mitigation. Details in section 5.
+4. **`DASH_PUSH_TO_SHEET` is off** — decide whether approvals should update the
    origin spreadsheet.
-4. **Private sheets** — open since 2026-09-25. Keep the printed note, or build
+5. **Private sheets** — open since 2026-09-25. Keep the printed note, or build
    Google OAuth (Drive/Sheets read scope).
-5. **`gh` CLI** — still not installed; workflow checks use the REST API.
-6. **Housekeeping** — the 23 untracked root files (`ipad_*.html`,
+6. **`gh` CLI** — still not installed; workflow checks use the REST API.
+7. **Housekeeping** — the 23 untracked root files (`ipad_*.html`,
    `support_*.html`, `*.py`, `images/`, `ref_pdf_content.txt`) remain untracked
    and uncommitted per AGENTS.md.
+8. **Rotate the Render API key** committed in `SESSION_EXPORT_2026-08-14.md`.
 
 ## Deployment notes
 

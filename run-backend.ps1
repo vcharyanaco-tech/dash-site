@@ -211,11 +211,26 @@ if ($SkipWrangler) {
 
 # ---------- 6. end-to-end health ----------
 Write-Host '[6/6] Verifying health through the tunnel...'
-try {
-  $h = Invoke-WebRequest "$tunnelUrl/api/health" -UseBasicParsing -TimeoutSec 20
-  Write-Host "Tunnel health check: HTTP $($h.StatusCode) OK"
-} catch {
-  Write-Warning "Health check through tunnel failed ($($_.Exception.Message)) - the tunnel may need a few more seconds; retry $tunnelUrl/api/health in a browser."
+# A freshly registered quick tunnel can answer 530 for the first ~10-20s while
+# Cloudflare finishes wiring the hostname. Retry instead of warning on the
+# first attempt, which is what made a healthy run look broken.
+$tunnelOk = $false
+$lastErr = ''
+for ($i = 0; $i -lt 12 -and -not $tunnelOk; $i++) {
+  try {
+    $h = Invoke-WebRequest "$tunnelUrl/api/health" -UseBasicParsing -TimeoutSec 20
+    if ($h.StatusCode -eq 200) {
+      Write-Host 'Tunnel health check: HTTP 200 OK'
+      $tunnelOk = $true
+      break
+    }
+  } catch {
+    $lastErr = $_.Exception.Message
+  }
+  if (-not $tunnelOk) { Start-Sleep -Seconds 5 }
+}
+if (-not $tunnelOk) {
+  Write-Warning "Health check through tunnel failed ($lastErr) - the tunnel may need a few more seconds; retry $tunnelUrl/api/health in a browser."
 }
 
 Write-Host ''
