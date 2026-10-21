@@ -17,6 +17,8 @@ Render service is still suspended**.
 | `4f52b10` | `fix:` retry tunnel health check and record bandwidth findings |
 | `8d41733` | `fix:` compress and dedupe KV snapshot uploads |
 | `ee8a139` | `fix:` run the Aadhaar fallback alongside the main backend |
+| `d5cb345` | `fix:` keep the local fallback tunnels alive |
+| `e85395f` | `fix:` wait longer for a new quick tunnel |
 | `b1c0fee` | aadhar-dashboard: cut backup egress with gzip, dedupe and a daily checkpoint |
 
 ---
@@ -213,6 +215,10 @@ only sees `a01eb877733d755cb57e25827a9c52fe` and gets
 `403 ... Authentication error`. Until then the client's raw fallback keeps
 backups working, but gzip stays inactive.
 
+Live check at 10:21 UTC: `skippedUnchanged` is **2**, `lastUploadAt` stayed at
+10:01 across the later checks, and `dbStoredBytes` is 272,235 against
+`dbBytes` 1,380,352. The main dedupe/gzip path is working end to end.
+
 ## 7. Aadhaar route outage (2026-10-21)
 
 **Symptom:** `https://dashboardharyana.site/aadhar-dashboard/` returned the
@@ -232,7 +238,7 @@ been suspended by its owner."
 
 - `run-aadhar.ps1` starts/reuses the local Streamlit app, starts/reuses its
   tunnel, updates `AADHAR_ORIGIN`, and verifies the public route. `-Stop` stops
-  both processes.
+  the app, its tunnel and the watchdog.
 - `run-backend.ps1` now calls it after the main backend is healthy;
   `-SkipAadhar` keeps the old main-only behaviour, and `-Stop` stops both.
 - The Startup-folder `dash-backend.cmd` needs no edit: it calls
@@ -249,6 +255,19 @@ been suspended by its owner."
 | Streamlit WebSocket `_stcore/stream` | opened, protocol `streamlit` |
 | `GET /api/health` | 200, gzip stats active |
 
+**Tunnel reliability:** at 09:56 UTC a network timeout killed both quick
+tunnels. `cloudflared` logged `Unauthorized: Tunnel not found` and retried
+forever; `/api/health` still answered because the Worker handles that path
+itself, which hid the failure. `watch-tunnels.ps1` now probes the real origins
+every 60 seconds (`POST /api`, which must reach Node, and the Aadhaar health
+URL), then invokes the idempotent setup scripts to recreate only the dead
+tunnel and update its secret. `run-backend.ps1` now reuses a healthy backend
+and tunnel, and starts the watchdog; `-Stop` stops it. Tested by killing each
+tunnel: Aadhaar recovered in about 2 minutes, main in about 1.5 minutes, without
+restarting either local app. The first Aadhaar pass hit the old 45 s tunnel
+health window and left the secret for the next pass, so that window was raised
+to 90 s; the next watchdog tick would still have repaired it.
+
 **Caveats:**
 
 - The local Aadhaar process has **no `AADHAR_SYNC_URL` / `AADHAR_SYNC_TOKEN`**,
@@ -258,7 +277,11 @@ been suspended by its owner."
   supplied; do not enter production data that exists nowhere else.
 - Both quick tunnels run on this PC. They stop when the machine shuts down;
   Startup only restarts them after login, and the hostnames change. The scripts
-  update both Worker secrets on every start.
+  update both Worker secrets on every start, and the watchdog recreates a
+  dropped tunnel. Quick tunnels still have no uptime guarantee. A named
+  Cloudflare tunnel would be stable, but the current API token can list tunnels
+  and zones yet gets `403` on DNS records, so the DNS route cannot be created
+  without a token addition or one dashboard step.
 - The Hobby bandwidth allowance resets at the start of the next monthly cycle,
   **1 November 2026 (UTC)**, which is when the suspended Render services become
   eligible to resume. After the new commits auto-deploy, repoint
@@ -269,8 +292,9 @@ been suspended by its owner."
 ## Files changed
 
 ```
-dash-site/run-backend.ps1        also starts/stops the Aadhaar fallback
+dash-site/run-backend.ps1        idempotent; starts/stops Aadhaar + watchdog
 dash-site/run-aadhar.ps1         new: local Streamlit + second quick tunnel
+dash-site/watch-tunnels.ps1      new: 60 s origin probe + tunnel recreation
 dash-site/README.md              documents the one-command local fallback
 src/server/data-sync.js          +138/-22  gzip + content-hash dedupe,
                                            legacy restore, stats fields
@@ -301,10 +325,7 @@ aadhar-dashboard/tests/test_backup_compression.py new, 7 tests
    Render resume, confirm `last_encoding: gzip`, a 1.9x stored/raw ratio, and
    one checkpoint upload per 24 h. The local fallback currently has no bridge
    token, so it does not exercise these paths.
-5. **Verify main dedupe over time** - the restarted backend already reports
-   `dbStoredBytes 272,234 < dbBytes 1,380,352`; after the next 10-minute tick,
-   confirm `skippedUnchanged` rises and no PUT is logged.
-6. **Local Aadhaar writes** - supply `AADHAR_SYNC_URL`/`AADHAR_SYNC_TOKEN` to the
+5. **Local Aadhaar writes** - supply `AADHAR_SYNC_URL`/`AADHAR_SYNC_TOKEN` to the
    local fallback if production writes are needed; otherwise keep it read-only
    and copy the DB back after 1 November.
 7. **`DASH_PUSH_TO_SHEET` is off** — decide whether approvals should update the
@@ -320,6 +341,11 @@ aadhar-dashboard/tests/test_backup_compression.py new, 7 tests
     URLs, then stop the local fallbacks and disable the Startup entry (or keep
     it as a standby).
 12. **Rotate the Render API key** committed in `SESSION_EXPORT_2026-08-14.md`.
+13. **Durable tunnel** - if the Cloudflare token gets `DNS:Edit` (or a record is
+    added from the dashboard), create a named tunnel with stable hostnames and
+    point `SERVER_ORIGIN` / `AADHAR_ORIGIN` at it. That removes the quick-tunnel
+    recreation and secret churn. The current token lists tunnels and zones but
+    DNS records return `403`.
 
 ## Deployment notes
 
@@ -334,8 +360,11 @@ Unchanged and still true:
   first and `/aadhar-dashboard/*` to the second.
 - Both quick tunnels run on this PC and stop when it shuts down; Startup only
   restarts them after login, and their hostnames change on every fresh start.
-  The Worker secrets therefore still point at the tunnels; restore the Render
-  URLs when the services resume.
+  `watch-tunnels.ps1` probes the real origins and recreates a dropped tunnel
+  within about a minute; `run-backend.ps1 -NoWatchdog` opts out. The Worker
+  secrets therefore still point at the tunnels; restore the Render URLs when
+  the services resume. A named tunnel is the durable alternative once DNS edit
+  access is available.
 - "Deploy Worker" reports success even when it skipped the real step
   (`CLOUDFLARE_API_TOKEN` unset). A green Worker checkmark means nothing.
 - The aadhar backup Worker must be deployed separately:
