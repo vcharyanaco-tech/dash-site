@@ -353,7 +353,10 @@ What was copied and verified:
   first-run temporary password).
 - A final local backup was pushed as generation `1792583343622-211419`: **26
   uploads, 3,102 transactions (`tx`), 91 camps and 12 users**, newest upload
-  `2026-10-14 06:21`, 5,894,144 raw bytes.
+  `2026-10-14 06:21`, 5,894,144 raw bytes. The bridge `/db` download and the
+  local `data\aadhaar.db` have the same SHA-256
+  (`1C414C5B7BDCE56BED1A804DD20DF9AD8741EC38D1738A6D0086F1E8DF2036F3`), so the
+  copied database is byte-for-byte identical.
 - The new service's log confirms it restored that generation at boot, then
   pushed generation `1792583437615-941d20` at 11:50:37 UTC: 2,920,536 gzip bytes
   sent, 5,894,144 raw bytes stored, `lastEncoding: gzip`.
