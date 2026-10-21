@@ -154,7 +154,10 @@ if (-not $tunnelUrl) {
   Set-Content -Path $urlFile -Value $tunnelUrl -NoNewline
 
   $tunnelOk = $false
-  for ($i = 0; $i -lt 15 -and -not $tunnelOk; $i++) {
+  # A fresh quick tunnel can answer 530 for around a minute while Cloudflare
+  # finishes wiring the hostname. Wait up to 90 s so the watchdog usually
+  # recovers in one pass instead of creating another tunnel on the next tick.
+  for ($i = 0; $i -lt 30 -and -not $tunnelOk; $i++) {
     $tunnelOk = Test-Healthy "$tunnelUrl$healthPath"
     if (-not $tunnelOk) { Start-Sleep -Seconds 3 }
   }
