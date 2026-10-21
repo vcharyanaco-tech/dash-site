@@ -252,9 +252,10 @@ been suspended by its owner."
 **Caveats:**
 
 - The local Aadhaar process has **no `AADHAR_SYNC_URL` / `AADHAR_SYNC_TOKEN`**,
-  so it serves the local `data/aadhaar.db` but does not mirror new writes. Treat
-  it as read-only until the bridge token is supplied; do not enter production
-  data that exists nowhere else.
+  so it serves the local `data/aadhaar.db` (latest upload in it is 25 September;
+  7 uploads, 871 transactions) and does not mirror new writes. It is not the
+  newest bridge generation. Treat it as read-only until the bridge token is
+  supplied; do not enter production data that exists nowhere else.
 - Both quick tunnels run on this PC. They stop when the machine shuts down;
   Startup only restarts them after login, and the hostnames change. The scripts
   update both Worker secrets on every start.
