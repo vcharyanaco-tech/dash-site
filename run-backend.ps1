@@ -15,8 +15,9 @@
 #   6. Verify GET /api/health through the tunnel returns 200
 #
 # Usage:
-#   .\run-backend.ps1                 # normal run
+#   .\run-backend.ps1                 # normal run (also starts the Aadhaar fallback)
 #   .\run-backend.ps1 -SkipWrangler   # skip step 5 (e.g. wrangler not logged in)
+#   .\run-backend.ps1 -SkipAadhar     # main dashboard only
 #   .\run-backend.ps1 -Stop           # stop backend + tunnel from a prior run
 #
 # Stopping: close the two PowerShell windows the script opens, or run
@@ -25,6 +26,7 @@
 
 param(
   [switch]$SkipWrangler,
+  [switch]$SkipAadhar,
   [switch]$Stop
 )
 
@@ -53,6 +55,8 @@ if ($Stop) {
     }
   }
   Write-Host 'Stopped backend and tunnel (if they were running).'
+  $aadharScript = Join-Path $repo 'run-aadhar.ps1'
+  if (Test-Path $aadharScript) { & $aadharScript -Stop }
   return
 }
 
@@ -240,3 +244,24 @@ Write-Host ' Keep this machine on and this window open.'
 Write-Host " Stop later:  .\run-backend.ps1 -Stop"
 Write-Host ' Logs:        %TEMP%\dash-backend.log / %TEMP%\dash-tunnel.log'
 Write-Host '====================================================='
+
+# The Aadhaar Streamlit dashboard is a separate service and a separate tunnel.
+# Start it after the main backend is healthy so a failure there does not stop
+# the main dashboard from coming up.
+if ($SkipAadhar) {
+  Write-Host 'Aadhaar fallback skipped (-SkipAadhar).'
+} else {
+  $aadharScript = Join-Path $repo 'run-aadhar.ps1'
+  if (Test-Path $aadharScript) {
+    Write-Host ''
+    Write-Host 'Starting the Aadhaar dashboard fallback...'
+    try {
+      & $aadharScript
+    } catch {
+      Write-Warning "Aadhaar fallback failed: $($_.Exception.Message)"
+      Write-Warning "Run .\run-aadhar.ps1 directly after fixing it."
+    }
+  } else {
+    Write-Warning 'run-aadhar.ps1 not found; Aadhaar dashboard was not started.'
+  }
+}

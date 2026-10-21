@@ -51,3 +51,22 @@ python -m http.server 8080
 # Run the unit tests
 node --test src/tests
 ```
+
+### Temporary local fallback (Render suspended)
+
+Until the Render services resume, run both dashboards from this machine:
+
+```powershell
+.\run-backend.ps1
+```
+
+It starts the Node backend on port 8787 behind a Cloudflare quick tunnel and
+updates the Worker's `SERVER_ORIGIN`. It then starts the sibling
+`aadhar-dashboard` Streamlit app on port 8501 behind a second quick tunnel and
+updates `AADHAR_ORIGIN`. Use `.\run-backend.ps1 -SkipAadhar` to start only the
+main dashboard, or `.\run-backend.ps1 -Stop` to stop both.
+
+Both tunnels run on this PC. They stop when the machine shuts down, and
+Startup-folder launches only bring them back after login; a quick-tunnel
+hostname also changes on restart, but the scripts update the Worker secrets.
+The permanent fix is the Render deployment resuming with the committed code.
