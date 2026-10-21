@@ -1,12 +1,11 @@
 # ============================================================
-# run-aadhar.ps1 - Run the Aadhaar Streamlit dashboard locally
-# and expose it through a Cloudflare quick tunnel while its
-# Render service is suspended.
+# run-aadhar.ps1 - Emergency local Aadhaar Streamlit fallback.
 #
-# The dash-site Worker routes /aadhar-dashboard/* to AADHAR_ORIGIN,
-# which normally points at Render. This script starts the app from
-# the sibling aadhar-dashboard repo, opens a second quick tunnel,
-# and updates that Worker secret.
+# Aadhaar normally runs on its own Render account. The dash-site
+# Worker routes /aadhar-dashboard/* to AADHAR_ORIGIN, which points
+# at that Render service. This script starts the app from the
+# sibling aadhar-dashboard repo, opens a quick tunnel, and
+# temporarily repoints that Worker secret at the tunnel.
 #
 # Usage:
 #   .\run-aadhar.ps1                  # normal run (reuses a healthy run)
@@ -15,8 +14,8 @@
 #   .\run-aadhar.ps1 -Port 8502       # non-default local port
 #
 # The quick-tunnel hostname changes every time it starts, so the Worker
-# secret must be updated on every run. Both processes stop when this
-# machine shuts down; Startup-folder launches only run after login.
+# secret must be updated on every run. The fallback is manual; it is not
+# started by the Startup folder unless run-backend.ps1 -WithAadhar is used.
 # ============================================================
 
 param(
