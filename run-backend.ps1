@@ -18,6 +18,7 @@
 #   .\run-backend.ps1                 # normal run (also starts the Aadhaar fallback)
 #   .\run-backend.ps1 -SkipWrangler   # skip step 5 (e.g. wrangler not logged in)
 #   .\run-backend.ps1 -SkipAadhar     # main dashboard only
+#   .\run-backend.ps1 -NoWatchdog     # do not start the tunnel watchdog
 #   .\run-backend.ps1 -Stop           # stop backend + tunnel from a prior run
 #
 # Stopping: close the two PowerShell windows the script opens, or run
@@ -27,6 +28,7 @@
 param(
   [switch]$SkipWrangler,
   [switch]$SkipAadhar,
+  [switch]$NoWatchdog,
   [switch]$Stop
 )
 
@@ -39,22 +41,39 @@ $pidBackend = Join-Path $env:TEMP 'dash-backend.pid'
 $pidTunnel  = Join-Path $env:TEMP 'dash-tunnel.pid'
 $logBackend = Join-Path $env:TEMP 'dash-backend.log'
 $logTunnel  = Join-Path $env:TEMP 'dash-tunnel.log'
+$urlFile    = Join-Path $env:TEMP 'dash-tunnel.url'
+$pidWatchdog = Join-Path $env:TEMP 'tunnel-watchdog.pid'
+
+function Stop-Tree([int]$ProcessId) {
+  Get-CimInstance Win32_Process -Filter "ParentProcessId=$ProcessId" -ErrorAction SilentlyContinue |
+    ForEach-Object { Stop-Tree $_.ProcessId }
+  Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+}
+
+function Stop-FromPidFile([string]$File) {
+  if (-not (Test-Path $File)) { return }
+  $saved = Get-Content $File -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($saved) { Stop-Tree ([int]$saved) }
+  Remove-Item $File -Force -ErrorAction SilentlyContinue
+}
+
+function Test-Healthy([string]$Url) {
+  try {
+    $r = Invoke-WebRequest $Url -UseBasicParsing -TimeoutSec 5
+    return ($r.StatusCode -eq 200)
+  } catch {
+    return $false
+  }
+}
 
 # ---------- -Stop ----------
 if ($Stop) {
-  foreach ($f in @($pidBackend, $pidTunnel)) {
-    if (Test-Path $f) {
-      $p = Get-Content $f -ErrorAction SilentlyContinue
-      if ($p) {
-        try { Stop-Process -Id $p -Force -ErrorAction SilentlyContinue } catch {}
-        # kill child processes too (cloudflared / node children)
-        Get-CimInstance Win32_Process -Filter "ParentProcessId=$p" -ErrorAction SilentlyContinue |
-          ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }
-      }
-      Remove-Item $f -Force -ErrorAction SilentlyContinue
-    }
-  }
-  Write-Host 'Stopped backend and tunnel (if they were running).'
+  # Stop the watchdog first so it cannot restart a tunnel while we are stopping.
+  Stop-FromPidFile $pidWatchdog
+  Stop-FromPidFile $pidTunnel
+  Stop-FromPidFile $pidBackend
+  Remove-Item $urlFile -Force -ErrorAction SilentlyContinue
+  Write-Host 'Stopped backend, tunnel and watchdog (if they were running).'
   $aadharScript = Join-Path $repo 'run-aadhar.ps1'
   if (Test-Path $aadharScript) { & $aadharScript -Stop }
   return
@@ -99,29 +118,32 @@ if (-not (Test-Path (Join-Path $serverDir 'node_modules'))) {
 }
 
 # ---------- 2. backend ----------
-Write-Host "[2/6] Starting backend on port $port ..."
-$nodeCmd = "node `"$serverDir\start.js`""
-# The child inherits the env loaded above, so only default DASH_DATA_DIR when
-# .env.local did not set one.
-Start-Process powershell -WindowStyle Minimized -ArgumentList @(
-  '-NoProfile','-Command',
-  "`$PID | Out-File '$pidBackend' -Force; Set-Location '$serverDir'; `$env:PORT='$port'; if (-not `$env:DASH_DATA_DIR) { `$env:DASH_DATA_DIR='$serverDir\data' }; $nodeCmd *> '$logBackend'"
-)
-# wait for the port to open
-$ok = $false
-for ($i = 0; $i -lt 30; $i++) {
-  Start-Sleep -Seconds 1
-  try {
-    $r = Invoke-WebRequest "http://localhost:$port/api/health" -UseBasicParsing -TimeoutSec 3
-    if ($r.StatusCode -eq 200) { $ok = $true; break }
-  } catch {}
+$backendHealth = "http://localhost:$port/api/health"
+if (Test-Healthy $backendHealth) {
+  Write-Host "[2/6] Backend already healthy on $backendHealth - reusing it."
+} else {
+  Stop-FromPidFile $pidBackend
+  Write-Host "[2/6] Starting backend on port $port ..."
+  $nodeCmd = "node `"$serverDir\start.js`""
+  # The child inherits the env loaded above, so only default DASH_DATA_DIR when
+  # .env.local did not set one.
+  Start-Process powershell -WindowStyle Minimized -ArgumentList @(
+    '-NoProfile','-Command',
+    "`$PID | Out-File '$pidBackend' -Force; Set-Location '$serverDir'; `$env:PORT='$port'; if (-not `$env:DASH_DATA_DIR) { `$env:DASH_DATA_DIR='$serverDir\data' }; $nodeCmd *> '$logBackend'"
+  )
+  $ok = $false
+  for ($i = 0; $i -lt 30; $i++) {
+    Start-Sleep -Seconds 1
+    $ok = Test-Healthy $backendHealth
+    if ($ok) { break }
+  }
+  if (-not $ok) {
+    Write-Host "Backend did not become healthy in 30s. Last log lines:"
+    if (Test-Path $logBackend) { Get-Content $logBackend -Tail 30 }
+    throw 'Backend failed to start - see log above.'
+  }
+  Write-Host "Backend healthy on $backendHealth"
 }
-if (-not $ok) {
-  Write-Host "Backend did not become healthy in 30s. Last log lines:"
-  if (Test-Path $logBackend) { Get-Content $logBackend -Tail 30 }
-  throw 'Backend failed to start - see log above.'
-}
-Write-Host "Backend healthy on http://localhost:$port/api/health"
 
 # ---------- 3. cloudflared ----------
 Write-Host '[3/6] Checking cloudflared...'
@@ -168,32 +190,44 @@ if (-not $cf) {
   }
 }
 if (-not $cf) { throw 'cloudflared not available - install manually from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/' }
-# kill any previous tunnel still bound (uses same logfile name)
-if (Test-Path $logTunnel) { Remove-Item $logTunnel -Force -ErrorAction SilentlyContinue }
 
-Write-Host '[4/6] Starting quick tunnel...'
-Start-Process powershell -WindowStyle Minimized -ArgumentList @(
-  '-NoProfile','-Command',
-  "`$PID | Out-File '$pidTunnel' -Force; cloudflared tunnel --url http://localhost:$port *> '$logTunnel'"
-)
-Start-Sleep -Seconds 6
-
-# ---------- 4. parse tunnel URL ----------
 $tunnelUrl = $null
-for ($i = 0; $i -lt 20 -and -not $tunnelUrl; $i++) {
-  if (Test-Path $logTunnel) {
-    $m = Select-String -Path $logTunnel -Pattern 'https://[a-z0-9-]+\.trycloudflare\.com' -AllMatches |
-         Select-Object -First 1
-    if ($m) { $tunnelUrl = $m.Matches[0].Value }
+if (Test-Path $urlFile) {
+  $candidate = ((Get-Content $urlFile -ErrorAction SilentlyContinue | Select-Object -First 1) + '').Trim()
+  if ($candidate -and (Test-Healthy "$candidate/api/health")) {
+    $tunnelUrl = $candidate
+    Write-Host "[4/6] Existing tunnel still healthy - reusing $tunnelUrl"
   }
-  if (-not $tunnelUrl) { Start-Sleep -Seconds 2 }
 }
+
 if (-not $tunnelUrl) {
-  Write-Host 'Could not find a trycloudflare.com URL in tunnel log. Last lines:'
-  if (Test-Path $logTunnel) { Get-Content $logTunnel -Tail 30 }
-  throw 'Tunnel URL not found - see log above.'
+  # Quick tunnels cannot reconnect after Cloudflare drops them, so a dead URL
+  # is replaced rather than reused. The Worker secret is updated below.
+  Stop-FromPidFile $pidTunnel
+  Remove-Item $logTunnel -Force -ErrorAction SilentlyContinue
+  Write-Host '[4/6] Starting quick tunnel...'
+  Start-Process powershell -WindowStyle Minimized -ArgumentList @(
+    '-NoProfile','-Command',
+    "`$PID | Out-File '$pidTunnel' -Force; cloudflared tunnel --url http://localhost:$port *> '$logTunnel'"
+  )
+  Start-Sleep -Seconds 6
+
+  for ($i = 0; $i -lt 20 -and -not $tunnelUrl; $i++) {
+    if (Test-Path $logTunnel) {
+      $m = Select-String -Path $logTunnel -Pattern 'https://[a-z0-9-]+\.trycloudflare\.com' -AllMatches |
+           Select-Object -First 1
+      if ($m) { $tunnelUrl = $m.Matches[0].Value }
+    }
+    if (-not $tunnelUrl) { Start-Sleep -Seconds 2 }
+  }
+  if (-not $tunnelUrl) {
+    Write-Host 'Could not find a trycloudflare.com URL in tunnel log. Last lines:'
+    if (Test-Path $logTunnel) { Get-Content $logTunnel -Tail 30 }
+    throw 'Tunnel URL not found - see log above.'
+  }
+  Set-Content -Path $urlFile -Value $tunnelUrl -NoNewline
+  Write-Host "Tunnel live at: $tunnelUrl"
 }
-Write-Host "Tunnel live at: $tunnelUrl"
 
 # ---------- 5. update SERVER_ORIGIN ----------
 if ($SkipWrangler) {
@@ -263,5 +297,35 @@ if ($SkipAadhar) {
     }
   } else {
     Write-Warning 'run-aadhar.ps1 not found; Aadhaar dashboard was not started.'
+  }
+}
+
+# ---------- watchdog ----------
+# Quick tunnels cannot reconnect after Cloudflare drops them. The watchdog
+# checks both public routes and recreates whichever tunnel is down.
+if ($NoWatchdog) {
+  Write-Host 'Tunnel watchdog skipped (-NoWatchdog).'
+} elseif ($SkipAadhar) {
+  Write-Host 'Tunnel watchdog skipped (main-only run).'
+} else {
+  $watchScript = Join-Path $repo 'watch-tunnels.ps1'
+  if (Test-Path $watchScript) {
+    $watchAlive = $false
+    if (Test-Path $pidWatchdog) {
+      $saved = Get-Content $pidWatchdog -ErrorAction SilentlyContinue | Select-Object -First 1
+      if ($saved -and (Get-Process -Id ([int]$saved) -ErrorAction SilentlyContinue)) {
+        $watchAlive = $true
+        Write-Host "Tunnel watchdog already running (pid $saved)."
+      }
+    }
+    if (-not $watchAlive) {
+      Start-Process powershell -WindowStyle Hidden -ArgumentList @(
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $watchScript
+      )
+      Start-Sleep -Seconds 1
+      Write-Host 'Tunnel watchdog started (log: %TEMP%\tunnel-watchdog.log).'
+    }
+  } else {
+    Write-Warning 'watch-tunnels.ps1 not found; tunnels will not be monitored.'
   }
 }

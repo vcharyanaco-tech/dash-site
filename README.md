@@ -69,4 +69,10 @@ main dashboard, or `.\run-backend.ps1 -Stop` to stop both.
 Both tunnels run on this PC. They stop when the machine shuts down, and
 Startup-folder launches only bring them back after login; a quick-tunnel
 hostname also changes on restart, but the scripts update the Worker secrets.
-The permanent fix is the Render deployment resuming with the committed code.
+A watchdog starts with the backend and checks both public routes every minute.
+If Cloudflare drops a quick tunnel, it recreates that tunnel and updates the
+matching Worker secret; see `%TEMP%\tunnel-watchdog.log`. Use
+`.\run-backend.ps1 -NoWatchdog` to skip it. Quick tunnels still have no uptime
+guarantee; a named Cloudflare tunnel is the durable fix, but the current API
+token cannot edit DNS. The permanent fix is the Render deployment resuming with
+the committed code.

@@ -39,6 +39,7 @@ $pidTunnel = Join-Path $env:TEMP 'aadhar-tunnel.pid'
 $logApp = Join-Path $env:TEMP 'aadhar-app.log'
 $logTunnel = Join-Path $env:TEMP 'aadhar-tunnel.log'
 $urlFile = Join-Path $env:TEMP 'aadhar-tunnel.url'
+$pidWatchdog = Join-Path $env:TEMP 'tunnel-watchdog.pid'
 
 function Stop-Tree([int]$ProcessId) {
   Get-CimInstance Win32_Process -Filter "ParentProcessId=$ProcessId" -ErrorAction SilentlyContinue |
@@ -75,6 +76,8 @@ function Find-Cloudflared {
 
 # ---------- -Stop ----------
 if ($Stop) {
+  # Stop the watchdog first so it cannot restart this tunnel while stopping.
+  Stop-FromPidFile $pidWatchdog
   Stop-FromPidFile $pidApp
   Stop-FromPidFile $pidTunnel
   Remove-Item $urlFile -Force -ErrorAction SilentlyContinue
