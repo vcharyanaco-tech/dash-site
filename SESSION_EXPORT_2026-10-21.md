@@ -381,10 +381,11 @@ What was copied and verified:
   Cloudflare token remains only in `.cloudflare.local`, and the bridge token in
   `.env.local`. None are committed or printed.
 
-The old Aadhaar service `srv-dasvqh8473hc73e53a3g` remains suspended and
-untouched in the old workspace. It can be deleted after the new service has
-survived a deploy/keepalive cycle. Dash-site remains on that old workspace until
-its bandwidth allowance resets on **1 November 2026 (UTC)**.
+The old Aadhaar service `srv-dasvqh8473hc73e53a3g` remains suspended in the old
+workspace, but its auto-deploy was set to `no` so future Aadhaar commits cannot
+redeploy it or compete for the bridge. It can be deleted after the new service
+has survived a deploy/keepalive cycle. Dash-site remains on that old workspace
+until its bandwidth allowance resets on **1 November 2026 (UTC)**.
 
 ## Files changed
 
