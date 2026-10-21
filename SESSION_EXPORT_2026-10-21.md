@@ -7,7 +7,8 @@ no export of its own, so this file covers both.
 
 One unit of work: **make `run-backend.ps1` survive a Startup-folder launch**,
 then a second: **cut the Render egress that exhausted the 5 GB Hobby allowance**
-(both repos).
+(both repos), and a third: **bring the Aadhaar dashboard back locally while its
+Render service is still suspended**.
 
 | SHA | Subject |
 |---|---|
@@ -15,7 +16,8 @@ then a second: **cut the Render egress that exhausted the 5 GB Hobby allowance**
 | `c86c901` | `fix:` load `.env.local` and survive stale PATH in `run-backend.ps1` |
 | `4f52b10` | `fix:` retry tunnel health check and record bandwidth findings |
 | `8d41733` | `fix:` compress and dedupe KV snapshot uploads |
-| `18f649b` | aadhar-dashboard: cut KV backup egress (gzip + unchanged skip) |
+| `ee8a139` | `fix:` run the Aadhaar fallback alongside the main backend |
+| `b1c0fee` | aadhar-dashboard: cut backup egress with gzip, dedupe and a daily checkpoint |
 
 ---
 
@@ -133,8 +135,11 @@ investigation and should be revoked and scrubbed from history.
 ## 6. Bandwidth fix implemented
 
 Both backup loops now send **gzip** and **skip the upload when the content is
-unchanged**. The Worker needs no change: it already stores and returns opaque
-`arrayBuffer` values, so gzip bytes ride through untouched.
+unchanged**. The dash-site Worker needs no change: it already stores and returns
+opaque `arrayBuffer` values, so gzip bytes ride through untouched. The aadhar
+dashboard uses a separate dedicated Worker, which had to learn to decompress
+gzip before validating and storing raw SQLite; that Worker deployment is still
+blocked (see below).
 
 ### `dash-site` — `src/server/data-sync.js` (`8d41733`)
 
@@ -154,14 +159,30 @@ unchanged**. The Worker needs no change: it already stores and returns opaque
 - When nothing changed, the stats PUT is throttled to 15 min, so an idle
   dashboard spends 4 KV writes/hour instead of 12.
 
-### `aadhar-dashboard` — `kv_sync.py` (`18f649b`)
+### `aadhar-dashboard` — `b1c0fee`
 
-- Mirror of the same policy: SHA-256 dedupe, gzip (`mtime=0`), 25 MiB
-  compressed-value guard, and restore support for gzipped + legacy raw.
-- `_last_hash` is seeded from `restore_data()`, so the first interval tick
-  after a restart does not re-upload the snapshot it just downloaded.
-- Status exposes `last_upload_at`, `last_checked_at`, `stored_bytes`, and
-  `skipped_unchanged`; README documents the behaviour.
+- SHA-256 dedupe of the raw SQLite snapshot, gzip (`mtime=0`, level 6), and a
+  25 MiB compressed-value guard. Measured on the real DB: 5,894,144 bytes raw
+  to 3,121,189 gzip (1.89x).
+- A daily checkpoint (`AADHAR_SYNC_CHECKPOINT_MS`, default 86,400,000 ms)
+  re-uploads an unchanged snapshot at most once a day, so an idle backup does
+  not look stale and a rollback point stays recent. `0` disables it.
+- `_last_hash` is seeded from `restore_data()`; the generation id's timestamp
+  seeds `_last_push_at`, so a fresh restore is not re-uploaded. A fallback past
+  an invalid latest generation leaves the hash unset so the repair is
+  republished; a manual rollback does the same.
+- Restore accepts gzipped and legacy raw snapshots. The dedicated Worker
+  (`backup-worker/worker.js`) decompresses gzip, validates SQLite, and stores
+  raw bytes, so existing generations and rollback stay raw.
+- Rolling-deploy safety: if the old Worker rejects gzip (`not_sqlite`), the
+  client retries the same snapshot raw and pauses compression for six hours
+  before probing again.
+- Status exposes `last_upload_at`, `last_checked_at`, `stored_bytes`,
+  `last_encoding`, and `skipped_unchanged`; the admin tab shows the checkpoint
+  cadence.
+- The earlier `18f649b` branch was based on diverged history and is preserved as
+  `backup/kv-sync-gzip-18f649b`; the fix was re-applied on `cf20636` and pushed
+  as `b1c0fee`.
 
 ### Verification
 
@@ -169,30 +190,100 @@ unchanged**. The Worker needs no change: it already stores and returns opaque
   unchanged-cycle skip, changed-DB re-upload, legacy+gzip decode.
 - Existing `backup-order` / `backup-status` tests still pass.
 - Full Node suite: **600 passed, 0 failed**.
-- New `aadhar-dashboard/test_kv_sync.py`: 3/3 — gzip upload, unchanged skip,
-  changed re-upload, gzip + legacy restore.
+- New `aadhar-dashboard/tests/test_backup_compression.py`: **7 passed** — gzip,
+  dedupe, changed re-upload, daily checkpoint, old-Worker fallback, restore +
+  dedupe seed, and repair after an invalid latest generation.
+- New `backup-worker/worker.test.mjs`: **6 passed** — gzip round-trip,
+  decompression cap, bad gzip, gzipped PUT stored raw, raw compatibility, and
+  an advertised-gzip mismatch.
+- Full aadhar pytest suite: **162 passed**. `wrangler deploy --dry-run`
+  bundles successfully (13.31 KiB).
 
-Expected egress: the 5.3 GB of October backup traffic becomes near-zero on
-idle cycles and only changed snapshots are sent, at 5.1× (dash-site) / 1.9×
-(aadhaar) compression. That leaves ample room inside the 5 GB allowance even
-on a busy editing day.
+Expected egress: idle cycles now cost no PUT, except the aadhar daily
+checkpoint (~3.1 MB/day at 1.9x, about 93 MB/month). Changed snapshots are
+5.1x (dash-site) / 1.9x (aadhaar) smaller. That leaves ample room inside the
+5 GB allowance even on a busy editing day.
 
-Deployment: the local backend must be restarted to load the new `data-sync.js`
-(Render is suspended). The aadhar commit is pushed; Render will auto-deploy it
-when the service is restored. The Worker is unchanged.
+Deployment: the local dash-site backend was restarted and now serves the gzip
+build — `/api/health` reports `dbStoredBytes` 272,234 against `dbBytes`
+1,380,352. The aadhar commit is pushed; Render will auto-deploy it when the
+service resumes. The dedicated aadhar Worker still needs a manual deploy from
+an account with access to `606780bc6c3ecd48289472c73d27a982`; the current token
+only sees `a01eb877733d755cb57e25827a9c52fe` and gets
+`403 ... Authentication error`. Until then the client's raw fallback keeps
+backups working, but gzip stays inactive.
+
+## 7. Aadhaar route outage (2026-10-21)
+
+**Symptom:** `https://dashboardharyana.site/aadhar-dashboard/` returned the
+Worker's 503 `Aadhaar dashboard unavailable (HTTP 503)` even while the main
+`/api/*` tunnel was healthy.
+
+**Cause:** the tunnel started by `run-backend.ps1` only replaces the main
+backend and updates `SERVER_ORIGIN`. `/aadhar-dashboard/*` is a separate
+Streamlit service behind the separate `AADHAR_ORIGIN` secret, which still
+pointed at `https://aadhar-dashboard-5i4x.onrender.com`. A direct request to
+that origin returned `x-render-routing: suspend-by-user` and "This service has
+been suspended by its owner."
+
+**Fix:** started the sibling `aadhar-dashboard` Streamlit app locally on port
+8501 from `boot.py`, opened a second Cloudflare quick tunnel, and updated the
+`AADHAR_ORIGIN` secret. The setup is now scripted:
+
+- `run-aadhar.ps1` starts/reuses the local Streamlit app, starts/reuses its
+  tunnel, updates `AADHAR_ORIGIN`, and verifies the public route. `-Stop` stops
+  both processes.
+- `run-backend.ps1` now calls it after the main backend is healthy;
+  `-SkipAadhar` keeps the old main-only behaviour, and `-Stop` stops both.
+- The Startup-folder `dash-backend.cmd` needs no edit: it calls
+  `run-backend.ps1`, which now brings up both services.
+
+**Verified after a clean restart of both fallbacks:**
+
+| Check | Result |
+|---|---|
+| `GET /` | 200 |
+| `GET /aadhar-dashboard/` | 200, Streamlit HTML |
+| `GET /aadhar-dashboard/_stcore/health` | 200 `ok` |
+| Streamlit JS asset through the Worker | 200 |
+| Streamlit WebSocket `_stcore/stream` | opened, protocol `streamlit` |
+| `GET /api/health` | 200, gzip stats active |
+
+**Caveats:**
+
+- The local Aadhaar process has **no `AADHAR_SYNC_URL` / `AADHAR_SYNC_TOKEN`**,
+  so it serves the local `data/aadhaar.db` but does not mirror new writes. Treat
+  it as read-only until the bridge token is supplied; do not enter production
+  data that exists nowhere else.
+- Both quick tunnels run on this PC. They stop when the machine shuts down;
+  Startup only restarts them after login, and the hostnames change. The scripts
+  update both Worker secrets on every start.
+- The Hobby bandwidth allowance resets at the start of the next monthly cycle,
+  **1 November 2026 (UTC)**, which is when the suspended Render services become
+  eligible to resume. After the new commits auto-deploy, repoint
+  `SERVER_ORIGIN` and `AADHAR_ORIGIN` from the quick tunnels back to the Render
+  service URLs **before** shutting this PC down. Otherwise the public routes
+  still depend on the local tunnels even though Render is healthy again.
 
 ## Files changed
 
 ```
-run-backend.ps1   +87/-11   env loading, DASH_DATA_DIR default, PATH append,
-                            winget guard + cloudflared install fallback,
-                            step-6 tunnel health retry
+dash-site/run-backend.ps1        also starts/stops the Aadhaar fallback
+dash-site/run-aadhar.ps1         new: local Streamlit + second quick tunnel
+dash-site/README.md              documents the one-command local fallback
 src/server/data-sync.js          +138/-22  gzip + content-hash dedupe,
                                            legacy restore, stats fields
 src/server/tests/backup-compression.test.js  new, 3 tests
-aadhar-dashboard/kv_sync.py      +99/-14   mirror policy + compressed cap
-aadhar-dashboard/test_kv_sync.py new, 3 tests
-aadhar-dashboard/README.md       +3        documents the policy
+
+aadhar-dashboard/kv_sync.py      +211/-?   gzip, dedupe, daily checkpoint,
+                                           fallback-safe restore
+aadhar-dashboard/app.py          status captions for skipped checks/checkpoint
+aadhar-dashboard/README.md       config + durability notes
+aadhar-dashboard/tools/check_backup_health.py  26 h stale threshold
+aadhar-dashboard/backup-worker/worker.js       gzip decompress + raw storage
+aadhar-dashboard/backup-worker/worker.test.mjs new, 6 tests
+aadhar-dashboard/backup-worker/package.json    new, test script
+aadhar-dashboard/tests/test_backup_compression.py new, 7 tests
 ```
 
 ## Pending tasks (carry forward)
@@ -201,28 +292,53 @@ aadhar-dashboard/README.md       +3        documents the policy
    with `CHANGE_REQUEST_DRY_RUN=true`, then write one throwaway cell.
 2. **Bundle headroom** — 552.4 of 575 KB raw consumed; next `app.js` change
    will trip it. Trim rather than raise a third time.
-3. **Verify the bandwidth fix live** — restart the local backend so
-   `data-sync.js` loads, then check `/api/health` backup stats
-   (`dbStoredBytes < dbBytes`, `skippedUnchanged` rising). The aadhar service
-   auto-deploys on unsuspend.
-4. **`DASH_PUSH_TO_SHEET` is off** — decide whether approvals should update the
+3. **Deploy the aadhar backup Worker** - the client is safe to ship first, but
+   gzip stays inactive until `backup-worker/worker.js` is deployed from an
+   account with access to `606780bc6c3ecd48289472c73d27a982`. The current token
+   only sees `a01eb877733d755cb57e25827a9c52fe` (`403 Authentication error`).
+4. **Verify aadhar gzip and checkpoint live** - after the Worker deploy and
+   Render resume, confirm `last_encoding: gzip`, a 1.9x stored/raw ratio, and
+   one checkpoint upload per 24 h. The local fallback currently has no bridge
+   token, so it does not exercise these paths.
+5. **Verify main dedupe over time** - the restarted backend already reports
+   `dbStoredBytes 272,234 < dbBytes 1,380,352`; after the next 10-minute tick,
+   confirm `skippedUnchanged` rises and no PUT is logged.
+6. **Local Aadhaar writes** - supply `AADHAR_SYNC_URL`/`AADHAR_SYNC_TOKEN` to the
+   local fallback if production writes are needed; otherwise keep it read-only
+   and copy the DB back after 1 November.
+7. **`DASH_PUSH_TO_SHEET` is off** — decide whether approvals should update the
    origin spreadsheet.
-5. **Private sheets** — open since 2026-09-25. Keep the printed note, or build
+8. **Private sheets** — open since 2026-09-25. Keep the printed note, or build
    Google OAuth (Drive/Sheets read scope).
-6. **`gh` CLI** — still not installed; workflow checks use the REST API.
-7. **Housekeeping** — the 23 untracked root files (`ipad_*.html`,
-   `support_*.html`, `*.py`, `images/`, `ref_pdf_content.txt`) remain untracked
-   and uncommitted per AGENTS.md.
-8. **Rotate the Render API key** committed in `SESSION_EXPORT_2026-08-14.md`.
+9. **`gh` CLI** — still not installed; workflow checks use the REST API.
+10. **Housekeeping** — the 23 untracked root files (`ipad_*.html`,
+    `support_*.html`, `*.py`, `images/`, `ref_pdf_content.txt`) remain untracked
+    and uncommitted per AGENTS.md.
+11. **Cut back to Render on 1 November** - after both Render services resume and
+    auto-deploy, set `SERVER_ORIGIN` and `AADHAR_ORIGIN` back to their Render
+    URLs, then stop the local fallbacks and disable the Startup entry (or keep
+    it as a standby).
+12. **Rotate the Render API key** committed in `SESSION_EXPORT_2026-08-14.md`.
 
 ## Deployment notes
 
 Unchanged and still true:
 
 - Frontend → GitHub Pages; the Worker serves the same files from the raw CDN.
-- Backend → **Render** (`autoDeploy: true`) is suspended; `run-backend.ps1` is
-  the local replacement. The Worker only proxies `/api/*`.
+- Backend → **Render** (`autoDeploy: true`) is suspended until **1 November
+  2026 (UTC)**, when the Hobby monthly bandwidth allowance resets. Until then
+  `run-backend.ps1` is the local replacement: it starts the Node backend,
+  starts the Aadhaar Streamlit app, opens one quick tunnel per service, and
+  updates `SERVER_ORIGIN` / `AADHAR_ORIGIN`. The Worker proxies `/api/*` to the
+  first and `/aadhar-dashboard/*` to the second.
+- Both quick tunnels run on this PC and stop when it shuts down; Startup only
+  restarts them after login, and their hostnames change on every fresh start.
+  The Worker secrets therefore still point at the tunnels; restore the Render
+  URLs when the services resume.
 - "Deploy Worker" reports success even when it skipped the real step
   (`CLOUDFLARE_API_TOKEN` unset). A green Worker checkmark means nothing.
+- The aadhar backup Worker must be deployed separately:
+  `cd aadhar-dashboard/backup-worker; wrangler deploy` with credentials for
+  account `606780bc6c3ecd48289472c73d27a982`.
 - Pages CDN propagation lags ~75 s — use a cache-buster before concluding a
   deploy failed.
