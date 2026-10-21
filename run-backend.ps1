@@ -1,9 +1,10 @@
 # ============================================================
-# run-backend.ps1 — Run the dashboard backend locally and expose
+# run-backend.ps1 - Run the dashboard backend locally and expose
 # it through a Cloudflare quick tunnel, replacing the suspended
 # Render service.
 #
 # What it does, in order:
+#   0. Load .env.local if present (DATA_SYNC_URL, WORKER_API_TOKEN, MAIL_*)
 #   1. npm install in src/server (skipped if node_modules exists)
 #   2. Start the Node backend (port 8787) in a hidden window
 #   3. Start `cloudflared tunnel --url http://localhost:8787`
@@ -55,6 +56,33 @@ if ($Stop) {
   return
 }
 
+# ---------- 0. env ----------
+# Load .env.local if present (DATA_SYNC_URL, WORKER_API_TOKEN, MAIL_*),
+# mirroring start-server.sh. Vars already in the process env win.
+$envFile = Join-Path $repo '.env.local'
+if (Test-Path $envFile) {
+  Get-Content $envFile | ForEach-Object {
+    $line = $_.Trim()
+    if (-not $line -or $line.StartsWith('#')) { return }
+    if ($line.StartsWith('export ')) { $line = $line.Substring(7).TrimStart() }
+    $i = $line.IndexOf('=')
+    if ($i -lt 1) { return }
+    $name = $line.Substring(0, $i).Trim()
+    $value = $line.Substring($i + 1).Trim()
+    # `source` strips one layer of matching quotes; mirror that so a value
+    # like MAIL_HTTP_URL="https://..." loads without the quotes.
+    if ($value.Length -ge 2 -and
+        (($value[0] -eq '"' -and $value[$value.Length - 1] -eq '"') -or
+         ($value[0] -eq "'" -and $value[$value.Length - 1] -eq "'"))) {
+      $value = $value.Substring(1, $value.Length - 2)
+    }
+    if ($name -and -not (Test-Path "Env:$name")) {
+      Set-Item -Path "Env:$name" -Value $value
+    }
+  }
+  Write-Host '[env] Loaded .env.local'
+}
+
 # ---------- 1. deps ----------
 if (-not (Test-Path (Join-Path $serverDir 'node_modules'))) {
   Write-Host '[1/6] Installing backend dependencies (first run only)...'
@@ -63,15 +91,17 @@ if (-not (Test-Path (Join-Path $serverDir 'node_modules'))) {
   if ($LASTEXITCODE -ne 0) { Pop-Location; throw 'npm install failed' }
   Pop-Location
 } else {
-  Write-Host '[1/6] Dependencies already installed — skipping npm install.'
+  Write-Host '[1/6] Dependencies already installed - skipping npm install.'
 }
 
 # ---------- 2. backend ----------
 Write-Host "[2/6] Starting backend on port $port ..."
 $nodeCmd = "node `"$serverDir\start.js`""
+# The child inherits the env loaded above, so only default DASH_DATA_DIR when
+# .env.local did not set one.
 Start-Process powershell -WindowStyle Minimized -ArgumentList @(
   '-NoProfile','-Command',
-  "`$PID | Out-File '$pidBackend' -Force; Set-Location '$serverDir'; `$env:PORT='$port'; `$env:DASH_DATA_DIR='$serverDir\data'; $nodeCmd *> '$logBackend'"
+  "`$PID | Out-File '$pidBackend' -Force; Set-Location '$serverDir'; `$env:PORT='$port'; if (-not `$env:DASH_DATA_DIR) { `$env:DASH_DATA_DIR='$serverDir\data' }; $nodeCmd *> '$logBackend'"
 )
 # wait for the port to open
 $ok = $false
@@ -85,20 +115,55 @@ for ($i = 0; $i -lt 30; $i++) {
 if (-not $ok) {
   Write-Host "Backend did not become healthy in 30s. Last log lines:"
   if (Test-Path $logBackend) { Get-Content $logBackend -Tail 30 }
-  throw 'Backend failed to start — see log above.'
+  throw 'Backend failed to start - see log above.'
 }
 Write-Host "Backend healthy on http://localhost:$port/api/health"
 
 # ---------- 3. cloudflared ----------
 Write-Host '[3/6] Checking cloudflared...'
+# Refresh PATH from the registry: this script may be launched from a shell
+# (Startup folder / explorer) whose environment predates installing
+# cloudflared or wrangler, so Get-Command would miss them.
+function Refresh-Path {
+  # Append registry entries that the current process is missing instead of
+  # replacing PATH outright: a caller may have session-only entries (nvm, pip,
+  # tool shims) that must keep working.
+  $current = @($env:Path -split ';' | Where-Object { $_ })
+  $fresh = @(
+    [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    [Environment]::GetEnvironmentVariable('Path', 'User')
+  ) -split ';' | Where-Object { $_ }
+  $missing = @($fresh | Where-Object { $current -notcontains $_ })
+  if ($missing.Count) { $env:Path = (@($current) + $missing) -join ';' }
+}
+Refresh-Path
 $cf = Get-Command cloudflared -ErrorAction SilentlyContinue
 if (-not $cf) {
-  Write-Host 'cloudflared not found — installing via winget...'
-  winget install --id Cloudflare.cloudflared --accept-source-agreements --accept-package-agreements
-  if ($LASTEXITCODE -ne 0) { throw 'winget install of cloudflared failed — install manually from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/' }
-  # refresh PATH for this session
-  $env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')
+  Write-Host 'cloudflared not found - installing via winget...'
+  if (Get-Command winget -ErrorAction SilentlyContinue) {
+    winget install --id Cloudflare.cloudflared --accept-source-agreements --accept-package-agreements
+  } else {
+    Write-Warning 'winget is not available - skipping automatic install.'
+  }
+  Refresh-Path
+  $cf = Get-Command cloudflared -ErrorAction SilentlyContinue
 }
+if (-not $cf) {
+  # winget exits non-zero when the package is already installed but this
+  # shell's PATH predates it (Startup-folder launches) - fall back to the
+  # known MSI install locations before giving up.
+  $known = @(
+    "$env:ProgramFiles\cloudflared\cloudflared.exe",
+    "${env:ProgramFiles(x86)}\cloudflared\cloudflared.exe",
+    "$env:LOCALAPPDATA\Microsoft\WinGet\Links\cloudflared.exe"
+  ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+  if ($known) {
+    Write-Host "Using cloudflared at: $known"
+    $env:Path = (Split-Path $known) + ';' + $env:Path
+    $cf = Get-Command cloudflared -ErrorAction SilentlyContinue
+  }
+}
+if (-not $cf) { throw 'cloudflared not available - install manually from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/' }
 # kill any previous tunnel still bound (uses same logfile name)
 if (Test-Path $logTunnel) { Remove-Item $logTunnel -Force -ErrorAction SilentlyContinue }
 
@@ -122,7 +187,7 @@ for ($i = 0; $i -lt 20 -and -not $tunnelUrl; $i++) {
 if (-not $tunnelUrl) {
   Write-Host 'Could not find a trycloudflare.com URL in tunnel log. Last lines:'
   if (Test-Path $logTunnel) { Get-Content $logTunnel -Tail 30 }
-  throw 'Tunnel URL not found — see log above.'
+  throw 'Tunnel URL not found - see log above.'
 }
 Write-Host "Tunnel live at: $tunnelUrl"
 
@@ -150,7 +215,7 @@ try {
   $h = Invoke-WebRequest "$tunnelUrl/api/health" -UseBasicParsing -TimeoutSec 20
   Write-Host "Tunnel health check: HTTP $($h.StatusCode) OK"
 } catch {
-  Write-Warning "Health check through tunnel failed ($($_.Exception.Message)) — the tunnel may need a few more seconds; retry $tunnelUrl/api/health in a browser."
+  Write-Warning "Health check through tunnel failed ($($_.Exception.Message)) - the tunnel may need a few more seconds; retry $tunnelUrl/api/health in a browser."
 }
 
 Write-Host ''
