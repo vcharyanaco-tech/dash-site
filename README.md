@@ -66,6 +66,11 @@ updates the Worker's `SERVER_ORIGIN`. It then starts the sibling
 updates `AADHAR_ORIGIN`. Use `.\run-backend.ps1 -SkipAadhar` to start only the
 main dashboard, or `.\run-backend.ps1 -Stop` to stop both.
 
+If `E:\projects\aadhar-dashboard\.env.local` exists, `run-aadhar.ps1` loads its
+`AADHAR_SYNC_URL` / `AADHAR_SYNC_TOKEN` into the Streamlit process so the local
+app can restore and upload snapshots through its backup Worker. That file is
+gitignored and must never be committed.
+
 Both tunnels run on this PC. They stop when the machine shuts down, and
 Startup-folder launches only bring them back after login; a quick-tunnel
 hostname also changes on restart, but the scripts update the Worker secrets.

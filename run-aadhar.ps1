@@ -40,6 +40,8 @@ $logApp = Join-Path $env:TEMP 'aadhar-app.log'
 $logTunnel = Join-Path $env:TEMP 'aadhar-tunnel.log'
 $urlFile = Join-Path $env:TEMP 'aadhar-tunnel.url'
 $pidWatchdog = Join-Path $env:TEMP 'tunnel-watchdog.pid'
+$envFile = Join-Path $aadharDir '.env.local'
+$envMarker = Join-Path $env:TEMP 'aadhar-app.envhash'
 
 function Stop-Tree([int]$ProcessId) {
   Get-CimInstance Win32_Process -Filter "ParentProcessId=$ProcessId" -ErrorAction SilentlyContinue |
@@ -74,6 +76,29 @@ function Find-Cloudflared {
   return $known
 }
 
+function Import-AadharEnv([string]$File) {
+  # Minimal .env parser; the file is local and ignored by git. Only AADHAR_*
+  # names are accepted so this cannot silently override unrelated process state.
+  Get-Content $File -ErrorAction Stop | ForEach-Object {
+    $line = $_.Trim()
+    if ($line -and -not $line.StartsWith('#')) {
+      $eq = $line.IndexOf('=')
+      if ($eq -gt 0) {
+        $name = $line.Substring(0, $eq).Trim()
+        if ($name -match '^AADHAR_[A-Z0-9_]+$') {
+          $value = $line.Substring($eq + 1).Trim()
+          if ($value.Length -ge 2 -and (
+              ($value.StartsWith('"') -and $value.EndsWith('"')) -or
+              ($value.StartsWith("'") -and $value.EndsWith("'")))) {
+            $value = $value.Substring(1, $value.Length - 2)
+          }
+          Set-Item -Path "Env:$name" -Value $value
+        }
+      }
+    }
+  }
+}
+
 # ---------- -Stop ----------
 if ($Stop) {
   # Stop the watchdog first so it cannot restart this tunnel while stopping.
@@ -81,6 +106,7 @@ if ($Stop) {
   Stop-FromPidFile $pidApp
   Stop-FromPidFile $pidTunnel
   Remove-Item $urlFile -Force -ErrorAction SilentlyContinue
+  Remove-Item $envMarker -Force -ErrorAction SilentlyContinue
   Write-Host 'Stopped the Aadhaar app and tunnel (if they were running).'
   return
 }
@@ -92,10 +118,30 @@ if (-not (Test-Path $python)) {
   throw "Python virtualenv not found at $python. Set up the aadhar-dashboard .venv first."
 }
 
+# Local bridge credentials: AADHAR_SYNC_URL / AADHAR_SYNC_TOKEN.
+# .env.local is gitignored; never print its values.
+$envHash = ''
+if (Test-Path $envFile) {
+  Import-AadharEnv $envFile
+  $envHash = (Get-FileHash $envFile -Algorithm SHA256).Hash
+  Write-Host "[env] Loaded Aadhaar bridge settings from $envFile"
+}
+
 # ---------- 1. Streamlit app ----------
-if (Test-Healthy $localHealth) {
+$runningHash = ''
+if (Test-Path $envMarker) {
+  $runningHash = (Get-Content $envMarker -ErrorAction SilentlyContinue | Select-Object -First 1)
+  if (-not $runningHash) { $runningHash = '' }
+}
+$appHealthy = Test-Healthy $localHealth
+$envChanged = $appHealthy -and ($runningHash -ne $envHash)
+
+if ($appHealthy -and -not $envChanged) {
   Write-Host "[1/4] Aadhaar app already healthy on $localHealth - reusing it."
 } else {
+  if ($appHealthy -and $envChanged) {
+    Write-Host '[1/4] Aadhaar app environment changed - restarting it with the new settings.'
+  }
   Stop-FromPidFile $pidApp
   Remove-Item $logApp -Force -ErrorAction SilentlyContinue
   Write-Host "[1/4] Starting Streamlit on port $Port ..."
@@ -112,6 +158,7 @@ if (Test-Healthy $localHealth) {
     if (Test-Path $logApp) { Get-Content $logApp -Tail 40 }
     throw 'Streamlit failed to start - see log above.'
   }
+  Set-Content -Path $envMarker -Value $envHash -NoNewline
   Write-Host "Aadhaar app healthy on $localHealth"
 }
 
