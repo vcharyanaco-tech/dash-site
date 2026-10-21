@@ -5,12 +5,17 @@ local `main` matched `origin/main` (0 ahead, 0 behind). The only local delta was
 an uncommitted `run-backend.ps1` (+51/−9), and the newest commit (`8ee1dcc`) had
 no export of its own, so this file covers both.
 
-One unit of work: **make `run-backend.ps1` survive a Startup-folder launch.**
+One unit of work: **make `run-backend.ps1` survive a Startup-folder launch**,
+then a second: **cut the Render egress that exhausted the 5 GB Hobby allowance**
+(both repos).
 
 | SHA | Subject |
 |---|---|
 | `8ee1dcc` | Add `run-backend.ps1`: run the backend locally behind a Cloudflare quick tunnel while Render is suspended |
 | `c86c901` | `fix:` load `.env.local` and survive stale PATH in `run-backend.ps1` |
+| `4f52b10` | `fix:` retry tunnel health check and record bandwidth findings |
+| `8d41733` | `fix:` compress and dedupe KV snapshot uploads |
+| `18f649b` | aadhar-dashboard: cut KV backup egress (gzip + unchanged skip) |
 
 ---
 
@@ -112,20 +117,69 @@ Both loops push even when nothing changed: no content hash, no compression.
 `dash-site` is the larger single consumer (56% of the total), but the shared
 root cause is the unconditional snapshot uploads.
 
-Cheap remediation (not yet implemented):
+Cheap remediation — **implemented 2026-10-21, see section 6**:
 
 1. Hash the snapshot and skip the PUT when unchanged (removes most uploads).
 2. gzip before PUT — measured ratios: dash-site **5.1×**, aadhaar **1.9×**.
-3. Raise `DATA_SYNC_INTERVAL_MS` to 1 h; aadhaar already runs hourly.
-4. Keep write-triggered snapshots; they cover the "edit then crash" window.
-
-Interim env-only mitigation (no code): `DATA_SYNC_INTERVAL_MS=3600000` on
-dash-site and `AADHAR_SYNC_INTERVAL_MS=21600000` on aadhaar → ~55 MB/day total
-(~1.7 GB/month), comfortably inside 5 GB.
+3. Keep write-triggered snapshots; they cover the "edit then crash" window.
+4. The interval env vars remain an emergency lever
+   (`DATA_SYNC_INTERVAL_MS=3600000` / `AADHAR_SYNC_INTERVAL_MS=21600000`)
+   but are no longer required.
 
 **Security note:** a live Render API key is committed in
 `SESSION_EXPORT_2026-08-14.md` (tracked). It was used read-only for this
 investigation and should be revoked and scrubbed from history.
+
+## 6. Bandwidth fix implemented
+
+Both backup loops now send **gzip** and **skip the upload when the content is
+unchanged**. The Worker needs no change: it already stores and returns opaque
+`arrayBuffer` values, so gzip bytes ride through untouched.
+
+### `dash-site` — `src/server/data-sync.js` (`8d41733`)
+
+- SHA-256 of the raw `VACUUM INTO` snapshot; if it matches the last successful
+  push, `/db` is not called at all. `VACUUM INTO` is deterministic for an
+  unchanged DB (verified across repeated snapshots), so idle timer ticks cost
+  a local copy but zero egress.
+- Uploads/meetings are deduped per file by content hash too, so a periodic
+  backup no longer re-sends every attachment.
+- The snapshot is gzipped (`level 6`) before the PUT. Restore sniffs the
+  `1f 8b` magic and accepts **legacy raw SQLite** values as well.
+- The files-before-DB commit order and the reserved `/db` budget slot are
+  preserved; a file only consumes the last slot when the DB is unchanged.
+- `lastBackupAt` now means "last verified snapshot" (upload or confirmed
+  identical); `lastUploadAt` is the last actual PUT. Health also exposes
+  `skippedUnchanged` and `dbStoredBytes`.
+- When nothing changed, the stats PUT is throttled to 15 min, so an idle
+  dashboard spends 4 KV writes/hour instead of 12.
+
+### `aadhar-dashboard` — `kv_sync.py` (`18f649b`)
+
+- Mirror of the same policy: SHA-256 dedupe, gzip (`mtime=0`), 25 MiB
+  compressed-value guard, and restore support for gzipped + legacy raw.
+- `_last_hash` is seeded from `restore_data()`, so the first interval tick
+  after a restart does not re-upload the snapshot it just downloaded.
+- Status exposes `last_upload_at`, `last_checked_at`, `stored_bytes`, and
+  `skipped_unchanged`; README documents the behaviour.
+
+### Verification
+
+- New `src/server/tests/backup-compression.test.js`: 3/3 — gzip magic,
+  unchanged-cycle skip, changed-DB re-upload, legacy+gzip decode.
+- Existing `backup-order` / `backup-status` tests still pass.
+- Full Node suite: **600 passed, 0 failed**.
+- New `aadhar-dashboard/test_kv_sync.py`: 3/3 — gzip upload, unchanged skip,
+  changed re-upload, gzip + legacy restore.
+
+Expected egress: the 5.3 GB of October backup traffic becomes near-zero on
+idle cycles and only changed snapshots are sent, at 5.1× (dash-site) / 1.9×
+(aadhaar) compression. That leaves ample room inside the 5 GB allowance even
+on a busy editing day.
+
+Deployment: the local backend must be restarted to load the new `data-sync.js`
+(Render is suspended). The aadhar commit is pushed; Render will auto-deploy it
+when the service is restored. The Worker is unchanged.
 
 ## Files changed
 
@@ -133,6 +187,12 @@ investigation and should be revoked and scrubbed from history.
 run-backend.ps1   +87/-11   env loading, DASH_DATA_DIR default, PATH append,
                             winget guard + cloudflared install fallback,
                             step-6 tunnel health retry
+src/server/data-sync.js          +138/-22  gzip + content-hash dedupe,
+                                           legacy restore, stats fields
+src/server/tests/backup-compression.test.js  new, 3 tests
+aadhar-dashboard/kv_sync.py      +99/-14   mirror policy + compressed cap
+aadhar-dashboard/test_kv_sync.py new, 3 tests
+aadhar-dashboard/README.md       +3        documents the policy
 ```
 
 ## Pending tasks (carry forward)
@@ -141,9 +201,10 @@ run-backend.ps1   +87/-11   env loading, DASH_DATA_DIR default, PATH append,
    with `CHANGE_REQUEST_DRY_RUN=true`, then write one throwaway cell.
 2. **Bundle headroom** — 552.4 of 575 KB raw consumed; next `app.js` change
    will trip it. Trim rather than raise a third time.
-3. **Decide the bandwidth fix** — dedupe/compress the KV snapshots in
-   `src/server/data-sync.js` (and mirror it in `aadhar-dashboard`), or apply
-   the env-only interim mitigation. Details in section 5.
+3. **Verify the bandwidth fix live** — restart the local backend so
+   `data-sync.js` loads, then check `/api/health` backup stats
+   (`dbStoredBytes < dbBytes`, `skippedUnchanged` rising). The aadhar service
+   auto-deploys on unsuspend.
 4. **`DASH_PUSH_TO_SHEET` is off** — decide whether approvals should update the
    origin spreadsheet.
 5. **Private sheets** — open since 2026-09-25. Keep the printed note, or build
