@@ -7,8 +7,9 @@ no export of its own, so this file covers both.
 
 One unit of work: **make `run-backend.ps1` survive a Startup-folder launch**,
 then a second: **cut the Render egress that exhausted the 5 GB Hobby allowance**
-(both repos), and a third: **bring the Aadhaar dashboard back locally while its
-Render service is still suspended**.
+(both repos), a third: **bring the Aadhaar dashboard back locally while its
+Render service is still suspended**, and a fourth: **move Aadhaar to a separate
+Render workspace with its full database, leaving dash-site on the old account**.
 
 | SHA | Subject |
 |---|---|
@@ -24,6 +25,8 @@ Render service is still suspended**.
 | `ca06e3a` | aadhar-dashboard: distinguish an existing local db from a failed restore |
 | `6eab278` | aadhar-dashboard: explicitly ignore the local bridge env file |
 | `f121f3c` | aadhar-dashboard: add a scoped local deploy helper for the backup Worker |
+| `5c6d667` | aadhar-dashboard: record dedicated Render service and local credentials |
+| `61837a6` | `fix:` make dash-site fallback main-only after Aadhaar migration |
 
 ---
 
@@ -233,6 +236,9 @@ Live check at 10:21 UTC: `skippedUnchanged` is **2**, `lastUploadAt` stayed at
 
 ## 7. Aadhaar route outage (2026-10-21)
 
+> Historical: this section records the temporary local fallback. Section 8
+> supersedes it; Aadhaar now runs on the dedicated Render workspace.
+
 **Symptom:** `https://dashboardharyana.site/aadhar-dashboard/` returned the
 Worker's 503 `Aadhaar dashboard unavailable (HTTP 503)` even while the main
 `/api/*` tunnel was healthy.
@@ -323,14 +329,73 @@ to 90 s; the next watchdog tick would still have repaired it.
   service URLs **before** shutting this PC down. Otherwise the public routes
   still depend on the local tunnels even though Render is healthy again.
 
+## 8. Aadhaar moved to a dedicated Render workspace (2026-10-21)
+
+The local-fallback notes in section 7 are historical. Aadhaar no longer runs on
+this PC: it was moved to a separate Render workspace so the two dashboards have
+independent free-tier bandwidth and suspension blast radius. The public URL did
+not change.
+
+| | |
+| --- | --- |
+| Workspace | `Vik's workspace team` (`tea-dbca8lrrjlhs73bb87p0`) |
+| Service | `srv-dbcadio473hc73fkdu30` |
+| Origin | `https://aadhar-dashboard-9ljo.onrender.com` |
+| Deploy | `dep-dbcadj8473hc73fkduu0` (live) |
+| Public URL | `https://dashboardharyana.site/aadhar-dashboard/` (unchanged) |
+
+What was copied and verified:
+
+- Service settings are the same as `render.yaml`: free plan, Oregon, Python,
+  `pip install -r requirements.txt`, `python boot.py`, health path
+  `/aadhar-dashboard/_stcore/health`, auto-deploy on commit, and all six
+  environment variables (Python version, bridge URL/token, backup intervals and
+  first-run temporary password).
+- A final local backup was pushed as generation `1792583343622-211419`: **26
+  uploads, 3,102 transactions (`tx`), 91 camps and 12 users**, newest upload
+  `2026-10-14 06:21`, 5,894,144 raw bytes.
+- The new service's log confirms it restored that generation at boot, then
+  pushed generation `1792583437615-941d20` at 11:50:37 UTC: 2,920,536 gzip bytes
+  sent, 5,894,144 raw bytes stored, `lastEncoding: gzip`.
+- The dash-site Worker secret `AADHAR_ORIGIN` was changed to the new Render URL.
+  Direct Render health, public health and the public Streamlit page all return
+  200; a public `_stcore/stream` WebSocket opened successfully.
+- The keepalive Worker secret `AADHAR_ORIGIN` was changed to the same URL and
+  `/ping` returned 200. The 12:10 UTC cron tick then updated
+  `lastSuccessAt: 2026-10-21T12:10:13.683Z`, `lastOk: true`, status 200,
+  `consecutiveFailures: 0`, so the keepalive path is confirmed.
+- A user commit (`a40d307`, merged as `1b9b8ff`, "ok") landed on `main` at
+  12:07 UTC and auto-triggered deploy `dep-dbcamejm8hqs73bl9gp0`. It went live
+  at 12:10 UTC, restored generation `1792583437615-941d20` (5,894,144 bytes),
+  skipped the unchanged upload, and passed direct/public health checks. That
+  confirms auto-deploy and restore-before-Streamlit in the new workspace.
+- The local Aadhaar app and tunnel were stopped. `run-backend.ps1` now defaults
+  to dash-site only and starts a main-only watchdog. `-WithAadhar` keeps the
+  emergency local fallback; `run-aadhar.ps1 -Stop` restores `AADHAR_ORIGIN` to
+  the Render URL. README and the watchdog mode are updated.
+- The new Render API key is stored only in the gitignored
+  `E:\projects\aadhar-dashboard\.render.local` with a restricted ACL. The
+  Cloudflare token remains only in `.cloudflare.local`, and the bridge token in
+  `.env.local`. None are committed or printed.
+
+The old Aadhaar service `srv-dasvqh8473hc73e53a3g` remains suspended and
+untouched in the old workspace. It can be deleted after the new service has
+survived a deploy/keepalive cycle. Dash-site remains on that old workspace until
+its bandwidth allowance resets on **1 November 2026 (UTC)**.
+
 ## Files changed
 
 ```
-dash-site/run-backend.ps1        idempotent; starts/stops Aadhaar + watchdog
+dash-site/run-backend.ps1        main-only by default; -WithAadhar local fallback;
+                                  starts/stops watchdog; no longer repoints
+                                  AADHAR_ORIGIN unless fallback is requested
 dash-site/run-aadhar.ps1         local Streamlit + second quick tunnel; loads
-                                  ignored bridge env; restarts app on env change
-dash-site/watch-tunnels.ps1      new: 60 s origin probe + tunnel recreation
-dash-site/README.md              documents the fallback and bridge env file
+                                  ignored bridge env; restarts app on env change;
+                                  -Stop restores AADHAR_ORIGIN to Render
+dash-site/watch-tunnels.ps1      main-only default; records watchdog mode;
+                                  optional Aadhaar probing with -WithAadhar
+dash-site/README.md              documents main-only fallback and separate
+                                  Aadhaar Render service
 src/server/data-sync.js          +138/-22  gzip + content-hash dedupe,
                                            legacy restore, stats fields
 src/server/tests/backup-compression.test.js  new, 3 tests
@@ -349,11 +414,16 @@ aadhar-dashboard/backup-worker/deploy.ps1      scoped local deploy helper;
 aadhar-dashboard/tests/test_backup_compression.py new, 7 tests
 aadhar-dashboard/boot.py         corrects the false "empty database" warning
                                   when a populated local db already exists
-aadhar-dashboard/.gitignore      explicit .env.local and .cloudflare.local
+aadhar-dashboard/.gitignore      explicit .env.local, .cloudflare.local and
+                                  .render.local
+aadhar-dashboard/README.md       dedicated Render workspace, new origin and
+                                  credential-file guidance
 aadhar-dashboard/.env.local      local only, ignored, never committed:
                                   bridge URL + token
 aadhar-dashboard/.cloudflare.local  local only, ignored, never committed:
                                   scoped Cloudflare API token + account id
+aadhar-dashboard/.render.local   local only, ignored, never committed:
+                                  Render API key for the Aadhaar workspace
 ```
 
 ## Pending tasks (carry forward)
@@ -372,42 +442,58 @@ aadhar-dashboard/.cloudflare.local  local only, ignored, never committed:
 7. **Housekeeping** — the 23 untracked root files (`ipad_*.html`,
    `support_*.html`, `*.py`, `images/`, `ref_pdf_content.txt`) remain untracked
    and uncommitted per AGENTS.md.
-8. **Cut back to Render on 1 November** - after both Render services resume and
-   auto-deploy, set `SERVER_ORIGIN` and `AADHAR_ORIGIN` back to their Render
-   URLs, then stop the local fallbacks and disable the Startup entry (or keep
-   it as a standby).
-9. **Credential hygiene** - revoke the Render API key committed in
-   `SESSION_EXPORT_2026-08-14.md`. If this chat transcript is shared, also rotate
-   the bridge token and the scoped Cloudflare API token, then update the ignored
-   `.env.local` / `.cloudflare.local` files. Never commit either file.
-10. **Durable tunnel** - if the Cloudflare token gets `DNS:Edit` (or a record is
-    added from the dashboard), create a named tunnel with stable hostnames and
-    point `SERVER_ORIGIN` / `AADHAR_ORIGIN` at it. That removes the quick-tunnel
-    recreation and secret churn. The current dash-site token lists tunnels and
-    zones but DNS records return `403`.
+8. **Dash-site cutover on 1 November** - Aadhaar is already on its dedicated
+   Render workspace. When the old workspace's bandwidth resets, let dash-site
+   auto-deploy, set `SERVER_ORIGIN` back to its Render URL, then stop the local
+   backend/tunnel and disable the Startup entry (or keep it as a standby). Do
+   not move dash-site until then; its Hobby allowance is still exhausted.
+9. **Watch the next Aadhaar backup/deploy cycle** - keepalive and auto-deploy
+   are confirmed in the new workspace. The next real write (or the daily
+   checkpoint) should show a new bridge generation and a healthy Render deploy;
+   check `/stats` and the Render deploy log rather than assuming.
+10. **Old Aadhaar service cleanup** - `srv-dasvqh8473hc73e53a3g` is still
+    suspended in the old workspace. Delete it only after the new service has
+    completed a deploy and keepalive cycle; keep the old dash-site service until
+    1 November.
+11. **Credential hygiene** - revoke the Render API key committed in
+    `SESSION_EXPORT_2026-08-14.md`. If this chat transcript is shared, also
+    rotate the new Render API key, the bridge token and the scoped Cloudflare
+    API token, then update the ignored `.render.local`, `.env.local` and
+    `.cloudflare.local` files. Never commit or print them.
+12. **Durable tunnel** - for the remaining dash-site fallback, if the Cloudflare
+    token gets `DNS:Edit` (or a record is added from the dashboard), create a
+    named tunnel with a stable hostname and point `SERVER_ORIGIN` at it. That
+    removes the quick-tunnel recreation and secret churn. The current dash-site
+    token lists tunnels and zones but DNS records return `403`.
 
 ## Deployment notes
 
 Unchanged and still true:
 
 - Frontend → GitHub Pages; the Worker serves the same files from the raw CDN.
-- Backend → **Render** (`autoDeploy: true`) is suspended until **1 November
-  2026 (UTC)**, when the Hobby monthly bandwidth allowance resets. Until then
-  `run-backend.ps1` is the local replacement: it starts the Node backend,
-  starts the Aadhaar Streamlit app, opens one quick tunnel per service, and
-  updates `SERVER_ORIGIN` / `AADHAR_ORIGIN`. The Worker proxies `/api/*` to the
-  first and `/aadhar-dashboard/*` to the second.
-- The Aadhaar fallback loads `AADHAR_SYNC_URL` / `AADHAR_SYNC_TOKEN` from the
-  gitignored `E:\projects\aadhar-dashboard\.env.local` on every `run-aadhar.ps1`
-  start and restarts the app when that file changes. The file is not in git;
-  do not print it, commit it, or copy it into another repo.
-- Both quick tunnels run on this PC and stop when it shuts down; Startup only
-  restarts them after login, and their hostnames change on every fresh start.
-  `watch-tunnels.ps1` probes the real origins and recreates a dropped tunnel
-  within about a minute; `run-backend.ps1 -NoWatchdog` opts out. The Worker
-  secrets therefore still point at the tunnels; restore the Render URLs when
-  the services resume. A named tunnel is the durable alternative once DNS edit
-  access is available.
+- **Dash-site backend → Render** (`autoDeploy: true`) is still suspended until
+  **1 November 2026 (UTC)**, when the old workspace's Hobby bandwidth resets.
+  Until then `run-backend.ps1` is its local replacement: it starts only the Node
+  backend and main quick tunnel and updates `SERVER_ORIGIN`. The Worker proxies
+  `/api/*` to that tunnel.
+- **Aadhaar backend → dedicated Render workspace**, service
+  `srv-dbcadio473hc73fkdu30`, origin
+  `https://aadhar-dashboard-9ljo.onrender.com`, auto-deploy on commit. The
+  dash-site Worker proxies `/aadhar-dashboard/*` to it using `AADHAR_ORIGIN`;
+  the public URL is unchanged. The keepalive Worker points at the same origin
+  and keeps its 10-minute cron with the 21:00-06:00 IST night skip.
+- The Aadhaar emergency fallback loads `AADHAR_SYNC_URL` /
+  `AADHAR_SYNC_TOKEN` from the gitignored
+  `E:\projects\aadhar-dashboard\.env.local` on every `run-aadhar.ps1` start and
+  restarts the app when that file changes. The file is not in git; do not
+  print it, commit it, or copy it into another repo. `run-backend.ps1 -WithAadhar`
+  enables this fallback; the default run leaves Aadhaar on Render.
+- Only the main quick tunnel runs on this PC now. It stops when the machine
+  shuts down; Startup restarts it after login, and its hostname changes on every
+  fresh start. `watch-tunnels.ps1` probes the main origin and recreates a dropped
+  tunnel within about a minute; `run-backend.ps1 -NoWatchdog` opts out. A named
+  tunnel is the durable alternative once DNS edit access is available. Aadhaar
+  no longer depends on this machine.
 - "Deploy Worker" reports success even when it skipped the real step
   (`CLOUDFLARE_API_TOKEN` unset). A green Worker checkmark means nothing.
 - The aadhar backup Worker was deployed separately with credentials for account
