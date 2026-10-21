@@ -13,11 +13,19 @@
  *   WORKER_API_TOKEN    shared bearer token (also used by the
  *                       worker's enterprise routes)
  *   DATA_SYNC_INTERVAL_MS  backup cadence (default 10 min)
+ *
+ * Snapshots are gzipped before upload and skipped entirely when the DB (and
+ * every upload/meeting file) is byte-identical to the last successful push.
+ * A 1.3 MB DB every 10 min was the workspace's largest Render egress line;
+ * see SESSION_EXPORT_2026-10-21.md. Restore accepts both gzipped and legacy
+ * raw-SQLite KV values.
  * ============================================================
  */
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 
 const DATA_DIR = process.env.DASH_DATA_DIR || path.join(__dirname, '..', '..', 'data');
 const DB_PATH = path.join(DATA_DIR, 'dashboard.db');
@@ -27,6 +35,24 @@ const MEETINGS_DIR = path.join(DATA_DIR, 'meetings');
 const BASE = (process.env.DATA_SYNC_URL || '').replace(/\/+$/, '');
 const TOKEN = process.env.WORKER_API_TOKEN || '';
 const INTERVAL_MS = Number(process.env.DATA_SYNC_INTERVAL_MS || 10 * 60 * 1000);
+
+function sha256_(buf) {
+  return crypto.createHash('sha256').update(buf).digest('hex');
+}
+
+/** Compress a DB snapshot before it crosses the Render egress meter. */
+function gzipSnapshot_(buf) {
+  return zlib.gzipSync(buf, { level: 6 });
+}
+
+/** Current snapshots are gzip; older KV values are raw SQLite. Sniff the
+ *  magic bytes rather than trusting a header (Workers/KV is opaque binary). */
+function decodeSnapshot_(buf) {
+  if (buf && buf.length > 2 && buf[0] === 0x1f && buf[1] === 0x8b) {
+    return zlib.gunzipSync(buf);
+  }
+  return buf;
+}
 
 function enabled() {
   return !!(BASE && TOKEN);
@@ -58,11 +84,24 @@ async function fetchBuf(url, opts) {
   return Buffer.from(await resp.arrayBuffer());
 }
 
-async function putBuf(url, buf) {
-  const resp = await fetchWithTimeout_(url, { method: 'PUT', headers: authHeaders(), body: buf });
+async function putBuf(url, buf, extraHeaders) {
+  const headers = Object.assign(authHeaders(), extraHeaders || {});
+  const resp = await fetchWithTimeout_(url, { method: 'PUT', headers: headers, body: buf });
   if (!resp.ok) throw new Error('backup bridge PUT ' + resp.status + ' for ' + url);
   return resp;
 }
+
+// Content hashes of the last bytes successfully pushed. In-memory only: after
+// a restart the first cycle uploads once, then the periodic loop is a no-op
+// until something actually changes. That one restart upload is deliberate —
+// it is cheaper than trusting a stale local hash file after a restore.
+let lastUploadedDbHash = '';
+const uploadedFileHashes = new Map();
+let lastStatsPutAt = 0;
+// Health stats are tiny, but there is no reason to spend a KV write every
+// 10 minutes when the snapshot was unchanged; 15 minutes keeps the worker's
+// fallback health view fresh without touching the write budget.
+const STATS_MIN_INTERVAL_MS = 15 * 60 * 1000;
 
 /** Download the latest DB + uploads from the KV bridge into DATA_DIR.
  *  Call BEFORE the server opens the SQLite file. No-op when disabled or
@@ -78,8 +117,9 @@ async function restoreData() {
   if (fs.existsSync(DB_PATH)) return { restored: false, reason: 'local db exists' };
   const out = { restored: false, db: false, uploads: 0, meetings: 0 };
   try {
-    const dbBuf = await fetchBuf(BASE + '/db', { headers: authHeaders() });
-    if (dbBuf) {
+    const storedDb = await fetchBuf(BASE + '/db', { headers: authHeaders() });
+    if (storedDb) {
+      const dbBuf = decodeSnapshot_(storedDb);
       fs.mkdirSync(DATA_DIR, { recursive: true });
       fs.writeFileSync(DB_PATH, dbBuf);
       // A restored snapshot must not be replayed against any stale WAL left
@@ -87,9 +127,14 @@ async function restoreData() {
       // corruption). Drop leftover side files so SQLite opens the copy clean.
       try { fs.rmSync(DB_PATH + '-wal', { force: true }); } catch (e) {}
       try { fs.rmSync(DB_PATH + '-shm', { force: true }); } catch (e) {}
+      // The bridge already holds these exact bytes; don't push them back on
+      // the first timer tick after a restart.
+      lastUploadedDbHash = sha256_(dbBuf);
       out.db = true;
       out.restored = true;
-      console.log('[data-sync] restored dashboard.db (' + dbBuf.length + ' bytes)');
+      out.dbBytes = dbBuf.length;
+      console.log('[data-sync] restored dashboard.db (' + dbBuf.length + ' bytes, ' +
+        (storedDb.length !== dbBuf.length ? 'gzip' : 'raw') + ' snapshot)');
     }
     const listResp = await fetch(BASE + '/uploads', { headers: authHeaders() });
     if (listResp.ok) {
@@ -100,6 +145,7 @@ async function restoreData() {
           const buf = await fetchBuf(BASE + '/uploads/' + encodeURIComponent(name), { headers: authHeaders() });
           if (buf) {
             fs.writeFileSync(path.join(UPLOAD_DIR, name), buf);
+            uploadedFileHashes.set('uploads/' + name, sha256_(buf));
             out.uploads++;
           }
         }
@@ -119,6 +165,7 @@ async function restoreData() {
           const buf = await fetchBuf(BASE + '/meetings/' + encodeURIComponent(name), { headers: authHeaders() });
           if (buf) {
             fs.writeFileSync(path.join(MEETINGS_DIR, name), buf);
+            uploadedFileHashes.set('meetings/' + name, sha256_(buf));
             out.meetings++;
           }
         }
@@ -159,12 +206,16 @@ const stats = {
   writesToday: 0,
   deletesToday: 0,
   lastBackupAt: null,
+  lastUploadAt: null,
+  lastCheckedAt: null,
   dbBytes: 0,
+  dbStoredBytes: 0,
   uploads: 0,
   meetings: 0,
   prunedToday: 0,
   retentionDays: RETENTION_DAYS,
   error: '',
+  skippedUnchanged: 0,
   skippedBudget: false
 };
 let lastCleanupAt = 0;
@@ -192,12 +243,12 @@ function canWrite() {
   return budgetLeft() > 0;
 }
 
-async function putBufCounted_(url, buf) {
+async function putBufCounted_(url, buf, extraHeaders) {
   if (!canWrite()) {
     stats.skippedBudget = true;
     return false;
   }
-  await putBuf(url, buf);
+  await putBuf(url, buf, extraHeaders);
   stats.writesToday++;
   return true;
 }
@@ -332,7 +383,7 @@ async function enforceRetention_(force) {
 
 async function backupData() {
   if (!enabled()) return { backedUp: false, reason: 'disabled' };
-  const out = { backedUp: true, dbBytes: 0, uploads: 0, meetings: 0 };
+  const out = { backedUp: true, dbBytes: 0, dbStoredBytes: 0, uploads: 0, meetings: 0, skipped: '' };
   try {
     const { db } = require('./db');
     const tmp = path.join(DATA_DIR, '.dashboard.backup-tmp.db');
@@ -362,58 +413,95 @@ async function backupData() {
     try { fs.unlinkSync(tmp); } catch (e) {}
     if (!ok) { out.backedUp = false; out.error = 'snapshot failed integrity check'; return out; }
 
+    // Dedupe on the raw SQLite bytes. VACUUM INTO is deterministic for an
+    // unchanged DB, so an idle timer tick costs a local snapshot but no PUT.
+    const dbHash = sha256_(buf);
+    const dbChanged = dbHash !== lastUploadedDbHash;
+
     // Files FIRST, DB LAST. The /db put is the commit point of a snapshot: an
     // upload that reaches KV but whose DB never arrives is a harmless orphan the
     // sweep removes; a DB that arrives while its files are still uploading means
     // documents rows reference keys the snapshot doesn't carry — broken
     // attachments after the next redeploy. Every file loop also reserves one
     // write so the /db commit always gets the final budget slot.
+    // A file whose content hash matches the last successful push is skipped.
+    const reserve = dbChanged ? 1 : 0;
     let names = [];
     try { names = fs.readdirSync(UPLOAD_DIR); } catch (e) {}
     for (const name of names) {
       if (name.indexOf('.') === 0) continue;
-      if (budgetLeft() <= 1) break;
+      if (budgetLeft() <= reserve) break;
       const p = path.join(UPLOAD_DIR, name);
       let st;
       try { st = fs.statSync(p); } catch (e) { continue; }
       if (!st.isFile()) continue;
-      if (!(await putBufCounted_(BASE + '/uploads/' + encodeURIComponent(name), fs.readFileSync(p)))) break;
+      const fileBuf = fs.readFileSync(p);
+      const fileKey = 'uploads/' + name;
+      const fileHash = sha256_(fileBuf);
+      if (uploadedFileHashes.get(fileKey) === fileHash) continue;
+      if (!(await putBufCounted_(BASE + '/uploads/' + encodeURIComponent(name), fileBuf))) break;
+      uploadedFileHashes.set(fileKey, fileHash);
       out.uploads++;
     }
     let meetNames = [];
     try { meetNames = fs.readdirSync(MEETINGS_DIR); } catch (e) {}
     for (const name of meetNames) {
       if (name.indexOf('.') === 0) continue;
-      if (budgetLeft() <= 1) break;
+      if (budgetLeft() <= reserve) break;
       const p = path.join(MEETINGS_DIR, name);
       let st;
       try { st = fs.statSync(p); } catch (e) { continue; }
       if (!st.isFile()) continue;
-      if (!(await putBufCounted_(BASE + '/meetings/' + encodeURIComponent(name), fs.readFileSync(p)))) break;
+      const fileBuf = fs.readFileSync(p);
+      const fileKey = 'meetings/' + name;
+      const fileHash = sha256_(fileBuf);
+      if (uploadedFileHashes.get(fileKey) === fileHash) continue;
+      if (!(await putBufCounted_(BASE + '/meetings/' + encodeURIComponent(name), fileBuf))) break;
+      uploadedFileHashes.set(fileKey, fileHash);
       out.meetings++;
     }
 
-    if (!(await putBufCounted_(BASE + '/db', buf))) {
-      out.backedUp = false;
-      out.reason = 'budget';
-      out.error = 'daily KV write budget exhausted (backups paused for today)';
-      return out;
+    if (dbChanged) {
+      // gzip before the PUT: SQLite compresses ~5x for this schema. The bytes
+      // are still opaque to the Worker/KV; restore sniffs the gzip magic.
+      const stored = gzipSnapshot_(buf);
+      if (!(await putBufCounted_(BASE + '/db', stored, { 'X-Backup-Encoding': 'gzip' }))) {
+        out.backedUp = false;
+        out.reason = 'budget';
+        out.error = 'daily KV write budget exhausted (backups paused for today)';
+        return out;
+      }
+      lastUploadedDbHash = dbHash;
+      out.dbBytes = buf.length;
+      out.dbStoredBytes = stored.length;
+      stats.lastUploadAt = new Date().toISOString();
+      stats.dbStoredBytes = stored.length;
+    } else {
+      out.skipped = 'unchanged';
     }
-    out.dbBytes = buf.length;
 
     await cleanupOrphanedKeys_();
     await enforceRetention_();
 
     // Reflect the run in the live stats (written to KV too, for the worker's
-    // /api/health when Node is unreachable).
+    // /api/health when Node is unreachable). lastBackupAt is the last verified
+    // snapshot (uploaded or confirmed identical); lastUploadAt is the last
+    // actual PUT, so an idle dashboard still reports a fresh, safe backup.
+    const cycleChanged = dbChanged || out.uploads > 0 || out.meetings > 0;
     stats.lastBackupAt = new Date().toISOString();
-    stats.dbBytes = out.dbBytes;
+    stats.lastCheckedAt = stats.lastBackupAt;
+    stats.dbBytes = buf.length;
     stats.uploads = out.uploads;
     stats.meetings = out.meetings;
+    if (!cycleChanged) stats.skippedUnchanged++;
     stats.error = '';
     const payload = {
       lastBackupAt: stats.lastBackupAt,
+      lastUploadAt: stats.lastUploadAt,
+      lastCheckedAt: stats.lastCheckedAt,
+      skippedUnchanged: stats.skippedUnchanged,
       dbBytes: stats.dbBytes,
+      dbStoredBytes: stats.dbStoredBytes,
       uploads: stats.uploads,
       meetings: stats.meetings,
       writesToday: stats.writesToday,
@@ -423,8 +511,20 @@ async function backupData() {
       retentionDays: RETENTION_DAYS,
       skippedBudget: stats.skippedBudget
     };
-    await putBufCounted_(BASE + '/stats', Buffer.from(JSON.stringify(payload)));
-    console.log('[data-sync] backup pushed: db=' + out.dbBytes + 'B, uploads=' + out.uploads + ', meetings=' + out.meetings + ', writesToday=' + stats.writesToday + '/' + WRITE_BUDGET);
+    if (cycleChanged || Date.now() - lastStatsPutAt >= STATS_MIN_INTERVAL_MS) {
+      if (await putBufCounted_(BASE + '/stats', Buffer.from(JSON.stringify(payload)))) {
+        lastStatsPutAt = Date.now();
+      }
+    }
+    if (cycleChanged) {
+      console.log('[data-sync] backup pushed: db=' +
+        (dbChanged ? out.dbBytes + 'B (gzip ' + out.dbStoredBytes + 'B)' : 'unchanged') +
+        ', uploads=' + out.uploads + ', meetings=' + out.meetings +
+        ', writesToday=' + stats.writesToday + '/' + WRITE_BUDGET);
+    } else {
+      console.log('[data-sync] snapshot unchanged — no upload (checked ' +
+        stats.skippedUnchanged + 'x, last upload ' + (stats.lastUploadAt || 'never') + ')');
+    }
   } catch (err) {
     out.backedUp = false;
     out.error = (err && err.message) || String(err);
@@ -444,6 +544,7 @@ async function deleteRemoteFile(kind, name) {
   if (!safe || safe.indexOf('/') !== -1 || safe.indexOf('\\') !== -1) return false;
   try {
     await fetchWithTimeout_(BASE + '/' + kind + '/' + encodeURIComponent(safe), { method: 'DELETE', headers: authHeaders() });
+    uploadedFileHashes.delete(kind + '/' + safe);
     stats.deletesToday++;
     return true;
   } catch (err) {
@@ -457,7 +558,10 @@ function getBackupStatus() {
   return {
     enabled: enabled(),
     lastBackupAt: stats.lastBackupAt || null,
+    lastUploadAt: stats.lastUploadAt || null,
+    lastCheckedAt: stats.lastCheckedAt || null,
     dbBytes: stats.dbBytes,
+    dbStoredBytes: stats.dbStoredBytes,
     uploads: stats.uploads,
     meetings: stats.meetings,
     error: stats.error || null,
@@ -467,6 +571,7 @@ function getBackupStatus() {
     deletesToday: stats.deletesToday,
     prunedToday: stats.prunedToday,
     retentionDays: RETENTION_DAYS,
+    skippedUnchanged: stats.skippedUnchanged,
     skippedBudget: stats.skippedBudget
   };
 }
@@ -530,5 +635,16 @@ module.exports = {
   async _runCleanupOrphanedKeysForTest() {
     lastCleanupAt = 0;
     await cleanupOrphanedKeys_();
+  },
+  // Test hook: gzip/raw snapshot detection shared with restoreData.
+  _decodeSnapshotForTest(buf) {
+    return decodeSnapshot_(buf);
+  },
+  // Test hook: forget in-process dedupe state so a test starts from a cold
+  // process (a real restart always uploads once).
+  _resetDedupeForTest() {
+    lastUploadedDbHash = '';
+    uploadedFileHashes.clear();
+    lastStatsPutAt = 0;
   }
 };
