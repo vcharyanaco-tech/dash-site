@@ -23,6 +23,7 @@ Render service is still suspended**.
 | `ba672a5` | `feat:` load Aadhaar bridge credentials from a local ignored file |
 | `ca06e3a` | aadhar-dashboard: distinguish an existing local db from a failed restore |
 | `6eab278` | aadhar-dashboard: explicitly ignore the local bridge env file |
+| `f121f3c` | aadhar-dashboard: add a scoped local deploy helper for the backup Worker |
 
 ---
 
@@ -203,6 +204,9 @@ blocked (see below).
   an advertised-gzip mismatch.
 - Full aadhar pytest suite: **162 passed**. `wrangler deploy --dry-run`
   bundles successfully (13.31 KiB).
+- Live deploy check: Worker version `9a4d6f8f-6440-4c73-82f6-88d2b2654e23`;
+  `/stats` reports `lastEncoding: gzip`, `lastReceivedBytes` 2,943,314 and
+  `lastBytes` 5,894,144. The app log shows `5894144 -> 2943314 bytes gzip`.
 
 Expected egress: idle cycles now cost no PUT, except the aadhar daily
 checkpoint (~3.1 MB/day at 1.9x, about 93 MB/month). Changed snapshots are
@@ -212,13 +216,16 @@ checkpoint (~3.1 MB/day at 1.9x, about 93 MB/month). Changed snapshots are
 Deployment: the local dash-site backend was restarted and now serves the gzip
 build — `/api/health` reports `dbStoredBytes` 272,235 against `dbBytes`
 1,380,352. The aadhar commit is pushed; Render will auto-deploy it when the
-service resumes. The dedicated aadhar Worker still needs a manual deploy from
-an account with access to `606780bc6c3ecd48289472c73d27a982`; the current token
-only sees `a01eb877733d755cb57e25827a9c52fe` and gets
-`403 ... Authentication error`. Until then the client's raw fallback keeps
-backups working, but gzip stays inactive. The local Aadhaar fallback now has
-the bridge token (section 7), so this fallback is exercised end to end: the
-fresh push at 10:39 UTC was stored raw at 5,894,144 bytes.
+service resumes.
+
+The dedicated aadhar Worker was deployed on 2026-10-21 at 11:05 UTC with the
+scoped local Cloudflare credential (version `9a4d6f8f-6440-4c73-82f6-88d2b2654e23`).
+The local Aadhaar fallback has the bridge token (section 7), so the path is
+exercised end to end: restarting the app pushed generation
+`1792580718266-1b814c` at 11:05:18 UTC. It sent **2,943,314 gzip bytes**, stored
+**5,894,144 raw bytes** (2.0x), and `/stats` reports `lastEncoding: gzip`. The
+raw-upload fallback remains for old clients, so the Worker is backward
+compatible.
 
 Live check at 10:21 UTC: `skippedUnchanged` is **2**, `lastUploadAt` stayed at
 10:01 across the later checks, and `dbStoredBytes` is 272,235 against
@@ -291,10 +298,17 @@ to 90 s; the next watchdog tick would still have repaired it.
   generation `1792579160976-561845` at 2026-10-21T10:39:20.976Z (5,894,144
   bytes raw), so the bridge is current and new local writes are mirrored again.
   The old database had 7 uploads, 871 transactions and no camps.
-- The current backup Worker build still rejects gzip (`not_sqlite`); the client
-  retried raw and paused compression for roughly six hours. Raw backups work,
-  but `last_encoding: gzip` and the compressed ratio will only appear after
-  `backup-worker/worker.js` is deployed.
+- **Gzip is live.** The gzip-capable Worker was deployed with the scoped
+  credential at 11:05 UTC (version `9a4d6f8f-6440-4c73-82f6-88d2b2654e23`).
+  Restarting the app cleared its six-hour raw backoff and pushed generation
+  `1792580718266-1b814c`: **2,943,314 gzip bytes sent, 5,894,144 raw bytes
+  stored** (2.0x), with `/stats` reporting `lastEncoding: gzip`. Raw uploads are
+  still accepted for old clients.
+- The Cloudflare API credential is stored only in the gitignored
+  `E:\projects\aadhar-dashboard\.cloudflare.local`; its ACL is restricted to
+  the current user, SYSTEM and Administrators. `backup-worker/deploy.ps1`
+  refuses to deploy unless both that file and `wrangler.toml` point at the
+  Aadhaar backup account, so the token is not used for dash-site.
 - Both quick tunnels run on this PC. They stop when the machine shuts down;
   Startup only restarts them after login, and the hostnames change. The scripts
   update both Worker secrets on every start, and the watchdog recreates a
@@ -324,17 +338,22 @@ src/server/tests/backup-compression.test.js  new, 3 tests
 aadhar-dashboard/kv_sync.py      +211/-?   gzip, dedupe, daily checkpoint,
                                            fallback-safe restore
 aadhar-dashboard/app.py          status captions for skipped checks/checkpoint
-aadhar-dashboard/README.md       config + durability notes
+aadhar-dashboard/README.md       config + durability notes; local deploy helper
 aadhar-dashboard/tools/check_backup_health.py  26 h stale threshold
-aadhar-dashboard/backup-worker/worker.js       gzip decompress + raw storage
+aadhar-dashboard/backup-worker/worker.js       gzip decompress + raw storage;
+                                  deployed as version 9a4d6f8f...
 aadhar-dashboard/backup-worker/worker.test.mjs new, 6 tests
 aadhar-dashboard/backup-worker/package.json    new, test script
+aadhar-dashboard/backup-worker/deploy.ps1      scoped local deploy helper;
+                                  refuses any other account
 aadhar-dashboard/tests/test_backup_compression.py new, 7 tests
 aadhar-dashboard/boot.py         corrects the false "empty database" warning
                                   when a populated local db already exists
-aadhar-dashboard/.gitignore      explicit .env.local entry
+aadhar-dashboard/.gitignore      explicit .env.local and .cloudflare.local
 aadhar-dashboard/.env.local      local only, ignored, never committed:
                                   bridge URL + token
+aadhar-dashboard/.cloudflare.local  local only, ignored, never committed:
+                                  scoped Cloudflare API token + account id
 ```
 
 ## Pending tasks (carry forward)
@@ -343,35 +362,29 @@ aadhar-dashboard/.env.local      local only, ignored, never committed:
    with `CHANGE_REQUEST_DRY_RUN=true`, then write one throwaway cell.
 2. **Bundle headroom** — 552.4 of 575 KB raw consumed; next `app.js` change
    will trip it. Trim rather than raise a third time.
-3. **Deploy the aadhar backup Worker** - the client is safe to ship first, but
-   gzip stays inactive until `backup-worker/worker.js` is deployed from an
-   account with access to `606780bc6c3ecd48289472c73d27a982`. The current token
-   only sees `a01eb877733d755cb57e25827a9c52fe` (`403 Authentication error`).
-4. **Verify aadhar gzip and checkpoint live** - after the Worker deploy and
-   Render resume, confirm `last_encoding: gzip`, a 1.9x stored/raw ratio, and
-   one checkpoint upload per 24 h. The local fallback now has the bridge token
-   and is exercising the raw fallback; its 10:39 UTC push is current.
-5. **`DASH_PUSH_TO_SHEET` is off** — decide whether approvals should update the
+3. **Verify the aadhar daily checkpoint live** - gzip is confirmed; after 24 h
+   of no writes, confirm the unchanged snapshot is re-uploaded once.
+4. **`DASH_PUSH_TO_SHEET` is off** — decide whether approvals should update the
    origin spreadsheet.
-6. **Private sheets** — open since 2026-09-25. Keep the printed note, or build
+5. **Private sheets** — open since 2026-09-25. Keep the printed note, or build
    Google OAuth (Drive/Sheets read scope).
-7. **`gh` CLI** — still not installed; workflow checks use the REST API.
-8. **Housekeeping** — the 23 untracked root files (`ipad_*.html`,
+6. **`gh` CLI** — still not installed; workflow checks use the REST API.
+7. **Housekeeping** — the 23 untracked root files (`ipad_*.html`,
    `support_*.html`, `*.py`, `images/`, `ref_pdf_content.txt`) remain untracked
    and uncommitted per AGENTS.md.
-9. **Cut back to Render on 1 November** - after both Render services resume and
+8. **Cut back to Render on 1 November** - after both Render services resume and
    auto-deploy, set `SERVER_ORIGIN` and `AADHAR_ORIGIN` back to their Render
    URLs, then stop the local fallbacks and disable the Startup entry (or keep
    it as a standby).
-10. **Rotate exposed credentials** - revoke the Render API key committed in
-    `SESSION_EXPORT_2026-08-14.md`, and rotate the Aadhaar bridge token (it was
-    pasted into chat and stored only in the ignored `.env.local`). Update that
-    file after rotating; never commit it.
-11. **Durable tunnel** - if the Cloudflare token gets `DNS:Edit` (or a record is
+9. **Credential hygiene** - revoke the Render API key committed in
+   `SESSION_EXPORT_2026-08-14.md`. If this chat transcript is shared, also rotate
+   the bridge token and the scoped Cloudflare API token, then update the ignored
+   `.env.local` / `.cloudflare.local` files. Never commit either file.
+10. **Durable tunnel** - if the Cloudflare token gets `DNS:Edit` (or a record is
     added from the dashboard), create a named tunnel with stable hostnames and
     point `SERVER_ORIGIN` / `AADHAR_ORIGIN` at it. That removes the quick-tunnel
-    recreation and secret churn. The current token lists tunnels and zones but
-    DNS records return `403`.
+    recreation and secret churn. The current dash-site token lists tunnels and
+    zones but DNS records return `403`.
 
 ## Deployment notes
 
@@ -397,8 +410,9 @@ Unchanged and still true:
   access is available.
 - "Deploy Worker" reports success even when it skipped the real step
   (`CLOUDFLARE_API_TOKEN` unset). A green Worker checkmark means nothing.
-- The aadhar backup Worker must be deployed separately:
-  `cd aadhar-dashboard/backup-worker; wrangler deploy` with credentials for
-  account `606780bc6c3ecd48289472c73d27a982`.
+- The aadhar backup Worker was deployed separately with credentials for account
+  `606780bc6c3ecd48289472c73d27a982`. Future updates on this machine use
+  `aadhar-dashboard/backup-worker/deploy.ps1`, which reads the gitignored
+  `.cloudflare.local` and refuses to target any other account.
 - Pages CDN propagation lags ~75 s — use a cache-buster before concluding a
   deploy failed.
