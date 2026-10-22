@@ -571,12 +571,13 @@ even a ~200 ms fragment render looked like a slow fade.
   - other CSS transitions are disabled and smooth scrolling is off.
 - `tests/test_screens.py` has a source guard for the override. Full suite:
   **168 passed**.
-- Local Playwright against a copy of the production database: the trace captured
-  89 stale-mutation samples during a Division change; the sampled elements
-  reported `opacity: 1` and `transition: none`, and the status/skeleton chrome
-  was absent from layout. The filter update finished in ~212 ms with no page
-  errors. (The earlier ~136 ms figure was a warm run; the point is that the
-  visual fade no longer adds 1.5 s to either.)
+- Local Playwright against a copy of the production database, final build: 93
+  stale-mutation samples during a Division change; every sample reported
+  `opacity: 1` and `transition: none`, and the status/skeleton chrome was absent
+  from layout. The filter update finished in ~270 ms (another warm run was
+  ~212 ms) with no page errors. The earlier ~136 ms figure was the best warm run
+  before the CSS change; the 212-270 ms range is run-to-run variance. The point
+  is that the visual fade no longer adds 1.5 s to either.
 - A minimal Streamlit probe with the final CSS showed the running icon
   `display: none` while the **Stop** button remained `inline-flex`, so the
   no-animation change does not remove the only way to interrupt a long run.
