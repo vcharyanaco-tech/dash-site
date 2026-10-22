@@ -14,7 +14,8 @@ and a fifth: **diagnose the one- to two-minute first load and reduce the new
 free instance's 512 MB memory pressure**, a sixth: **localize Streamlit
 reruns with fragments, forms and cached initialization**, and a seventh:
 **remove the client-side fade and loading chrome that still made fast reruns
-feel laggy**.
+feel laggy**, and an eighth: **keep the Stop control available while hiding
+only the animated running indicator**.
 
 | SHA | Subject |
 |---|---|
@@ -38,6 +39,7 @@ feel laggy**.
 | `7f9e462` | aadhar-dashboard: localize Streamlit reruns with fragments and forms |
 | `97adb39` | aadhar-dashboard: read binary database probe in backup health check |
 | `4663688` | aadhar-dashboard: remove Streamlit rerun fade and loading chrome |
+| `d47a9db` | aadhar-dashboard: keep the Streamlit Stop control visible |
 
 ---
 
@@ -562,9 +564,10 @@ even a ~200 ms fragment render looked like a slow fade.
   login, setup and every signed-in screen:
   - `[data-stale="true"]{opacity:1!important;transition:none!important}` keeps
     the old content fully visible until the new delta arrives.
-  - `[data-testid="stStatusWidget"]` and `[data-testid="stSkeleton"]` are
-    hidden. Explicit `st.spinner` feedback for long backup/restore operations is
-    deliberately retained.
+  - `[data-testid="stStatusWidgetRunningIcon"]` and `[data-testid="stSkeleton"]`
+    are hidden. The status widget's **Stop** control is deliberately left
+    available, and explicit `st.spinner` feedback for long backup/restore
+    operations is retained.
   - other CSS transitions are disabled and smooth scrolling is off.
 - `tests/test_screens.py` has a source guard for the override. Full suite:
   **168 passed**.
@@ -574,15 +577,19 @@ even a ~200 ms fragment render looked like a slow fade.
   was absent from layout. The filter update finished in ~212 ms with no page
   errors. (The earlier ~136 ms figure was a warm run; the point is that the
   visual fade no longer adds 1.5 s to either.)
+- A minimal Streamlit probe with the final CSS showed the running icon
+  `display: none` while the **Stop** button remained `inline-flex`, so the
+  no-animation change does not remove the only way to interrupt a long run.
 - `4663688` -> `dep-dbcv1i3m8hqs73ap2da0`; live at
-  `2026-10-22T11:18:52Z`.
+  `2026-10-22T11:18:52Z`. The follow-up `d47a9db` ->
+  `dep-dbcv4jfavr4c73d39rig` is live at `2026-10-22T11:25:28Z`.
 - Public health, public root and Render-origin health return `200`. The live
-  login page contains the injected style block; `body` has `transition: none`,
-  with no page errors or failed requests. The immediate post-deploy first load
-  paid a cold start (17.4 s); two new warm contexts then loaded in 5.0 s and
-  4.7 s.
+  login page contains the final style block (running-icon rule, no full
+  status-widget hide); `body` has `transition: none`, with no page errors or
+  failed requests. The immediate post-deploy first load paid a cold start
+  (9.9 s); two new warm contexts then loaded in 4.4 s and 4.0 s.
 - Render events still show only the two earlier `server_failed` OOMs at
-  `04:22:49Z` and `04:26:40Z`; no new failure followed `4663688`.
+  `04:22:49Z` and `04:26:40Z`; no new failure followed `4663688` or `d47a9db`.
 - Backup health at `11:20Z`: generation `1792663175313-d7ce70`, raw
   `5,894,144` bytes, gzip `2,902,426` bytes on the wire, `20/120` pushes,
   `12` generations retained. Downloading `/db` and running `PRAGMA quick_check`
@@ -619,7 +626,8 @@ aadhar-dashboard/app.py          status captions for skipped checks/checkpoint;
                                   bounded report caches (max_entries); page-level
                                   fragments, cached init_db, cached seven-day
                                   chart, batched MBU editor and NO_ANIMATION_CSS
-                                  (no stale fade, skeleton or status chrome)
+                                  (no stale fade or skeleton; running icon hidden,
+                                  Stop retained)
 aadhar-dashboard/tests/test_screens.py  fragment/cache/form guards, MBU
                                   editor render test and no-fade CSS guard
 aadhar-dashboard/README.md       interaction-performance measurements, no-fade
@@ -674,11 +682,11 @@ aadhar-dashboard/.render.local   local only, ignored, never committed:
    backend/tunnel and disable the Startup entry (or keep it as a standby). Do
    not move dash-site until then; its Hobby allowance is still exhausted.
 9. **Watch the next Aadhaar checkpoint** - the fragment deploy (`7f9e462`),
-   the health-check deploy (`97adb39`) and the no-fade deploy (`4663688`) are
-   live, and the latest snapshot (`1792663175313-d7ce70`, 5,894,144 bytes) is
-   healthy. Remaining: after 24 h without writes, confirm the daily checkpoint
-   re-publishes the unchanged snapshot once and does not exhaust the 120/day
-   push budget.
+   the health-check deploy (`97adb39`) and the no-fade deploys (`4663688`,
+   `d47a9db`) are live, and the latest snapshot
+   (`1792663175313-d7ce70`, 5,894,144 bytes) is healthy. Remaining: after 24 h
+   without writes, confirm the daily checkpoint re-publishes the unchanged
+   snapshot once and does not exhaust the 120/day push budget.
 10. **Old Aadhaar service cleanup** - `srv-dasvqh8473hc73e53a3g` is still
     suspended in the old workspace. Delete it only after the new service has
     completed a deploy and keepalive cycle; keep the old dash-site service until
@@ -694,12 +702,13 @@ aadhar-dashboard/.render.local   local only, ignored, never committed:
     removes the quick-tunnel recreation and secret churn. The current dash-site
     token lists tunnels and zones but DNS records return `403`.
 13. **Aadhaar free-instance memory** - no new OOM followed the `7f9e462`,
-    `97adb39` or `4663688` deploys; memory was not re-measured after them. The
-    working set was ~198 MB with a dashboard loaded before the fragment work,
-    but the free plan still caps at 512 MB. If `oomKilled` returns under normal
-    concurrent use, decide on Starter Plus (1 GB) or Standard (2 GB); do not pay
-    for Starter, which is still 512 MB. Keepalive and the night skip are
-    unchanged, so the first morning request can still pay a cold start.
+    `97adb39`, `4663688` or `d47a9db` deploys; memory was not re-measured after
+    them. The working set was ~198 MB with a dashboard loaded before the
+    fragment work, but the free plan still caps at 512 MB. If `oomKilled`
+    returns under normal concurrent use, decide on Starter Plus (1 GB) or
+    Standard (2 GB); do not pay for Starter, which is still 512 MB. Keepalive
+    and the night skip are unchanged, so the first morning request can still
+    pay a cold start.
 14. **If interaction still feels slow** - the 1.5 s stale fade and loading
     chrome are gone, so measure the remaining wall time before changing the UI
     again. Next likely wins are batching Dashboard filters/search or reducing
