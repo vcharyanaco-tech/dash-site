@@ -11,7 +11,8 @@ then a second: **cut the Render egress that exhausted the 5 GB Hobby allowance**
 Render service is still suspended**, a fourth: **move Aadhaar to a separate
 Render workspace with its full database, leaving dash-site on the old account**,
 and a fifth: **diagnose the one- to two-minute first load and reduce the new
-free instance's 512 MB memory pressure**.
+free instance's 512 MB memory pressure**, and a sixth: **localize Streamlit
+reruns with fragments, forms and cached initialization**.
 
 | SHA | Subject |
 |---|---|
@@ -32,6 +33,8 @@ free instance's 512 MB memory pressure**.
 | `2153fc3` | aadhar-dashboard: keep the chosen upload file after a failed save |
 | `322b1b9` | aadhar-dashboard: bound memory use on the free Render instance |
 | `5182cc7` | aadhar-dashboard: document the free-instance memory limit and mitigations |
+| `7f9e462` | aadhar-dashboard: localize Streamlit reruns with fragments and forms |
+| `97adb39` | aadhar-dashboard: read binary database probe in backup health check |
 
 ---
 
@@ -470,8 +473,85 @@ Backup dedupe and gzip are independent of the tunnel and still live:
   Aadhaar process, with a daily checkpoint that republishes an unchanged
   snapshot once per 24 h.
 
-No `server_failed` event has been recorded since the 04:26:40 UTC OOM; the
-latest deploy (`5182cc7`) remains live.
+No `server_failed` event had been recorded since the 04:26:40 UTC OOM at the
+time of that audit; the then-latest deploy (`5182cc7`) remained live.
+
+## 10. Streamlit interaction performance (2026-10-22)
+
+Implemented recommendation 1: fragments, forms and cached initialization. The
+one- to two-minute first load had already been traced to OOM on the 512 MB free
+instance; this section addresses the separate, recurring cost of Streamlit's
+rerun model.
+
+### Changes (aadhar-dashboard `7f9e462`)
+
+- `dashboard`, `operator_analysis_tab`, `report_tab`, `camps_tab` and `backup_tab`
+  are now `@st.fragment`s. A filter change inside one of them no longer re-runs
+  the sidebar, login check, `init_db()` or the other page functions.
+- The MBU `st.data_editor` is inside `st.form` with a **Save entries** submit.
+  Cell edits stay in the browser until Save instead of causing a rerun per
+  keystroke.
+- `init_db()` now delegates to `@st.cache_resource _init_db_cached(db_path)`.
+  Schema creation and index checks run once per process and database path, not
+  once per click. The cache is cleared after a backup rollback.
+- The seven-day Division chart is `@st.cache_data`, keyed by the selected
+  upload IDs/labels and the Division/Sub Division filters. It is cleared with
+  the other report caches whenever master, transactions or transfers change.
+- No `st.rerun()` was removed blindly. The remaining calls are needed for logout,
+  password changes, dialog close, flash-after-write and post-restore cache
+  reset. The change narrows reruns; it does not make Streamlit rerun-free.
+- Tests added for the fragment boundaries, cached schema setup, seven-day cache,
+  the MBU save form and an MBU editor render with a seeded pending row.
+  Full suite: **167 passed**.
+
+### Measurements
+
+Local Streamlit server and Chrome, against a copy of the 5.9 MB production
+database. Browser figures are medians of nine alternating Division selections
+(Karnal and Hisar) using keyboard selection.
+
+| Interaction | Before (`5182cc7`) | After (`7f9e462`) |
+|---|---:|---:|
+| Dashboard fragment body, server render | ~330 ms | ~195 ms (~40% less) |
+| Division filter, browser-visible update | ~164 ms | ~136 ms (~17% faster) |
+| `init_db()` per rerun | ~8 ms | ~0.6 ms |
+| MBU cell edit | one full rerun per edit | no server rerun until Save |
+
+The server figures came from temporary `_timed` instrumentation around
+`dashboard`, `init_db` and `sidebar`; the browser figures came from Playwright.
+Absolute times on Render's throttled CPU will be higher, but the ratios are the
+part that carries over. The remaining dashboard render still builds the metrics,
+target table and chart; most of the gain inside the body came from caching the
+seven-day aggregate, while the fragment avoids the outer script.
+
+### Deploy and verification
+
+- `7f9e462` -> `dep-dbcugus9v7es73bvkja0`; build and deploy succeeded at
+  `2026-10-22T10:43:24Z`.
+- `97adb39` (read the binary `/db` health probe as bytes) ->
+  `dep-dbcuj9e1egvs73f5imt0`; live at `2026-10-22T10:48:22Z`.
+- Public health, public root and Render-origin health all return `200`; the live
+  login page renders with no page errors. Fresh Playwright contexts load in
+  roughly 3.8-4.4 s after the deploy; the immediate first load was slower.
+- Render events still show only the two earlier `server_failed` OOMs at
+  `04:22:49Z` and `04:26:40Z`. No new OOM or server failure followed either
+  deploy.
+- Backup health at `10:50Z`: generation `1792663175313-d7ce70`, raw
+  `5,894,144` bytes, gzip `2,902,426` bytes on the wire (50.8% smaller),
+  `20/120` pushes today, `12` generations retained. Downloading `/db` and
+  running `PRAGMA quick_check` returned `ok`; the snapshot has 33 uploads,
+  3,949 transactions, 176 master stations, 104 camps, 176 MBU camps, 12 users
+  and 237 audit rows.
+- `tests/test_backup_compression.py`: 7 passed. Dedupe, gzip and restore remain
+  intact. The health-check helper was corrected during verification: `/db`
+  returns SQLite bytes, so it must not be UTF-8 decoded before `/health` is
+  read.
+
+Remaining limitation: Streamlit still reruns on every interaction. Page
+navigation and writes remain full-app reruns; fragments only bound the work to
+the affected page. Eliminating reruns entirely would mean replacing Streamlit
+with a request/response UI (for example FastAPI + Jinja2/HTMX) on an always-on
+host.
 
 ## Files changed
 
@@ -493,7 +573,14 @@ src/server/tests/backup-compression.test.js  new, 3 tests
 aadhar-dashboard/kv_sync.py      +211/-?   gzip, dedupe, daily checkpoint,
                                            fallback-safe restore
 aadhar-dashboard/app.py          status captions for skipped checks/checkpoint;
-                                  bounded report caches (max_entries)
+                                  bounded report caches (max_entries); page-level
+                                  fragments, cached init_db, cached seven-day
+                                  chart and batched MBU editor
+aadhar-dashboard/tests/test_screens.py  fragment/cache/form guards and MBU
+                                  editor render test
+aadhar-dashboard/README.md       interaction-performance measurements and
+                                  remaining Streamlit rerun limitation
+aadhar-dashboard/tools/check_backup_health.py  read /db as bytes, not UTF-8
 aadhar-dashboard/parsers.py      iter_sheets: one Excel sheet at a time
 aadhar-dashboard/.streamlit/config.toml  disconnectedSessionTTL = 30
 aadhar-dashboard/render.yaml     memory/thread env vars for the 512 MB cap
@@ -542,10 +629,11 @@ aadhar-dashboard/.render.local   local only, ignored, never committed:
    auto-deploy, set `SERVER_ORIGIN` back to its Render URL, then stop the local
    backend/tunnel and disable the Startup entry (or keep it as a standby). Do
    not move dash-site until then; its Hobby allowance is still exhausted.
-9. **Watch the next Aadhaar backup/deploy cycle** - keepalive and auto-deploy
-   are confirmed in the new workspace. The next real write (or the daily
-   checkpoint) should show a new bridge generation and a healthy Render deploy;
-   check `/stats` and the Render deploy log rather than assuming.
+9. **Watch the next Aadhaar checkpoint** - the fragment deploy (`7f9e462`) and
+   the health-check deploy (`97adb39`) are live, and the latest snapshot
+   (`1792663175313-d7ce70`, 5,894,144 bytes) is healthy. Remaining: after 24 h
+   without writes, confirm the daily checkpoint re-publishes the unchanged
+   snapshot once and does not exhaust the 120/day push budget.
 10. **Old Aadhaar service cleanup** - `srv-dasvqh8473hc73e53a3g` is still
     suspended in the old workspace. Delete it only after the new service has
     completed a deploy and keepalive cycle; keep the old dash-site service until
@@ -560,12 +648,13 @@ aadhar-dashboard/.render.local   local only, ignored, never committed:
     named tunnel with a stable hostname and point `SERVER_ORIGIN` at it. That
     removes the quick-tunnel recreation and secret churn. The current dash-site
     token lists tunnels and zones but DNS records return `403`.
-13. **Aadhaar free-instance memory** - watch Render events and memory after
-    `322b1b9`. The working set is now ~198 MB with a dashboard loaded, but the
-    free plan still caps at 512 MB. If `oomKilled` returns under normal
-    concurrent use, decide on Starter Plus (1 GB) or Standard (2 GB); do not
-    pay for Starter, which is still 512 MB. Keepalive and the night skip are
-    unchanged, so the first morning request can still pay a cold start.
+13. **Aadhaar free-instance memory** - no new OOM followed the `7f9e462` or
+    `97adb39` deploys; memory was not re-measured after them. The working set
+    was ~198 MB with a dashboard loaded before the fragment work, but the free
+    plan still caps at 512 MB. If `oomKilled` returns under normal concurrent
+    use, decide on Starter Plus (1 GB) or Standard (2 GB); do not pay for
+    Starter, which is still 512 MB. Keepalive and the night skip are unchanged,
+    so the first morning request can still pay a cold start.
 
 ## Deployment notes
 
