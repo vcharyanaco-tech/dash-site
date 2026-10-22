@@ -436,6 +436,43 @@ Render Starter Plus (1 GB, $15/month) or Standard (2 GB, $25/month). Starter
 ($7/month) is still 512 MB and would not address the limit. The free plan was
 kept for now; the keepalive and night-skip schedule are unchanged.
 
+### 9.1 Quick-tunnel audit (2026-10-22 06:24-06:27 UTC)
+
+Aadhaar is **not** loading through a quick tunnel.
+
+- Public `https://dashboardharyana.site/aadhar-dashboard/` and
+  `.../_stcore/health` returned 200 with `x-render-origin-server: uvicorn` and
+  a fresh `rndr-id`, so the Worker is proxying straight to Render.
+- `%TEMP%\aadhar-tunnel.url` is absent, `%TEMP%\tunnel-watchdog.mode` is
+  `main`, and no Streamlit process is running. The only dash-site cloudflared
+  process targets `localhost:8787`; the other `localhost:8080` tunnel belongs
+  to the local OpenCode server, not Aadhaar.
+- The new Render key sees service `srv-dbcadio473hc73fkdu30` in owner
+  `tea-dbca8lrrjlhs73bb87p0` ("Vik's workspace"), and the old service
+  `srv-dasvqh8473hc73e53a3g` returns 404 on that key. The workspaces are
+  separate as intended.
+- Removing the Aadhaar quick tunnel therefore changes nothing: there is
+  nothing left to remove. Removing the **dash-site** quick tunnel would stop
+  the main dashboard's `/api/*` path until `SERVER_ORIGIN` is switched to the
+  Render URL on 1 November or a named tunnel replaces it. Aadhaar would stay up.
+
+Backup dedupe and gzip are independent of the tunnel and still live:
+
+- `GET https://aadhar-backup.aadhar-haryana.workers.dev/health` at 06:27 UTC:
+  latest generation `1792649453249-5430be`, `lastEncoding: gzip`,
+  `lastBytes: 5894144`, `lastReceivedBytes: 2905022` (50.7% smaller on the
+  wire), `pushesToday: 8/120`, `trackedGenerations: 12`.
+- `tests/test_backup_compression.py`: 7 passed. Dash-site
+  `src/server/tests/backup-compression.test.js`: 3 passed (gzip, unchanged
+  snapshot skipped, changed snapshot re-uploaded, gzip/raw restore).
+- Gzip is transport compression for the backup PUT; the Worker stores raw
+  SQLite and restores either encoding. Dedupe is a SHA-256 comparison in the
+  Aadhaar process, with a daily checkpoint that republishes an unchanged
+  snapshot once per 24 h.
+
+No `server_failed` event has been recorded since the 04:26:40 UTC OOM; the
+latest deploy (`5182cc7`) remains live.
+
 ## Files changed
 
 ```
