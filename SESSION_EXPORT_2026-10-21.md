@@ -8,8 +8,10 @@ no export of its own, so this file covers both.
 One unit of work: **make `run-backend.ps1` survive a Startup-folder launch**,
 then a second: **cut the Render egress that exhausted the 5 GB Hobby allowance**
 (both repos), a third: **bring the Aadhaar dashboard back locally while its
-Render service is still suspended**, and a fourth: **move Aadhaar to a separate
-Render workspace with its full database, leaving dash-site on the old account**.
+Render service is still suspended**, a fourth: **move Aadhaar to a separate
+Render workspace with its full database, leaving dash-site on the old account**,
+and a fifth: **diagnose the one- to two-minute first load and reduce the new
+free instance's 512 MB memory pressure**.
 
 | SHA | Subject |
 |---|---|
@@ -27,6 +29,9 @@ Render workspace with its full database, leaving dash-site on the old account**.
 | `f121f3c` | aadhar-dashboard: add a scoped local deploy helper for the backup Worker |
 | `5c6d667` | aadhar-dashboard: record dedicated Render service and local credentials |
 | `61837a6` | `fix:` make dash-site fallback main-only after Aadhaar migration |
+| `2153fc3` | aadhar-dashboard: keep the chosen upload file after a failed save |
+| `322b1b9` | aadhar-dashboard: bound memory use on the free Render instance |
+| `5182cc7` | aadhar-dashboard: document the free-instance memory limit and mitigations |
 
 ---
 
@@ -387,6 +392,50 @@ redeploy it or compete for the bridge. It can be deleted after the new service
 has survived a deploy/keepalive cycle. Dash-site remains on that old workspace
 until its bandwidth allowance resets on **1 November 2026 (UTC)**.
 
+## 9. Aadhaar free-instance OOM and slow first load (2026-10-22)
+
+The public page was loading, but the first request sometimes took roughly one
+to two minutes. Warm requests were normally sub-second, so the routing path was
+not the problem. Render's event log showed two `server_failed` events with
+`reason.oomKilled.memoryLimit: "512Mi"`:
+
+| Time (UTC) | Event | Next `server_available` |
+|---|---|---|
+| 04:22:49 | instance `srv-dbcadio473hc73fkdu30-x79xg` killed | 04:23:19 |
+| 04:26:40 | same instance killed again | 04:27:27 |
+
+The 30-second memory samples were 202-223 MB before the first kill, then
+reached 377 MB before the second. The spike between samples crossed 512 MB, so
+the metric chart understates the peak. The logs showed a dashboard session
+reconnecting immediately before the first kill and no application traceback;
+this was memory pressure, not a code exception or a bad proxy route.
+
+Mitigations in `322b1b9` (kept on the free plan):
+
+- `render.yaml` and the live service now set `MALLOC_ARENA_MAX=2`,
+  `MALLOC_TRIM_THRESHOLD_=65536`, `OPENBLAS_NUM_THREADS=1`,
+  `OMP_NUM_THREADS=1`, `NUMEXPR_NUM_THREADS=1` and `MKL_NUM_THREADS=1`.
+- Report caches are bounded to 8 entries; logo/target/backup-status caches to 1.
+- `parsers.iter_sheets` reads one Excel sheet at a time instead of loading the
+  whole workbook with `sheet_name=None`; `parse_first_usable` uses it.
+- `.streamlit/config.toml` sets `disconnectedSessionTTL = 30` so a closed tab's
+  state is released sooner.
+
+Verification: deploy `dep-dbcp7jjm8hqs73aikh60` (commit `322b1b9`) went live at
+04:42:08 UTC, restored generation `1792643524660-29f017`, and passed public page
+and health checks at about 0.37 s. Memory settled at ~124 MB after boot and
+~198 MB with the dashboard loaded, down from ~202 MB and ~261 MB before the
+change. The docs-only follow-up `5182cc7` deployed as
+`dep-dbcp9pdg1s2s738a7v3g` at 04:47:00 UTC and also returned 200 on both
+public checks. No new `server_failed` event was recorded by 04:48 UTC. The full
+Python suite passed (162 tests).
+
+This does not make 512 MB support unlimited concurrent users. If the OOM
+returns under normal use, the reliable fix is a paid instance with more RAM:
+Render Starter Plus (1 GB, $15/month) or Standard (2 GB, $25/month). Starter
+($7/month) is still 512 MB and would not address the limit. The free plan was
+kept for now; the keepalive and night-skip schedule are unchanged.
+
 ## Files changed
 
 ```
@@ -406,8 +455,13 @@ src/server/tests/backup-compression.test.js  new, 3 tests
 
 aadhar-dashboard/kv_sync.py      +211/-?   gzip, dedupe, daily checkpoint,
                                            fallback-safe restore
-aadhar-dashboard/app.py          status captions for skipped checks/checkpoint
-aadhar-dashboard/README.md       config + durability notes; local deploy helper
+aadhar-dashboard/app.py          status captions for skipped checks/checkpoint;
+                                  bounded report caches (max_entries)
+aadhar-dashboard/parsers.py      iter_sheets: one Excel sheet at a time
+aadhar-dashboard/.streamlit/config.toml  disconnectedSessionTTL = 30
+aadhar-dashboard/render.yaml     memory/thread env vars for the 512 MB cap
+aadhar-dashboard/README.md       config + durability notes; local deploy helper;
+                                  free-instance memory/OOM guidance
 aadhar-dashboard/tools/check_backup_health.py  26 h stale threshold
 aadhar-dashboard/backup-worker/worker.js       gzip decompress + raw storage;
                                   deployed as version 9a4d6f8f...
@@ -469,6 +523,12 @@ aadhar-dashboard/.render.local   local only, ignored, never committed:
     named tunnel with a stable hostname and point `SERVER_ORIGIN` at it. That
     removes the quick-tunnel recreation and secret churn. The current dash-site
     token lists tunnels and zones but DNS records return `403`.
+13. **Aadhaar free-instance memory** - watch Render events and memory after
+    `322b1b9`. The working set is now ~198 MB with a dashboard loaded, but the
+    free plan still caps at 512 MB. If `oomKilled` returns under normal
+    concurrent use, decide on Starter Plus (1 GB) or Standard (2 GB); do not
+    pay for Starter, which is still 512 MB. Keepalive and the night skip are
+    unchanged, so the first morning request can still pay a cold start.
 
 ## Deployment notes
 
