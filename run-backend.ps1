@@ -11,8 +11,9 @@
 #      (installs cloudflared via winget if missing)
 #   4. Parse the https://xxxx.trycloudflare.com URL from tunnel output
 #   5. Update the Cloudflare Worker secret SERVER_ORIGIN to that URL
-#      (wrangler secret put SERVER_ORIGIN, config: src/worker/wrangler.toml)
-#   6. Verify GET /api/health through the tunnel returns 200
+#      (Cloudflare API; config: src/worker/wrangler.toml)
+#   6. Verify GET /api/health through the tunnel returns 200, then verify
+#      POST /api through the public Worker reaches this backend
 #   7. Start the tunnel watchdog for the main backend (optionally Aadhaar)
 #
 # Aadhaar is hosted on Render now, so it is no longer started by default.
@@ -21,7 +22,7 @@
 # Usage:
 #   .\run-backend.ps1                 # main dashboard only (Aadhaar stays on Render)
 #   .\run-backend.ps1 -WithAadhar     # main + local Aadhaar fallback
-#   .\run-backend.ps1 -SkipWrangler   # skip step 5 (e.g. wrangler not logged in)
+#   .\run-backend.ps1 -SkipWrangler   # skip the SERVER_ORIGIN update (manual)
 #   .\run-backend.ps1 -SkipAadhar     # compatibility alias for the default
 #   .\run-backend.ps1 -NoWatchdog     # do not start the tunnel watchdog
 #   .\run-backend.ps1 -Stop           # stop backend + tunnel from a prior run
@@ -70,6 +71,59 @@ function Test-Healthy([string]$Url) {
   try {
     $r = Invoke-WebRequest $Url -UseBasicParsing -TimeoutSec 5
     return ($r.StatusCode -eq 200)
+  } catch {
+    return $false
+  }
+}
+
+function Get-WranglerValue([string]$Name) {
+  if (-not (Test-Path $wranglerCfg)) { return $null }
+  $line = Get-Content $wranglerCfg -ErrorAction SilentlyContinue |
+    Where-Object { $_ -match ('^\s*' + [regex]::Escape($Name) + '\s*=\s*"([^"]+)"') } |
+    Select-Object -First 1
+  if ($line -and $line -match '"([^"]+)"') { return $Matches[1] }
+  return $null
+}
+
+# Update SERVER_ORIGIN through the Cloudflare API rather than wrangler. The
+# wrangler CLI can fail on a transient fetch error (and, under
+# $ErrorActionPreference='Stop', that failure aborted this script before the
+# watchdog or the public-route check ran). That left the Worker pointing at a
+# dead quick tunnel, so app.html failed with "Error loading app: HTTP 530".
+function Set-WorkerOrigin([string]$Url) {
+  $workerName = Get-WranglerValue 'name'
+  $accountId = $env:CLOUDFLARE_ACCOUNT_ID
+  if (-not $accountId) { $accountId = Get-WranglerValue 'account_id' }
+  $token = $env:CLOUDFLARE_API_TOKEN
+
+  if (-not $workerName -or -not $accountId -or -not $token) {
+    Write-Warning 'CLOUDFLARE_API_TOKEN / account ID / Worker name unavailable; cannot update SERVER_ORIGIN automatically.'
+    return $false
+  }
+
+  $body = @{ name = 'SERVER_ORIGIN'; text = $Url; type = 'secret_text' } | ConvertTo-Json -Compress
+  $headers = @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/json' }
+  $uri = "https://api.cloudflare.com/client/v4/accounts/$accountId/workers/scripts/$workerName/secrets"
+
+  for ($attempt = 1; $attempt -le 3; $attempt++) {
+    try {
+      $res = Invoke-RestMethod -Uri $uri -Method Put -Headers $headers -Body $body -TimeoutSec 45
+      if ($res.success) { return $true }
+      Write-Warning "Cloudflare API rejected the SERVER_ORIGIN update (attempt $attempt)."
+    } catch {
+      Write-Warning "Cloudflare API update failed (attempt $attempt): $($_.Exception.Message)"
+    }
+    if ($attempt -lt 3) { Start-Sleep -Seconds (2 * $attempt) }
+  }
+  return $false
+}
+
+function Test-PublicApi {
+  try {
+    $r = Invoke-WebRequest -Uri 'https://dashboardharyana.site/api' -Method Post `
+      -UseBasicParsing -ContentType 'text/plain' `
+      -Body '{"function":"getServerTime","args":[]}' -TimeoutSec 25
+    return ($r.StatusCode -eq 200 -and $r.Content -match '"result"')
   } catch {
     return $false
   }
@@ -240,21 +294,19 @@ if (-not $tunnelUrl) {
 }
 
 # ---------- 5. update SERVER_ORIGIN ----------
+$originUpdated = $false
 if ($SkipWrangler) {
   Write-Host '[5/6] Skipping SERVER_ORIGIN update (-SkipWrangler).'
 } else {
-  Write-Host '[5/6] Updating Worker secret SERVER_ORIGIN ...'
-  Push-Location (Join-Path $repo 'src\worker')
-  $tunnelUrl | wrangler secret put SERVER_ORIGIN --config $wranglerCfg 2>&1 | ForEach-Object { Write-Host $_ }
-  if ($LASTEXITCODE -ne 0) {
-    Pop-Location
-    Write-Warning 'wrangler secret put failed. Run manually:'
-    Write-Host "  wrangler login"
-    Write-Host "  echo $tunnelUrl | wrangler secret put SERVER_ORIGIN --config src\worker\wrangler.toml"
-  } else {
+  Write-Host '[5/6] Updating Worker secret SERVER_ORIGIN via Cloudflare API ...'
+  $originUpdated = Set-WorkerOrigin $tunnelUrl
+  if ($originUpdated) {
     Write-Host 'SERVER_ORIGIN updated.'
+  } else {
+    Write-Warning 'Could not update SERVER_ORIGIN automatically.'
+    Write-Host "  Set the Worker secret SERVER_ORIGIN to: $tunnelUrl"
+    Write-Host '  Then re-run: .\run-backend.ps1'
   }
-  Pop-Location
 }
 
 # ---------- 6. end-to-end health ----------
@@ -279,6 +331,33 @@ for ($i = 0; $i -lt 12 -and -not $tunnelOk; $i++) {
 }
 if (-not $tunnelOk) {
   Write-Warning "Health check through tunnel failed ($lastErr) - the tunnel may need a few more seconds; retry $tunnelUrl/api/health in a browser."
+}
+
+# The tunnel can be healthy while the Worker still points at the previous dead
+# quick tunnel. That mismatch is what returns HTTP 530 to app.html, so probe the
+# public POST /api route (not /api/health, which the Worker answers itself).
+Write-Host 'Verifying Worker -> backend route...'
+$publicOk = $false
+for ($i = 0; $i -lt 12 -and -not $publicOk; $i++) {
+  $publicOk = Test-PublicApi
+  if (-not $publicOk) { Start-Sleep -Seconds 5 }
+}
+if (-not $publicOk -and -not $SkipWrangler) {
+  Write-Host 'Public route is still failing; retrying the SERVER_ORIGIN update...'
+  $originUpdated = Set-WorkerOrigin $tunnelUrl
+  if ($originUpdated) {
+    Start-Sleep -Seconds 5
+    for ($i = 0; $i -lt 6 -and -not $publicOk; $i++) {
+      $publicOk = Test-PublicApi
+      if (-not $publicOk) { Start-Sleep -Seconds 5 }
+    }
+  }
+}
+if ($publicOk) {
+  Write-Host 'Public /api route: HTTP 200 OK (Worker reaches this backend).'
+} else {
+  Write-Warning 'Public /api route is not reaching this backend yet. The dashboard may show "Error loading app: HTTP 530" until SERVER_ORIGIN matches the live tunnel.'
+  Write-Host "  Current tunnel: $tunnelUrl"
 }
 
 Write-Host ''

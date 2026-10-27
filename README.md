@@ -68,6 +68,12 @@ This starts the Node backend on port 8787 behind a Cloudflare quick tunnel,
 updates the Worker's `SERVER_ORIGIN`, and leaves `AADHAR_ORIGIN` pointed at the
 dedicated Render service. It also starts a main-only tunnel watchdog.
 
+The `SERVER_ORIGIN` update uses the Cloudflare API, not the wrangler CLI, and
+the script then probes the public `POST /api` route. `/api/health` is answered
+by the Worker itself, so it cannot prove the tunnel is reachable. If
+`SERVER_ORIGIN` is stale, `app.html` shows `Error loading app: HTTP 530` even
+though the quick tunnel's own health check is green.
+
 - `.\run-backend.ps1 -WithAadhar` is the emergency local Aadhaar fallback. It
   starts the sibling Streamlit app on port 8501 behind a second quick tunnel,
   repoints `AADHAR_ORIGIN` at that tunnel, and monitors both routes.
