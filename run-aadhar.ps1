@@ -212,7 +212,10 @@ if (-not $tunnelUrl) {
   for ($i = 0; $i -lt 30 -and -not $tunnelUrl; $i++) {
     Start-Sleep -Seconds 2
     if (Test-Path $logTunnel) {
-      $m = Select-String -Path $logTunnel -Pattern 'https://[a-z0-9-]+\.trycloudflare\.com' -AllMatches |
+      # Exclude the API endpoint (see run-backend.ps1): a failed registration
+      # logs `Post "https://api.trycloudflare.com/tunnel": ...` and matching it
+      # stored the API host as the tunnel URL.
+      $m = Select-String -Path $logTunnel -Pattern 'https://(?!api\.)[a-z0-9-]+\.trycloudflare\.com' -AllMatches |
            Select-Object -First 1
       if ($m) { $tunnelUrl = $m.Matches[0].Value }
     }

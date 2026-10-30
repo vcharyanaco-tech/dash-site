@@ -278,7 +278,11 @@ if (-not $tunnelUrl) {
 
   for ($i = 0; $i -lt 20 -and -not $tunnelUrl; $i++) {
     if (Test-Path $logTunnel) {
-      $m = Select-String -Path $logTunnel -Pattern 'https://[a-z0-9-]+\.trycloudflare\.com' -AllMatches |
+      # Exclude the API endpoint: when registration fails, cloudflared logs
+      # `Post "https://api.trycloudflare.com/tunnel": ...`, and matching that
+      # stored https://api.trycloudflare.com as the tunnel URL (and as the
+      # Worker SERVER_ORIGIN), which made every /api call return HTTP 405.
+      $m = Select-String -Path $logTunnel -Pattern 'https://(?!api\.)[a-z0-9-]+\.trycloudflare\.com' -AllMatches |
            Select-Object -First 1
       if ($m) { $tunnelUrl = $m.Matches[0].Value }
     }
