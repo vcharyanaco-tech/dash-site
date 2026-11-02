@@ -556,10 +556,14 @@ function openLinkPreview(url, title) {
   const titleEl = getEl('previewModalTitle');
   if (titleEl) titleEl.textContent = title || 'Preview';
   if (openNew) openNew.href = safe;
-  previewZoom = 80;
 
   let target = '';
   try { target = (typeof toEmbeddableUrl === 'function' && toEmbeddableUrl(safe)) || safe; } catch (err) { target = safe; }
+
+  /* Restore the zoom last used for this specific document; unseen links keep
+     the 80% default. */
+  previewZoomTarget = target || '';
+  previewZoom = previewZoomForTarget_(previewZoomTarget);
 
   /* Presentation Mode keeps two levels of reuse:
      1) a background warm frame that has already finished loading;
@@ -660,9 +664,67 @@ function closeLinkPreview() {
 /* ---------------------------------- Preview zoom ---------------------------------- */
 /* Scales the embedded iframe so Sheets/Docs/Presentations (and any other
    preview) can be zoomed in/out. Zoom buttons call these directly; trackpad
-   pinch (browsers send Ctrl+wheel) is wired by wirePreviewPinch(). */
+   pinch (browsers send Ctrl+wheel) is wired by wirePreviewPinch().
+   Each preview target remembers its own zoom in localStorage: opening a link
+   starts at the zoom last chosen for that document (80% the first time). */
 
-let previewZoom = 80;
+var PREVIEW_ZOOM_DEFAULT = 80;
+var PREVIEW_ZOOM_MIN = 50;
+var PREVIEW_ZOOM_MAX = 300;
+var PREVIEW_ZOOM_STORE_KEY = 'dash.preview.zoomByTarget';
+var PREVIEW_ZOOM_STORE_LIMIT = 500;
+
+let previewZoom = PREVIEW_ZOOM_DEFAULT;
+let previewZoomTarget = '';
+let previewZoomStore = null;
+
+function clampPreviewZoom_(value) {
+  const n = Number(value);
+  if (!isFinite(n)) return PREVIEW_ZOOM_DEFAULT;
+  return Math.min(PREVIEW_ZOOM_MAX, Math.max(PREVIEW_ZOOM_MIN, Math.round(n)));
+}
+
+function loadPreviewZoomStore_() {
+  if (previewZoomStore) return previewZoomStore;
+  previewZoomStore = {};
+  try {
+    const raw = localStorage.getItem(PREVIEW_ZOOM_STORE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === 'object') {
+      Object.keys(parsed).forEach(function (key) {
+        const value = Number(parsed[key]);
+        if (isFinite(value)) previewZoomStore[key] = clampPreviewZoom_(value);
+      });
+    }
+  } catch (err) {
+    previewZoomStore = {};
+  }
+  return previewZoomStore;
+}
+
+function savePreviewZoomStore_() {
+  if (!previewZoomStore) return;
+  try { localStorage.setItem(PREVIEW_ZOOM_STORE_KEY, JSON.stringify(previewZoomStore)); } catch (err) {}
+}
+
+function previewZoomForTarget_(target) {
+  if (!target) return PREVIEW_ZOOM_DEFAULT;
+  const store = loadPreviewZoomStore_();
+  return Object.prototype.hasOwnProperty.call(store, target)
+    ? clampPreviewZoom_(store[target])
+    : PREVIEW_ZOOM_DEFAULT;
+}
+
+function rememberPreviewZoom_(target, value) {
+  if (!target) return;
+  const store = loadPreviewZoomStore_();
+  store[target] = clampPreviewZoom_(value);
+  const keys = Object.keys(store);
+  if (keys.length > PREVIEW_ZOOM_STORE_LIMIT) {
+    keys.slice(0, keys.length - PREVIEW_ZOOM_STORE_LIMIT).forEach(function (key) { delete store[key]; });
+  }
+  savePreviewZoomStore_();
+}
 
 function applyPreviewZoom() {
   const frame = getEl('previewFrame');
@@ -672,13 +734,18 @@ function applyPreviewZoom() {
 }
 
 function adjustPreviewZoom(delta) {
-  previewZoom = Math.min(300, Math.max(50, previewZoom + delta));
+  previewZoom = clampPreviewZoom_(previewZoom + delta);
   applyPreviewZoom();
+  rememberPreviewZoom_(previewZoomTarget, previewZoom);
 }
 
 function previewZoomIn() { adjustPreviewZoom(10); }
 function previewZoomOut() { adjustPreviewZoom(-10); }
-function previewZoomReset() { previewZoom = 80; applyPreviewZoom(); }
+function previewZoomReset() {
+  previewZoom = PREVIEW_ZOOM_DEFAULT;
+  applyPreviewZoom();
+  rememberPreviewZoom_(previewZoomTarget, previewZoom);
+}
 
 /* Trackpad pinch-to-zoom (and Ctrl+scroll on a mouse) scales the preview. */
 function wirePreviewPinch() {

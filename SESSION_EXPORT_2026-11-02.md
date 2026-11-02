@@ -56,11 +56,30 @@ hosting", documenting the Render origin, the matching `WORKER_API_TOKEN`
 requirement, the cron/keep-alive and night skip, the backup bridge, and the
 `HTTP 530` symptom of a stale `SERVER_ORIGIN`.
 
-## 3. Commits
+## 3. Per-link preview zoom memory
+
+The in-page link preview (used by presentation mode hyperlinks) always reset to
+80% when reopened. Zoom is now remembered per preview target:
+
+- First open of a document still starts at the 80% default.
+- Zoom in/out/pinch (and Reset) store the value under
+  `localStorage['dash.preview.zoomByTarget']`, keyed by the embeddable URL
+  (Drive `/preview`, Sheets `htmlview`, or the raw URL), so each record's link
+  reopens at its own last zoom.
+- The map is capped at 500 entries (oldest evicted) and every access is wrapped
+  in `try/catch`, so private mode or a full quota falls back to the 80% default.
+- Works with the presentation warm-frame cache: the stored zoom is re-applied
+  whenever a cached iframe is adopted.
+
+Changed `src/app/ai.js` and rebuilt `app.js` with `node build/build-app.js`; the
+backend and `run-aadhar.ps1` are untouched by this part.
+
+## 4. Commits
 
 | SHA | Subject |
 |---|---|
-| _pending_ | `chore:` remove the dash-site quick-tunnel setup and document Render hosting |
+| `4c5aa88` | `chore:` restore dash-site to Render and remove the quick-tunnel setup |
+| _pending_ | `feat:` remember the preview zoom per link target |
 
 Files changed:
 
@@ -69,6 +88,9 @@ dash-site/README.md          Render hosting section replaces the tunnel guide
 dash-site/run-backend.ps1    deleted
 dash-site/watch-tunnels.ps1  deleted
 dash-site/run-aadhar.ps1     drop references to the removed scripts
+dash-site/src/app/ai.js      per-target preview zoom memory
+dash-site/app.js             rebuilt from src/app modules
+dash-site/SESSION_EXPORT_2026-11-02.md
 ```
 
 ## Pending tasks (carry forward)
