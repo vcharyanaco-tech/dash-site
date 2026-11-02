@@ -52,46 +52,33 @@ python -m http.server 8080
 node --test src/tests
 ```
 
-### Temporary local fallback (dash-site only)
+### Backend hosting
 
-Dash-site's Render backend is still suspended until 1 November 2026, so the
-main dashboard runs from this machine. The Aadhaar dashboard is no longer part
-of this fallback: it now runs on a **separate Render account** at
-`https://aadhar-dashboard-9ljo.onrender.com`, still exposed through
-`https://dashboardharyana.site/aadhar-dashboard/`.
+Dash-site runs on Render at `https://dash-site-2wkg.onrender.com` (service
+`srv-d9uqprijobas73bh8ie0`, `autoDeploy: true`). The Cloudflare Worker
+(`dashv1-proxy`) proxies `POST /api` and `/macros/*` to it through
+`SERVER_ORIGIN`, which must be that Render URL.
 
-```powershell
-.\run-backend.ps1
-```
+The Worker's `*/10 * * * *` cron pings `SERVER_ORIGIN/api/health` so the free
+instance never idles out, skipping 21:00-06:00 IST to bank instance-hours
+overnight. The `DATA_BACKUP_KV` bridge restores `dashboard.db` on boot and
+uploads a snapshot every 10 minutes and on SIGTERM, so redeploys and free-tier
+restarts keep the data.
 
-This starts the Node backend on port 8787 behind a Cloudflare quick tunnel,
-updates the Worker's `SERVER_ORIGIN`, and leaves `AADHAR_ORIGIN` pointed at the
-dedicated Render service. It also starts a main-only tunnel watchdog.
+- The Render service must have `WORKER_API_TOKEN` set to the same value as the
+  Worker secret (it is in the gitignored `.env.local`). Without it the boot
+  restore fails with `401` and the instance comes up with an empty database.
+- `/api/health` is answered by the Worker itself, so it cannot prove the origin
+  is reachable. Probe `POST /api` (e.g. `getServerTime`) instead. A stale
+  `SERVER_ORIGIN` shows as `Error loading app: HTTP 530` in `app.html`.
 
-The `SERVER_ORIGIN` update uses the Cloudflare API, not the wrangler CLI, and
-the script then probes the public `POST /api` route. `/api/health` is answered
-by the Worker itself, so it cannot prove the tunnel is reachable. If
-`SERVER_ORIGIN` is stale, `app.html` shows `Error loading app: HTTP 530` even
-though the quick tunnel's own health check is green.
+The Aadhaar dashboard is separate: it runs on its own Render account at
+`https://aadhar-dashboard-9ljo.onrender.com`, exposed through
+`https://dashboardharyana.site/aadhar-dashboard/` via `AADHAR_ORIGIN`.
+`run-aadhar.ps1` remains as a manual local fallback for it (see the script and
+`E:\projects\aadhar-dashboard\.env.local`, which is gitignored).
 
-- `.\run-backend.ps1 -WithAadhar` is the emergency local Aadhaar fallback. It
-  starts the sibling Streamlit app on port 8501 behind a second quick tunnel,
-  repoints `AADHAR_ORIGIN` at that tunnel, and monitors both routes.
-- `.\run-aadhar.ps1 -Stop` (or `.\run-backend.ps1 -Stop`) stops the local app
-  and tunnel and restores `AADHAR_ORIGIN` to the Render URL.
-- `.\run-backend.ps1 -SkipAadhar` is kept as an alias for the default
-  main-only mode. `-NoWatchdog` skips the watchdog.
-
-If `E:\projects\aadhar-dashboard\.env.local` exists, `run-aadhar.ps1` loads its
-`AADHAR_SYNC_URL` / `AADHAR_SYNC_TOKEN` into the Streamlit process so the local
-fallback can restore and upload snapshots through its backup Worker. That file
-is gitignored and must never be committed.
-
-The main quick tunnel runs on this PC. It stops when the machine shuts down, and
-Startup-folder launches only bring it back after login; the hostname changes on
-restart, but the script updates the Worker secret. The watchdog checks the main
-public route every minute and recreates a dropped tunnel; see
-`%TEMP%\tunnel-watchdog.log`. Quick tunnels still have no uptime guarantee; a
-named Cloudflare tunnel is the durable fix for dash-site, but the current API
-token cannot edit DNS. The permanent fix is the dash-site Render deployment
-resuming with the committed code.
+The dash-site quick-tunnel scripts (`run-backend.ps1`, `watch-tunnels.ps1`) and
+their Startup-folder launcher were removed on 2026-11-02 when the Render service
+resumed. They remain in git history (`git show 7ecb632:run-backend.ps1`) if a
+temporary local origin is ever needed again.

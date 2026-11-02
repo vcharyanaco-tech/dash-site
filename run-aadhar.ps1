@@ -14,8 +14,8 @@
 #   .\run-aadhar.ps1 -Port 8502       # non-default local port
 #
 # The quick-tunnel hostname changes every time it starts, so the Worker
-# secret must be updated on every run. The fallback is manual; it is not
-# started by the Startup folder unless run-backend.ps1 -WithAadhar is used.
+# secret must be updated on every run. The fallback is manual and is never
+# started automatically.
 # ============================================================
 
 param(
@@ -102,16 +102,11 @@ function Import-AadharEnv([string]$File) {
 
 # ---------- -Stop ----------
 if ($Stop) {
-  # Stop a full watchdog so it cannot restart this tunnel while stopping. A
-  # main-only watchdog belongs to dash-site and must keep running.
+  # Stop any legacy watchdog left over from the removed dash-site tunnel
+  # setup so it cannot restart a tunnel while stopping.
   if (Test-Path $pidWatchdog) {
-    $savedWatchdog = Get-Content $pidWatchdog -ErrorAction SilentlyContinue | Select-Object -First 1
-    $watchMode = Get-Content $watchModeFile -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($savedWatchdog -and $watchMode -eq 'main') {
-      Write-Host 'Leaving the main-only dash-site watchdog running.'
-    } else {
-      Stop-FromPidFile $pidWatchdog
-    }
+    Stop-FromPidFile $pidWatchdog
+    Remove-Item $watchModeFile -Force -ErrorAction SilentlyContinue
   }
   Stop-FromPidFile $pidApp
   Stop-FromPidFile $pidTunnel
@@ -202,7 +197,7 @@ if (-not $tunnelUrl) {
 
   $cf = Find-Cloudflared
   if (-not $cf) {
-    throw 'cloudflared not found. Run .\run-backend.ps1 first or install cloudflared.'
+    throw 'cloudflared not found. Install cloudflared and make sure it is on PATH.'
   }
 
   Write-Host '[2/4] Starting quick tunnel for the Aadhaar app ...'
@@ -212,7 +207,7 @@ if (-not $tunnelUrl) {
   for ($i = 0; $i -lt 30 -and -not $tunnelUrl; $i++) {
     Start-Sleep -Seconds 2
     if (Test-Path $logTunnel) {
-      # Exclude the API endpoint (see run-backend.ps1): a failed registration
+      # Exclude the API endpoint: a failed registration
       # logs `Post "https://api.trycloudflare.com/tunnel": ...` and matching it
       # stored the API host as the tunnel URL.
       $m = Select-String -Path $logTunnel -Pattern 'https://(?!api\.)[a-z0-9-]+\.trycloudflare\.com' -AllMatches |
