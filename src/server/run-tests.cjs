@@ -18,6 +18,16 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-tests-'));
 process.env.DASH_DATA_DIR = dir;
 process.env.RATE_LIMIT_DISABLED = '1';
 
+// Never let a test run talk to the live KV backup bridge. The ambient shell
+// may have DATA_SYNC_URL/WORKER_API_TOKEN exported (e.g. copied from
+// .env.local for a manual restore); if the suite inherits them, any test that
+// boots index.js restores from KV and then uploads its scratch DB back,
+// overwriting production data (observed 2026-11-02: the test DB became the
+// live snapshot and every real user's login failed). Backup-specific tests
+// set their own fake bridge URL/token explicitly and keep working.
+delete process.env.DATA_SYNC_URL;
+delete process.env.WORKER_API_TOKEN;
+
 // Seed the empty scratch DB exactly like a fresh local `npm run seed` so
 // tests that assume baseline records (e.g. smoke.test.js posting to row 4)
 // keep working; seed.js is idempotent so it is safe on any recovery path.

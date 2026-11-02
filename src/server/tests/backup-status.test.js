@@ -8,6 +8,9 @@ const os = require('os');
 
 const TMP = path.join(os.tmpdir(), 'backup-status-' + Date.now());
 process.env.DASH_DATA_DIR = TMP;
+// The bridge must be off for this test regardless of the caller's shell env.
+process.env.DATA_SYNC_URL = '';
+process.env.WORKER_API_TOKEN = '';
 fs.mkdirSync(TMP, { recursive: true });
 
 require('../db');

@@ -2,6 +2,15 @@
 // DASH_BOOTSTRAP_ADMIN_PASSWORD through their secret manager.
 const crypto = require('crypto');
 
+// Safety net for `node --test` runs that bypass run-tests.cjs: never inherit
+// the live KV bridge from the shell. Tests that need a bridge set DATA_SYNC_URL
+// and WORKER_API_TOKEN themselves (and use a fake host); they can opt back in
+// with DASH_TEST_KEEP_BRIDGE=1.
+if (!process.env.DASH_TEST_KEEP_BRIDGE) {
+  delete process.env.DATA_SYNC_URL;
+  delete process.env.WORKER_API_TOKEN;
+}
+
 const password = process.env.DASH_BOOTSTRAP_ADMIN_PASSWORD ||
   crypto.randomBytes(24).toString('base64url') + 'A1!';
 process.env.DASH_BOOTSTRAP_ADMIN_PASSWORD = password;

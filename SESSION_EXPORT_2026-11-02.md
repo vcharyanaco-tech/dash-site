@@ -74,22 +74,71 @@ The in-page link preview (used by presentation mode hyperlinks) always reset to
 Changed `src/app/ai.js` and rebuilt `app.js` with `node build/build-app.js`; the
 backend and `run-aadhar.ps1` are untouched by this part.
 
-## 4. Commits
+## 4. Incident: the test suite overwrote the live KV snapshot
+
+After the cutover, every real user (including admin) got
+`Invalid email, username or password.` while Render still reported a healthy
+1.53 MB database.
+
+**Root cause.** The agent shell had `DATA_SYNC_URL` and `WORKER_API_TOKEN` in
+its ambient environment (taken from `.env.local` for the manual restore).
+`node src/server/run-tests.cjs` inherited them, so test files that boot
+`index.js` had the KV bridge enabled: they created/restored a scratch DB and
+`backupData()` uploaded it to `backup:db.sqlite`, replacing production data with
+the test seed (9 test users, 31 records). A 2026-11-02 Render restart then
+restored that snapshot, so real accounts no longer existed. The tell-tale was
+`backup-status.test.js` failing (`enabled` was `true` under the ambient env).
+
+**Recovery.**
+
+1. Built a `VACUUM INTO` snapshot from the local production DB
+   (`src/server/data/dashboard.db`) - verified `integrity_check=ok`, 20 users,
+   38 records, 63 submissions, 1,531,904 bytes.
+2. PUT the gzipped snapshot (297,759 bytes) to
+   `https://dashboardharyana.site/api/backup/db`.
+3. Triggered Render deploy `dep-dbk3gtajnfac739g16d0`; boot restore came up at
+   1,531,904 bytes.
+4. Discovered the old instance's SIGTERM backup had overwritten KV with the test
+   DB *after* the deploy started, so re-PUT the production snapshot once the old
+   instance was gone and verified KV: 20 users / 38 records.
+5. Verified the test account `vali_viewer@test.com` now gets
+   `Invalid email, username or password.` (it logged in while the test DB was
+   live), and that Render/Worker health show the restored DB.
+
+No uploads or meetings were lost: both KV lists and the local directories were
+already empty.
+
+**Prevention.**
+
+- `src/server/run-tests.cjs` deletes `DATA_SYNC_URL`/`WORKER_API_TOKEN` before
+  spawning the seed and test runner, with a comment explaining the incident.
+- `src/server/tests/test-bootstrap.js` does the same for direct `node --test`
+  runs (opt out with `DASH_TEST_KEEP_BRIDGE=1`).
+- `backup-status.test.js` explicitly blanks the bridge env so it no longer
+  depends on the caller's shell.
+- Re-ran the full suite with the production env still exported: 600/600 pass and
+  the KV snapshot stayed at 1,531,904 bytes / 20 users.
+
+## 5. Commits
 
 | SHA | Subject |
 |---|---|
 | `4c5aa88` | `chore:` restore dash-site to Render and remove the quick-tunnel setup |
-| _pending_ | `feat:` remember the preview zoom per link target |
+| `b90d06d` | `feat:` remember the preview zoom per link target |
+| _pending_ | `fix:` stop test runs from overwriting the live KV backup |
 
 Files changed:
 
 ```
-dash-site/README.md          Render hosting section replaces the tunnel guide
-dash-site/run-backend.ps1    deleted
-dash-site/watch-tunnels.ps1  deleted
-dash-site/run-aadhar.ps1     drop references to the removed scripts
-dash-site/src/app/ai.js      per-target preview zoom memory
-dash-site/app.js             rebuilt from src/app modules
+dash-site/README.md                       Render hosting section replaces the tunnel guide
+dash-site/run-backend.ps1                 deleted
+dash-site/watch-tunnels.ps1               deleted
+dash-site/run-aadhar.ps1                  drop references to the removed scripts
+dash-site/src/app/ai.js                   per-target preview zoom memory
+dash-site/app.js                          rebuilt from src/app modules
+dash-site/src/server/run-tests.cjs        clear the live bridge env before tests
+dash-site/src/server/tests/test-bootstrap.js  same guard for direct runs
+dash-site/src/server/tests/backup-status.test.js  pin the bridge off
 dash-site/SESSION_EXPORT_2026-11-02.md
 ```
 
