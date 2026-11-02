@@ -1,0 +1,316 @@
+Pages: 5
+--- Page 1 ---
+Apple iPad Lineup — India
+Prices and specifications from the Apple Online Store (apple.com/in), current as of 25 September 2026.
+All prices are Maximum Retail Price (MRP), inclusive of taxes, for the base configuration of each capacity
+shown. Apple revises pricing and lineups periodically — confirm current prices at apple.com/in before
+purchase.
+At a Glance
+iPad Pro
+iPad Air
+iPad
+iPad mini
+Starting price
+₹1,39,900
+₹89,900
+₹49,900
+₹69,900
+Screen size
+11" or 13"
+11" or 13"
+11"
+8.3"
+Display
+Ultra Retina XDR
+(OLED, ProMotion)
+Liquid Retina
+(LED IPS)
+Liquid Retina
+(LED IPS)
+Liquid Retina
+(LED IPS)
+Chip
+Apple M5
+Apple M4
+Apple A16
+Apple A17 Pro
+RAM
+12GB / 16GB
+12GB
+Not published
+8GB
+Apple Intelligence
+Yes
+Yes
+No
+Yes
+Storage options
+256GB–2TB
+128GB–1TB
+128GB–512GB
+128GB–512GB
+Face ID / Touch ID
+Face ID
+Touch ID
+Touch ID
+Touch ID
+Pencil support
+Pencil Pro,
+Pencil (USB-C)
+Pencil Pro,
+Pencil (USB-C)
+Pencil (USB-C),
+Pencil (1st gen)*
+Pencil Pro,
+Pencil (USB-C)
+Weight (Wi-Fi, smallest)
+444 g (11")
+464 g (11")
+477 g
+293 g
+*Apple Pencil (1st generation) requires a USB-C to Apple Pencil Adapter (sold separately) on iPad (A16).
+
+
+--- Page 2 ---
+iPad Pro
+The ultimate iPad experience with the most advanced technology  •  From ₹1,39,900
+Key specifications
+Screen sizes
+11-inch (27.96 cm) and 13-inch (33.02 cm)
+Display
+Ultra Retina XDR (Tandem OLED), ProMotion 10–120Hz, P3 wide colour, True Tone,
+anti-reflective coating. 11": 2420×1668 px at 264 ppi. 13": 2752×2064 px at 264 ppi.
+Nano-texture glass option on 1TB/2TB models.
+Chip
+Apple M5. 256GB/512GB models: 9-core CPU, 10-core GPU, 12GB RAM. 1TB/2TB
+models: 10-core CPU, 10-core GPU, 16GB RAM. Hardware-accelerated ray tracing,
+16-core Neural Engine.
+Apple
+Intelligence
+Yes
+Storage
+256GB, 512GB, 1TB, 2TB
+Rear camera
+12MP Wide, ƒ/1.8, 4K video with ProRes support, LiDAR Scanner
+Front camera
+12MP landscape TrueDepth (Center Stage), Face ID
+Biometrics
+Face ID
+Connectivity
+Wi-Fi 7, Bluetooth 6; optional 5G + eSIM (Wi-Fi + Cellular models)
+Port
+Thunderbolt / USB 4
+Audio
+Four-speaker audio, studio-quality four-mic array
+Battery
+11": 31.29 Wh. 13": 38.99 Wh. Up to 10 hours web/video use.
+Weight (Wi-Fi)
+11": 444 g. 13": 579 g.
+Colours
+Silver, Space Black
+Accessories
+supported
+Apple Pencil Pro, Apple Pencil (USB-C), Magic Keyboard for iPad Pro
+Pricing — 11-inch, Wi-Fi (standard glass)
+Storage
+RAM
+Price (₹)
+256GB
+12GB
+1,39,900
+512GB
+12GB
+1,63,900
+1TB
+16GB
+2,11,900
+2TB
+16GB
+2,71,900
+Pricing — 13-inch, Wi-Fi (standard glass)
+Storage
+RAM
+Price (₹)
+256GB
+12GB
+1,99,900
+512GB
+12GB
+2,23,900
+1TB
+16GB
+2,71,900
+2TB
+16GB
+3,31,900
+Wi-Fi + Cellular adds approximately ₹24,000 over the equivalent Wi-Fi price. Nano-texture display glass (1TB/2TB only) adds
+approximately ₹12,000 over standard glass.
+
+
+--- Page 3 ---
+iPad Air
+Serious performance in a thin and light design  •  From ₹89,900
+Key specifications
+Screen sizes
+11-inch (27.96 cm) and 13-inch (33.02 cm)
+Display
+Liquid Retina (LED-backlit IPS), P3 wide colour, True Tone, anti-reflective coating, no
+ProMotion. 11": 2360×1640 px at 264 ppi, 500 nits. 13": 2732×2048 px at 264 ppi, 600
+nits.
+Chip
+Apple M4 — 8-core CPU (3 performance + 5 efficiency), 9-core GPU, 16-core Neural
+Engine, 12GB RAM, hardware-accelerated ray tracing
+Apple
+Intelligence
+Yes
+Storage
+128GB, 256GB, 512GB, 1TB
+Rear camera
+12MP Wide, ƒ/1.8, 4K video
+Front camera
+12MP landscape Center Stage (no TrueDepth)
+Biometrics
+Touch ID (top button)
+Connectivity
+Wi-Fi 7, Bluetooth 6; optional 5G + eSIM (Wi-Fi + Cellular models)
+Port
+USB-C
+Battery
+13-inch: 36.59 Wh. Up to 10 hours web/video use.
+Weight (Wi-Fi)
+11": 464 g. 13": 616 g.
+Colours
+Space Grey, Blue, Purple, Starlight
+Accessories
+supported
+Apple Pencil Pro, Apple Pencil (USB-C), Magic Keyboard for iPad Air
+Pricing — 11-inch, Wi-Fi
+Storage
+Price (₹)
+128GB
+89,900
+256GB
+1,01,900
+512GB
+1,25,900
+1TB
+1,61,900
+Pricing — 13-inch, Wi-Fi
+Storage
+Price (₹)
+128GB
+1,19,900
+256GB
+1,31,900
+512GB
+1,55,900
+1TB
+1,91,900
+Wi-Fi + Cellular adds approximately ₹18,000 over the equivalent Wi-Fi price on every capacity.
+
+
+--- Page 4 ---
+iPad
+The colourful, all-screen iPad for everyday use  •  From ₹49,900
+Key specifications
+Screen size
+11-inch (28.22 cm)
+Display
+Liquid Retina (LED-backlit IPS), 2360×1640 px at 264 ppi, 500 nits, sRGB colour (not P3
+wide colour), no anti-reflective coating, no ProMotion
+Chip
+Apple A16 — 5-core CPU, 4-core GPU, 16-core Neural Engine
+Apple
+Intelligence
+Not supported
+Storage
+128GB, 256GB, 512GB
+Rear camera
+12MP Wide, ƒ/1.8, 4K video
+Front camera
+12MP landscape (no TrueDepth, no Center Stage)
+Biometrics
+Touch ID (top button)
+Connectivity
+Wi-Fi 6, Bluetooth 5.3; optional 5G + eSIM (Wi-Fi + Cellular models)
+Port
+USB-C (USB 2.0 speeds)
+Battery
+28.6 Wh. Up to 10 hours web/video use.
+Weight (Wi-Fi)
+477 g
+Colours
+Silver, Blue, Pink, Yellow
+Accessories
+supported
+Apple Pencil (USB-C), Apple Pencil (1st generation, adapter required), Magic Keyboard
+Folio
+Pricing
+Storage
+Wi-Fi (₹)
+Wi-Fi + Cellular (₹)
+128GB
+49,900
+67,900
+256GB
+61,900
+79,900
+512GB
+85,900
+1,03,900
+
+
+--- Page 5 ---
+iPad mini
+The full iPad experience in an ultra-portable design  •  From ₹69,900
+Key specifications
+Screen size
+8.3-inch (21.08 cm)
+Display
+Liquid Retina (LED-backlit IPS), 2266×1488 px at 326 ppi, 500 nits, P3 wide colour,
+True Tone, anti-reflective coating, no ProMotion
+Chip
+Apple A17 Pro — 6-core CPU (2 performance + 4 efficiency), 5-core GPU, 16-core
+Neural Engine, 8GB RAM
+Apple
+Intelligence
+Yes
+Storage
+128GB, 256GB, 512GB
+Rear camera
+12MP Wide, ƒ/1.8, 4K video
+Front camera
+12MP Center Stage (top-facing, portrait orientation)
+Biometrics
+Touch ID (top button)
+Connectivity
+Wi-Fi 6E, Bluetooth 5.3; optional 5G + eSIM (Wi-Fi + Cellular models)
+Port
+USB-C
+Battery
+19.3 Wh. Up to 10 hours web/video use.
+Weight (Wi-Fi)
+293 g
+Colours
+Blue, Purple, Starlight, Space Grey
+Accessories
+supported
+Apple Pencil Pro, Apple Pencil (USB-C), Bluetooth keyboards (no dedicated Magic
+Keyboard)
+Pricing
+Storage
+Wi-Fi (₹)
+Wi-Fi + Cellular (₹)
+128GB
+69,900
+87,900
+256GB
+81,900
+99,900
+512GB
+1,05,900
+1,23,900
+Source: apple.com/in (Apple Online Store, India), retrieved 25 September 2026. All prices are MRP inclusive of taxes and may change
+without notice; No Cost EMI, instant cashback and trade-in offers may further reduce effective cost — see apple.com/in for current terms.
+
+

@@ -1,0 +1,18 @@
+
+=== support_125406.html ===
+  iPad: iPad Pro 11‑inch (M5) - Tech Specs - Apple Support (IN) :root{--sk-body-text-color:
+
+=== support_125407.html ===
+  iPad: iPad Pro 13‑inch (M5) - Tech Specs - Apple Support (IN) :root{--sk-body-text-color:
+
+=== support_126471.html ===
+  iPad: iPad Air 11-inch (M4) - Tech Specs - Apple Support (IN) :root{--sk-body-text-color:
+
+=== support_126472.html ===
+  iPad: iPad Air 13-inch (M4) - Tech Specs - Apple Support (IN) :root{--sk-body-text-color:
+
+=== support_122240.html ===
+  iPad: iPad (A16) - Tech Specs - Apple Support (IN) :root{--sk-body-text-color: rgb(29, 29,
+
+=== support_121456.html ===
+  iPad: iPad mini (A17 Pro) - Tech Specs - Apple Support (IN) :root{--sk-body-text-color: rg

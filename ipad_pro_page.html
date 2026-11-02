@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html  class="in en-in nojs en seg-consumer emea " lang="en-IN" >
+<head>
+
+
+            
+    <script crossorigin="anonymous">
+        window.ECHO_CONFIG = {
+            metadata: {
+                environment: "",
+                format: "common",
+                fmt: "common",
+                region: "emea",
+                country: "IN",
+                sf: "in",
+                segment: "Consumer",
+                locale: "en-in",
+                referer: document.referrer,
+                node: "standard/home/shop_ipad/family/ipad_pro/select",
+                pageResource: "ipad-4",
+                feature: "step1evolution",
+                targetEnabled: "false"
+            },
+            config: {
+                "pageViewId": Math.random().toString(36).substring(2, 12) + '-' + Date.now().toString(36),
+                "app": "com.apple.www.Store",
+                "delaySendingPageViewDataMS": 500,
+                "altTextEventSampleRatePct": 1.0,
+                "interactionEventSampleRatePct": 100.0,
+                "resourceEventSampleRatePct": 5.0,
+                "rumEventSampleRatePct": 25.0,
+                "performanceMeasurePollingIntervalMS": 1000,
+                "performanceMeasuresToReport": "".split(','),
+                "resourceDisallowedResourceList": "securemetrics.apple.com".split(','),
+                "resourcePollingIntervalMS": 2001,
+                "sendErrors": true,
+                "sendPageViewData": true,
+                "sendResourceData":  true,
+                "passiveEventIngestionUrl": "https://www.apple.com/fxpmdp/ec/as/v1/api",
+                "criticalEventIngestionUrl": "/shop/mdp/api/echo",
+                "sendLoggingData": true,
+                "eventListeners": null || {},
+                "preLoadErrors": []
+            }
+        };
+
+        window.ECHO_CONFIG.config.preLoadErrorListener =  (event) => {
+            window.ECHO_CONFIG.config.preLoadErrors.push(event);
+        };
+
+        window.addEventListener('error',window.ECHO_CONFIG.config.preLoadErrorListener);
+
+        window.AS_LOG_LEVEL = "ERROR";
+    </script>
+
+                <script crossorigin="anonymous">
+                    document.addEventListener('readystatechange', function() {
+                        function createAndDispatchEchoEvent(data) {
+                            var event = new CustomEvent("echoPerformanceNowEvent", {
+                                detail: data,
+                            });
+                            window.dispatchEvent(event);
+                        }
+
+                        if (document.readyState === "interactive") {
+                            let lastIntersectedTime = 0;
+
+                            const observerCallback = function (entries, observer) {
+                                entries.forEach((entry) => {
+                                    if (entry.isIntersecting) {
+                                        lastIntersectedTime = performance.now();
+                                    }
+
+                                    observer.unobserve(entry.target);
+                                });
+
+                                observer.disconnect();
+
+                                // Dispatch time for last intersecting object with viewport
+                                createAndDispatchEchoEvent({
+                                    id: "viewportLoad",
+                                    performanceNow: lastIntersectedTime,
+                                });
+                            };
+                        
+                            if (window.IntersectionObserver) {
+                                // get all the els on page
+                                const itemsInViewport = document.querySelectorAll('*');
+
+                                // instantiate 
+                                const intersectionObserver = new IntersectionObserver(observerCallback, {
+                                    root: null,
+                                    rootMargin: "0px 0px 0px 0px",
+                                    threshold: 0.0,
+                                });
+
+                                // iterate over all els and observe each one
+                                itemsInViewport.forEach(el => {
+                                    intersectionObserver.observe(el);
+                                });
+                            } //END window.IntersectionObserver
+                        } //END document.readyState === "interactive"
+                    });
+                </script>
+
+    <script crossorigin="anonymous">
+        (function () {
+            const logger = typeof window.Log === "function" ? window.Log("pixel") : window.console;
+
+            try {
+                function sanitizeAndNormalizePathname(pathname) {
+                    let newPathname = pathname;
+                    let decodedPathname;
+
+                    try {
+                        decodedPathname = decodeURIComponent(pathname);
+                    } catch (error) {
+                        decodedPathname = pathname;
+                    }
+
+                    // first handle /storepickup and /<sf>/storepickup
+                    if (decodedPathname.includes('/storepickup')) {
+                        newPathname = '/storepickup';
+                    }
+
+                    // then handle /store and /<sf>/store
+                    else if (decodedPathname.includes('/store')) {
+                        const base = '/store';
+                        const path = decodedPathname.split('/store')[1];
+                        newPathname = `${base}${path}`;
+                    }
+
+                    // handle /search and /<sf>/search
+                    else if (decodedPathname.includes('/search')) {
+                        newPathname = '/search';
+                    }
+
+                    // handle /giftcard and /<sf>/giftcard
+                    else if (decodedPathname.includes('/giftcard')) {
+                        newPathname = '/giftcard';
+                    }
+
+                    // handle /shop/bag/saved_bag and /<sf>/shop/bag/saved_bag
+                    else if (decodedPathname.includes('/shop/bag/saved_bag')) {
+                        const base = '/shop/bag/saved_bag';
+                        newPathname = `${base}`;
+                    }
+
+                    // handle /shop/order and /<sf>/shop/order
+                    else if (decodedPathname.includes('/shop/bag')) {
+                        const base = '/shop/bag';
+                        newPathname = `${base}`;
+                    }
+
+                    // handle /shop/order and /<sf>/shop/order
+                    else if (decodedPathname.includes('/shop/pdpAddToBag')) {
+                        const base = '/shop/pdpAddToBag';
+                        newPathname = `${base}`;
+                    }
+
+                    // handle /shop/order and /<sf>/shop/order
+                    else if (decodedPathname.includes('/shop/order')) {
+                        const base = '/shop/order';
+                        const path = decodedPathname
+                            .split(base)[1]
+                            .replace(/\d/g, '0')
+                            .replace(/[\w.-]+@[\w.-]+\.\w+/g, 'user@example.com');
+                        newPathname = `${base}${path}`;
+                    }
+
+                    // handle /shop/recap and /<sf>/shop/recap
+                    else if (decodedPathname.includes('/shop/recap')) {
+                        const base = '/shop/recap';
+                        newPathname = `${base}`;
+                    }
+
+                    // handle /shop/start and /<sf>/shop/start
+                    else if (decodedPathname.includes('/shop/start')) {
+                        const base = '/shop/start';
+                        newPathname = `${base}`;
+                    }
+
+                    // handle /shop/confirm and /<sf>/shop/confirm
+                    else if (decodedPathname.includes('/shop/confirm')) {
+                        const base = '/shop/confirm';
+                        newPathname = `${base}`;
+                    }
+
+                    // handle /shop/posThankYou and /<sf>/shop/posThankYou
+                    else if (decodedPathname.includes('/shop/posThankYou')) {
+                        const base = '/shop/posThankYou';
+                        newPathname = `${base}`;
+                    }
+
+                    // handle /shop/yoursaves and /<sf>/shop/yoursaves
+                    else if (decodedPathname.includes('/shop/yoursaves')) {
+                        const base = '/shop/yoursaves';
+                        newPathname = `${base}`;
+                    }
+
+                    // handle /shop and /<sf>/shop
+                    else if (decodedPathname.includes('/shop')) {
+                        const base = '/shop';
+                        const path = decodedPathname.split('/shop')[1];
+                        newPathname = `${base}${path}`;
+                    }
+
+                    // handle %
+                    if (newPathname.includes('%')) {
+                        newPathname = newPathname.split('%')[0];
+                    }
+
+                    return newPathname;
+                }
+
+                function getSanitizedLocation(location) {
+                    if (!location) {
+                        return {};
+                    }
+                    const newLocation = new URL(location);
+                    if (newLocation.protocol.startsWith('http')) {
+                        return newLocation;
+                    }
+                    newLocation.pathname = 'pathname';
+                    return newLocation;
+                }
+
+                function getAosSanitizedLocation(location) {
+                    const sanitizedLocation = getSanitizedLocation(location);
+
+                    const normalizedPath = sanitizeAndNormalizePathname(sanitizedLocation.pathname);
+
+                    sanitizedLocation.hash = '';
+                    sanitizedLocation.href = `${sanitizedLocation.protocol}//${sanitizedLocation.host}${normalizedPath}`;
+                    sanitizedLocation.password = '';
+                    sanitizedLocation.pathname = normalizedPath;
+                    sanitizedLocation.search = '';
+
+                    return sanitizedLocation;
+                }
+
+                const sanitizedLocation = getAosSanitizedLocation(window.location);
+
+                function getPageShopPath(pathname) {
+                    let newPathname = pathname;
+
+                    // handle /shop/product and /<sf>/shop/product
+                    if (newPathname.includes('/shop/product')) {
+                        const base = '/shop/product';
+                        newPathname = `${base}`;
+                    }
+
+                    const pathElements = newPathname.split('/');
+
+                    if (pathElements.length <= 5) {
+                        return newPathname;
+                    }
+
+                    return pathElements.slice(0, 4).join('/');
+                }
+
+                const { app, pageViewId } = window.ECHO_CONFIG && window.ECHO_CONFIG.config;
+                const referrer = document.referrer.includes('apple.com') ? getAosSanitizedLocation(document.referrer).href : document.referrer;
+                const host = sanitizedLocation.host;
+                const pageHostname = sanitizedLocation.hostname;
+                const pagePathname = sanitizedLocation.pathname;
+                const pageUrl = sanitizedLocation.href;
+                const pageShopPath = getPageShopPath(sanitizedLocation.pathname);
+                const recordTime=Date.now();
+
+                function sanitizeQuery({ search, pageResource }) {
+                    if ([
+                        'accessories-3',
+                        'accessories-4',
+                        'giftcards-1',
+                        'giftcards-3',
+                        'ipad-4',
+                        'iphone-2',
+                        'mac-2',
+                        'rs-buyflow-1',
+                        'rs-merch-4',
+                        'rs-pdp-1',
+                        'vision-1',
+                        'watch-3',
+                    ].includes(pageResource)) {
+                        return search
+                            .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2}/g, 'user@example.com')
+                            .replace(/\b[0-9a-f]{40}\b/g, '[REDACTED]');
+                    }
+                    return '?<query>';
+                }
+
+                const pageUrlParams = encodeURIComponent(
+                    window.location.search
+                    ? sanitizeQuery({ search: window.location.search, pageResource: 'ipad-4' })
+                    : ''
+                );
+                const src = `https://www.apple.com/shop/mdp/echo/echo.png?app=${app}&pageViewId=${pageViewId}&recordTime=${recordTime}&referrer=${referrer}&referer=${referrer}&host=${host}&pageHostname=${pageHostname}&pageUrl=${pageUrl}&pagePathname=${pagePathname}&pageShopPath=${pageShopPath}&pageUrlParams=${pageUrlParams}&eventType=pageview&environment=&format=common&region=emea&country=IN&sf=in&segment=Consumer&locale=en-in&node=standard/home/shop_ipad/family/ipad_pro/select&pageResource=ipad-4&feature=step1evolution`;
+                const pixelScript = document.createElement("img");
+                
+                pixelScript.setAttribute("src", src);
+
+                const srcB = `https://www.apple.com/fxpmdp/ec/as/v1/echo.png?app=${app}&pageViewId=${pageViewId}&recordTime=${recordTime}&referrer=${referrer}&referer=${referrer}&host=${host}&pageHostname=${pageHostname}&pageUrl=${pageUrl}&pagePathname=${pagePathname}&pageShopPath=${pageShopPath}&pageUrlParams=${pageUrlParams}&eventType=pageview&environment=&format=common&region=emea&country=IN&sf=in&segment=Consumer&locale=en-in&node=standard/home/shop_ipad/family/ipad_pro/select&pageResource=ipad-4&feature=step1evolution`;
+                const pixelScriptB = document.createElement("img");
+
+                pixelScriptB.setAttribute("src", srcB);
+            } catch (e) {
+                logger.error(e);
+            }
+        })();
+    </script>
+
+    <noscript>
+        <img src="https://www.apple.com/shop/mdp/echo/echo.png?app=com.apple.www.Store&pageViewId=no-js&recordTime=no-js&referrer=no-js&referer=no-js&host=no-js&pageHostname=no-js&pageUrl=no-js&pagePathname=no-js&pageShopPath=no-js&pageUrlParams=no-js&eventType=pageview&environment=&format=common&region=emea&country=IN&sf=in&segment=Consumer&locale=en-in&node=standard/home/shop_ipad/family/ipad_pro/select&pageResource=ipad-4&feature=step1evolution" width="1" height="1" />
+
+        <img src="https://www.apple.com/fxpmdp/ec/as/v1/echo.png?app=com.apple.www.Store&pageViewId=no-js&recordTime=no-js&referrer=no-js&referer=no-js&host=no-js&pageHostname=no-js&pageUrl=no-js&pagePathname=no-js&pageShopPath=no-js&pageUrlParams=no-js&eventType=pageview&environment=&format=common&region=emea&country=IN&sf=in&segment=Consumer&locale=en-in&node=standard/home/shop_ipad/family/ipad_pro/select&pageResource=ipad-4&feature=step1evolution" width="1" height="1" />
+    </noscript>
+
+            <link rel="preconnect" href="https://store.storeimages.cdn-apple.com/4668/store.apple.com" crossorigin="anonymous">
+<link rel="dns-prefetch" href="https://store.storeimages.cdn-apple.com/4668/store.apple.com" crossorigin="anonymous">
+
+<link rel="preconnect" href="https://www.apple.com" crossorigin="anonymous">
+<link rel="dns-prefetch" href="https://www.apple.com" crossorigin="anonymous">
+
+
+            <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1" />
+    <title>Buy iPad Pro - Apple (IN)</title>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />    
+    <meta name="format-detection" content="telephone=no" />        
+         <meta name="twitter:site" content="@apple" />
+        <meta name="robots" content="max-image-preview:large" />
+        <meta property="og:image" content="https://store.storeimages.cdn-apple.com/1/as-images.apple.com/is/ipad-pro-model-select-gallery-1-202405?wid=1200&amp;hei=630&amp;fmt=jpeg&amp;qlt=95&amp;.v=1713495958512" />
+        <meta property="og:title" content="Buy iPad Pro" />
+        <meta property="og:site_name" content="Apple (IN)" />
+        <meta property="og:locale" content="en_IN" />
+        <meta property="og:url" content="https://www.apple.com/in/shop/buy-ipad/ipad-pro" />
+        <meta property="og:description" content="iPad Pro with the M5 chip is a giant leap for AI on iPad. Trade in your current device to save and get free delivery or pickup. Buy now at apple.com." />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta property="og:type" content="product" />
+    <meta name="description" content="iPad Pro with the M5 chip is a giant leap for AI on iPad. Trade in your current device to save and get free delivery or pickup. Buy now at apple.com." />
+        
+      
+      
+      <link rel="canonical" href="https://www.apple.com/in/shop/buy-ipad/ipad-pro" />
+          <script  crossorigin="anonymous"> document.cookie = "as_sfa=Mnxpbnxpbnx8ZW5fSU58Y29uc3VtZXJ8aW50ZXJuZXR8MHwwfDE; path=/; domain=apple.com; expires=Wed, 24-Mar-2027 07:49:32 GMT; Secure;"; </script>
+			<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"iPad Pro 11-inch (M5)","url":"https://www.apple.com/in/shop/buy-ipad/ipad-pro","mainEntityOfPage":"https://www.apple.com/in/shop/buy-ipad/ipad-pro","offers":[{"@type":"Offer","priceCurrency":"INR","price":307900.00,"sku":"ME6C4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":271900.00,"sku":"MDWU4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":283900.00,"sku":"MDWX4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":235900.00,"sku":"ME2V4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":295900.00,"sku":"ME2Y4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":187900.00,"sku":"ME2T4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":211900.00,"sku":"MDWP4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":163900.00,"sku":"ME2N4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":223900.00,"sku":"MDWT4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":187900.00,"sku":"ME2Q4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":163900.00,"sku":"MDWM4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":283900.00,"sku":"MDWW4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":139900.00,"sku":"MDWK4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":235900.00,"sku":"ME2U4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":295900.00,"sku":"ME6A4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":211900.00,"sku":"MDWQ4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":247900.00,"sku":"ME2X4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":271900.00,"sku":"MDWV4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":163900.00,"sku":"ME2P4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":163900.00,"sku":"MDWN4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":307900.00,"sku":"ME6D4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":139900.00,"sku":"MDWL4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":223900.00,"sku":"MDWR4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":247900.00,"sku":"ME2W4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}}],"image":"https://store.storeimages.cdn-apple.com/1/as-images.apple.com/is/ipad-pro-model-select-gallery-1-202405?wid=5120&hei=2880&fmt=jpeg&qlt=90&.v=1713495958512","description":"iPad Pro with the M5 chip is a giant leap for AI on iPad. Trade in your current device to save and get free delivery or pickup. Buy now at apple.com."}</script>
+			<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"iPad Pro 13-inch (M5)","url":"https://www.apple.com/in/shop/buy-ipad/ipad-pro","mainEntityOfPage":"https://www.apple.com/in/shop/buy-ipad/ipad-pro","offers":[{"@type":"Offer","priceCurrency":"INR","price":271900.00,"sku":"MDYN4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":307900.00,"sku":"ME8H4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":295900.00,"sku":"ME8D4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":199900.00,"sku":"MDYJ4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":223900.00,"sku":"ME7W4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":367900.00,"sku":"ME8N4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":247900.00,"sku":"ME8C4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":343900.00,"sku":"MDYV4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":355900.00,"sku":"ME8K4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":295900.00,"sku":"ME8F4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":331900.00,"sku":"MDYU4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":283900.00,"sku":"MDYR4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":355900.00,"sku":"ME8J4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":271900.00,"sku":"MDYP4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":223900.00,"sku":"MDYL4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":223900.00,"sku":"MDYM4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":199900.00,"sku":"MDYK4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":367900.00,"sku":"ME8M4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":283900.00,"sku":"MDYQ4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":247900.00,"sku":"ME7Y4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":343900.00,"sku":"MDYW4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":223900.00,"sku":"ME7X4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":307900.00,"sku":"ME8G4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}},{"@type":"Offer","priceCurrency":"INR","price":331900.00,"sku":"MDYT4HN/A","shippingDetails":{"@type":"OfferShippingDetails","shippingRate":{"@type":"MonetaryAmount","value":0,"currency":"INR"}}}],"image":"https://store.storeimages.cdn-apple.com/1/as-images.apple.com/is/ipad-pro-model-select-gallery-1-202405?wid=5120&hei=2880&fmt=jpeg&qlt=90&.v=1713495958512","description":"iPad Pro with the M5 chip is a giant leap for AI on iPad. Trade in your current device to save and get free delivery or pickup. Buy now at apple.com."}</script>
+			<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":"1","item":{"@id":"https://www.apple.com/in/ipad","url":"https://www.apple.com/in/ipad","name":"iPad"}},{"@type":"ListItem","position":"2","item":{"@id":"https://www.apple.com/in/ipad-pro","url":"https://www.apple.com/in/ipad-pro","name":"iPad Pro"}},{"@type":"ListItem","position":"3","name":"Buy iPad Pro"}]}</script>
+		<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is the difference in display glass options?","acceptedAnswer":{"@type":"Answer","text":"iPad Pro offers two anti-reflective glass options. Standard glass has an industry-leading anti‑reflective coating for viewing comfort and readability. Nano‑texture glass further minimises glare while delivering outstanding image quality in workspaces with bright light sources, like sunlight. Nano-texture glass is available in 1TB or 2TB configurations."}},{"@type":"Question","name":"Which Apple Pencil will work with my iPad?","acceptedAnswer":{"@type":"Answer","text":"Both Apple Pencil Pro and Apple Pencil (USB-C) are compatible with this iPad Pro.\nApple Pencil Pro pairs wirelessly and attaches magnetically for charging and storage.\nApple Pencil (USB-C) pairs via USB-C Charge Cable and attaches magnetically for storage."}},{"@type":"Question","name":"What type of SIM does this iPad have?","acceptedAnswer":{"@type":"Answer","text":"iPad Pro includes eSIM technology that enables fast, convenient and secure activation of mobile data plans. There are a few ways to activate eSIM on your iPad, including transferring from another iPad, joining an existing iPhone data plan, adding a new plan in Settings, scanning a QR code or using an app from a network provider. Footnote 1 With eSIM you can choose mobile data plans from selected network providers in more than 190 countries and regions around the world. Learn more about setting up eSIM."}},{"@type":"Question","name":"Which keyboard will work with this iPad?","acceptedAnswer":{"@type":"Answer","text":"Magic Keyboard for iPad. Third-party keyboards are also available.\nExplore iPad Keyboards"}},{"@type":"Question","name":"What are my payment and financing options?","acceptedAnswer":{"@type":"Answer","text":"Apple accepts most credit and debit cards, Net Banking, UPI, and Payment on Delivery. You can also pay in instalments with EMI using an eligible credit or debit card.\nDuring Checkout, you can compare instalment options and select the one that works best for you.\nSome payment options may not be available for all products. Subject to card eligibility. Learn more about Apple payment (opens in new window), as well as Terms and Conditions (opens in new window). You can call 00800 040 1966 for more information."}},{"@type":"Question","name":"What is included with AppleCare+?","acceptedAnswer":{"@type":"Answer","text":"AppleCare+ for iPad is an insurance product that provides expert technical support and hardware coverage for iPad, Apple Pencil and Apple‑branded iPad keyboard, including unlimited incidents of accidental damage protection. Each incident is subject to an excess fee of ₹2,500 for screen repair, ₹8,900 for other accidental damage for iPad models launched after 1 May 2024, ₹3,900 for accidental damage to all other iPad models, and ₹2,500 for Apple Pencil or Apple‑branded iPad keyboard. The screen repair service fee is only available on eligible iPad models when there is no other damage present. For the list of eligible models, please refer to the terms (opens in new window). Coverage begins on your AppleCare+ purchase date.    Learn more about AppleCare+(opens in new window)"}}]}</script>
+		
+	<script type="application/json" id="metrics">{"config":{"asMetrics":{"maxCampaignAndAffiliateLength":255,"graffitiFeatures":["sectionEngagement","pageLoad"],"asMetricsFeatures":["sharedDataLayer"],"dataMule":"v1","storedEntryPointEnabled":false,"graffitiEnabled":true},"omniture":{"account":["applestoreww"],"trackingServer":"securemetrics.apple.com","internalDomains":["store.apple.com","secure.store.apple.com","secure1.store.apple.com","secure2.store.apple.com","epp.apple.com","secure1.epp.apple.com","storeint.apple.com","secure1.storeint.apple.com","www.apple.com"]},"global":{"cookieDomain":"apple.com"}},"data":{"node":"standard/home/shop_ipad/family/ipad_pro/select","pageName":"AOS: home/shop_ipad/family/ipad_pro/select","properties":{"isHomePage":false,"encryptedStoreId":"wKJJUUY79UT9J2KPA","serverName":"c78000","characterSetForCountry":"UTF-8","currencyCode":"INR","computedChannel":"AOS: iPad","storeSegmentVariable":"AOS: IN Consumer","storeFrontId":"804096","productsString":"ipad_pro","eventType":"event55","computedCustomStoreName":"AOS: IN Consumer","langAttribute":"en-in","evarDataNodesEnabled":true},"currency":"INR","area":"shop","category":"ipad_pro","products":[{"sku":"MDWU4","partNumber":"MDWU4HN/A","price":{"fullPrice":271900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi 2TB with standard glass - Space Black"},{"sku":"MDWK4","partNumber":"MDWK4HN/A","price":{"fullPrice":139900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi 256GB with standard glass - Space Black"},{"sku":"MDWM4","partNumber":"MDWM4HN/A","price":{"fullPrice":163900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi 512GB with standard glass - Space Black"},{"sku":"MDWP4","partNumber":"MDWP4HN/A","price":{"fullPrice":211900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi 1TB with standard glass - Space Black"},{"sku":"MDWV4","partNumber":"MDWV4HN/A","price":{"fullPrice":271900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi 2TB with standard glass - Silver"},{"sku":"MDWN4","partNumber":"MDWN4HN/A","price":{"fullPrice":163900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi 512GB with standard glass - Silver"},{"sku":"MDWL4","partNumber":"MDWL4HN/A","price":{"fullPrice":139900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi 256GB with standard glass - Silver"},{"sku":"MDWQ4","partNumber":"MDWQ4HN/A","price":{"fullPrice":211900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi 1TB with standard glass - Silver"},{"sku":"MDWX4","partNumber":"MDWX4HN/A","price":{"fullPrice":283900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi 2TB with nano-texture glass - Silver"},{"sku":"MDWT4","partNumber":"MDWT4HN/A","price":{"fullPrice":223900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi 1TB with nano-texture glass - Silver"},{"sku":"MDWW4","partNumber":"MDWW4HN/A","price":{"fullPrice":283900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi 2TB with nano-texture glass - Space Black"},{"sku":"MDWR4","partNumber":"MDWR4HN/A","price":{"fullPrice":223900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi 1TB with nano-texture glass - Space Black"},{"sku":"ME2X4","partNumber":"ME2X4HN/A","price":{"fullPrice":247900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi + Cellular 1TB with nano-texture glass - Silver"},{"sku":"ME6D4","partNumber":"ME6D4HN/A","price":{"fullPrice":307900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi + Cellular 2TB with nano-texture glass - Silver"},{"sku":"ME2W4","partNumber":"ME2W4HN/A","price":{"fullPrice":247900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi + Cellular 1TB with nano-texture glass - Space Black"},{"sku":"ME6C4","partNumber":"ME6C4HN/A","price":{"fullPrice":307900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi + Cellular 2TB with nano-texture glass - Space Black"},{"sku":"ME2N4","partNumber":"ME2N4HN/A","price":{"fullPrice":163900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi + Cellular 256GB with standard glass - Space Black"},{"sku":"ME2Q4","partNumber":"ME2Q4HN/A","price":{"fullPrice":187900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi + Cellular 512GB with standard glass - Space Black"},{"sku":"ME2U4","partNumber":"ME2U4HN/A","price":{"fullPrice":235900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi + Cellular 1TB with standard glass - Space Black"},{"sku":"ME2Y4","partNumber":"ME2Y4HN/A","price":{"fullPrice":295900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi + Cellular 2TB with standard glass - Space Black"},{"sku":"ME2P4","partNumber":"ME2P4HN/A","price":{"fullPrice":163900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi + Cellular 256GB with standard glass - Silver"},{"sku":"ME2T4","partNumber":"ME2T4HN/A","price":{"fullPrice":187900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi + Cellular 512GB with standard glass - Silver"},{"sku":"ME2V4","partNumber":"ME2V4HN/A","price":{"fullPrice":235900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi + Cellular 1TB with standard glass - Silver"},{"sku":"ME6A4","partNumber":"ME6A4HN/A","price":{"fullPrice":295900.00},"category":"ipad","name":"11-inch iPad Pro Wi‑Fi + Cellular 2TB with standard glass - Silver"},{"sku":"MDYR4","partNumber":"MDYR4HN/A","price":{"fullPrice":283900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi 1TB with nano-texture glass - Silver"},{"sku":"MDYW4","partNumber":"MDYW4HN/A","price":{"fullPrice":343900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi 2TB with nano-texture glass - Silver"},{"sku":"MDYQ4","partNumber":"MDYQ4HN/A","price":{"fullPrice":283900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi 1TB with nano-texture glass - Space Black"},{"sku":"MDYV4","partNumber":"MDYV4HN/A","price":{"fullPrice":343900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi 2TB with nano-texture glass - Space Black"},{"sku":"MDYK4","partNumber":"MDYK4HN/A","price":{"fullPrice":199900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi 256GB with standard glass - Silver"},{"sku":"MDYM4","partNumber":"MDYM4HN/A","price":{"fullPrice":223900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi 512GB with standard glass - Silver"},{"sku":"MDYP4","partNumber":"MDYP4HN/A","price":{"fullPrice":271900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi 1TB with standard glass - Silver"},{"sku":"MDYU4","partNumber":"MDYU4HN/A","price":{"fullPrice":331900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi 2TB with standard glass - Silver"},{"sku":"MDYJ4","partNumber":"MDYJ4HN/A","price":{"fullPrice":199900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi 256GB with standard glass - Space Black"},{"sku":"MDYN4","partNumber":"MDYN4HN/A","price":{"fullPrice":271900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi 1TB with standard glass - Space Black"},{"sku":"MDYL4","partNumber":"MDYL4HN/A","price":{"fullPrice":223900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi 512GB with standard glass - Space Black"},{"sku":"MDYT4","partNumber":"MDYT4HN/A","price":{"fullPrice":331900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi 2TB with standard glass - Space Black"},{"sku":"ME8G4","partNumber":"ME8G4HN/A","price":{"fullPrice":307900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi + Cellular 1TB with nano-texture glass - Space Black"},{"sku":"ME8M4","partNumber":"ME8M4HN/A","price":{"fullPrice":367900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi + Cellular 2TB with nano-texture glass - Space Black"},{"sku":"ME8H4","partNumber":"ME8H4HN/A","price":{"fullPrice":307900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi + Cellular 1TB with nano-texture glass - Silver"},{"sku":"ME8N4","partNumber":"ME8N4HN/A","price":{"fullPrice":367900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi + Cellular 2TB with nano-texture glass - Silver"},{"sku":"ME7Y4","partNumber":"ME7Y4HN/A","price":{"fullPrice":247900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi + Cellular 512GB with standard glass - Space Black"},{"sku":"ME7W4","partNumber":"ME7W4HN/A","price":{"fullPrice":223900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi + Cellular 256GB with standard glass - Space Black"},{"sku":"ME8D4","partNumber":"ME8D4HN/A","price":{"fullPrice":295900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi + Cellular 1TB with standard glass - Space Black"},{"sku":"ME8J4","partNumber":"ME8J4HN/A","price":{"fullPrice":355900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi + Cellular 2TB with standard glass - Space Black"},{"sku":"ME7X4","partNumber":"ME7X4HN/A","price":{"fullPrice":223900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi + Cellular 256GB with standard glass - Silver"},{"sku":"ME8C4","partNumber":"ME8C4HN/A","price":{"fullPrice":247900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi + Cellular 512GB with standard glass - Silver"},{"sku":"ME8F4","partNumber":"ME8F4HN/A","price":{"fullPrice":295900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi + Cellular 1TB with standard glass - Silver"},{"sku":"ME8K4","partNumber":"ME8K4HN/A","price":{"fullPrice":355900.00},"category":"ipad","name":"13-inch iPad Pro Wi‑Fi + Cellular 2TB with standard glass - Silver"}],"sectionEngagement":[[".dd-compare","buyflow-compare"],["[data-analytics-section=\"dimensionScreensize\"]","dimensionscreensize"],["[data-analytics-section=\"dimensionFinish\"]","dimensiondisplay"],["[data-analytics-section=\"summary\"]","summary"],["#acc_pencil,#acc_pencil_first","pencil"],["[data-analytics-section=\"buyflow-business\"]","buyflow-business"],["[data-analytics-section=\"engraving\"]","engraving"],["[data-analytics-section=\"applecare\"]","applecare"],["[data-analytics-section=\"tradein\"]","tradein"],["[data-analytics-section=\"dimensionCapacity\"]","dimensioncapacity"],[".dd-services","app-services"],["[data-analytics-section=\"paymentOptions\"]","paymentOptions"],["[data-analytics-section=\"dimensionColor\"]","dimensioncolor"],["[data-analytics-section=\"dimensionConnection\"]","dimensionconnection"],["[data-analytics-section=\"buyflow-faq\"]","buyflow-faq"]],"buyflow":{"step":"select","lineOfBusiness":"ipad","state":"cold","name":"ipad_pro","dimensionOrder":[["dimensionScreensize","dimensionColor","dimensionCapacity","dimensionFinish","dimensionConnection"]],"selectionOrder":[["dimensionScreensize","dimensionColor","dimensionCapacity","dimensionFinish","dimensionConnection","engraving","accessories","tradeIn","payment","appleCare"]]}}}</script>
+            <script type="application/json" id="graffiti-tags">[{"u":"","c":"sha256-InHLRsCmgLkNI50JitrzYkKC5sP/RWNExyV5b8hFdJY=","p":"100"},{"u":"","c":"sha256-6uDuRrU3iYArK+xSoicPHQShFgnVClprVub4TzY1Sh8=","p":"100"},{"u":"","c":"sha256-8d0JaOIs3LQfFO9vRvD8XCEAgZArPSU9AIn3OewImi0=","p":"100"},{"u":"","c":"sha256-8GPkXGAKkthUvZ4pb5QR5nZrx+OZatfWali/VHHQd/c=","p":"100"},{"u":"","c":"sha256-EtTbPxh6vnGap6nLDi2M+/F3SP/uKez7cXrAMx7FxEo=","p":"100"},{"u":"","c":"sha256-qM1Cb1VOJ+mg0p7YZ5fH4bQvnmWGjRm0n2YZgRk5BmI=","p":"100"},{"u":"","c":"sha256-Ar/W3doVv0TG6IIxeFraSn6rsF4bwim91R91k3L64ps=","p":"100"},{"u":"","c":"sha256-6UXxLVuLoC4JzpXyfZ7I+fscF/4tnQ4XfBROBWPezpQ=","p":"100"},{"u":"","c":"sha256-IzxhxJDy4u3MXYlQpUKoOO6QEZ10GHnSyt7Bamlw9lI=","p":"100"},{"u":"","c":"sha256-2JvlQzmpMY+PRvP0T6vpOwlsbx1Ss1uxVec4W0M7ijk=","p":"100"},{"u":"","c":"sha256-JAryiUgvt0S8yqj+q0VAIuOJKqQojYXvsq4nJfJ3DwQ=","p":"100"},{"u":"","c":"sha256-asH0vGL/3DX5lN3Ccq0osLyOecMTVH2084VQ/rfj1MQ=","p":"100"},{"u":"","c":"sha256-zTK6Zz4vAB/Z4nQ8i9BBq/TDoOJKCmdWpj4YHghVjN8=","p":"100"},{"u":"","c":"sha256-X4cjS4Wr+Sl0MyeTXRKx2uTrQr3M1NKJGBMZfl++xKk=","p":"100"},{"u":"","c":"sha256-qlYVs8cOSoi3C9Z91m7Q3uqVeeX/q92i3+U0GhPjEjE=","p":"100"},{"u":"","c":"sha256-HOrQt1AyBrERUnL8hEWcAV8x/W5eLPm+9nTz5NQfCPc=","p":"100"},{"u":"","c":"sha256-dIbkvQlbSjNMjCY4DEQICrxjLCG+7c1TcAJqPBU2uvA=","p":"100"},{"u":"","c":"sha256-vIPxZQuXgICpC2j6mPVT0+jlKSJy9tPOdj26GHulocg=","p":"100"},{"u":"","c":"sha256-eScPIg4Mak9pSZ4VO24t6zimN6bRK1TXC8T9J6cLN88=","p":"100"},{"u":"","c":"sha256-pyN9psm0qS/nRuE/iN6lRMKQNpYycKB+fy9xOcz0x2I=","p":"100"},{"u":"","c":"sha256-me7GgNgobNlipJOZe572+JiENrdNtSu/EGZlUIwM5DQ=","p":"100"},{"u":"","c":"sha256-jPEnOONIgAcUVEsj0x+ufyW0AaLhf7OwIKerpVTFV0k=","p":"100"},{"u":"","c":"sha256-KWyGTIlIi8zoB47RNRsWjbi6GysiYuYC+XkN/kAD1/U=","p":"100"},{"u":"","c":"sha256-UN5R8fhSDjQTTekBW/2OxTvmtFXMNsXWfYDkarJ9UfE=","p":"100"},{"u":"","c":"sha256-GDrN520N6pxjlgZjpx6ig3eGcLbOcuQ+Ki/OVcbDiaU=","p":"100"},{"u":"","c":"sha256-h4hHMfW1aOWecH+ZudUuT/jQ3hARMakj8v0C0ePrgv0=","p":"100"},{"u":"","c":"sha256-RkQoe7XoUt/7TpFjHkSjlfDf6d0XmU6WeBm7E0lSHXk=","p":"100"},{"u":"","c":"sha256-4ZDkhD+rlR3dYpYnrBDs101Dio+hne709ceeZW8NOdc=","p":"100"},{"u":"","c":"sha256-z8p4RNkdRQhvC39ncdCEQsw7IfFtPl+Hg1+aRNuE+Cc=","p":"100"},{"u":"","c":"sha256-IeMaMDUlvehMcOtnNhPplrC3Mte0CRYv/9YFsBeqNwc=","p":"100"},{"u":"","c":"sha256-xjNu+LJMeavn+euredL/aq9+YOd8HhBWqCFarjiuh44=","p":"100"}]</script>
+    
+    
+    <link rel="image_src" href="" />
+
+
+
+
+        
+
+
+<script>
+window.apple = window.apple || {};
+    apple.buyFlowVersionId = "v10";
+    apple.buyFlowFirstStep = true;
+    apple.buyFlowExpiry = 28800000;
+    apple.buyFlowPath = "/in/shop/buy-ipad/ipad-pro";
+</script>
+
+
+        
+
+<script>
+    window.asBuyFlow = window.asBuyFlow || {};
+    window.asBuyFlow.sfa = 'in';
+
+    window.asBuyFlow.storageConfig = {
+        genericPath: '/' + window.asBuyFlow.sfa + (window.apple && window.apple.buyFlowPath
+            ? window.apple.buyFlowPath : (window.location.pathname + '/generic'))
+    }
+</script>
+
+                                <link rel="preload" as="image" href="">
+
+
+                <script crossorigin="anonymous" type="application/json" id="uiConfig">
+        {
+                    "fetchHeaders": {
+                        "sendHeaders": true
+                    }
+        }
+    </script>
+
+	<script crossorigin="anonymous">
+		window.asUnsupportedBrowserUrl = "https://www.apple.com/in/shop/unsupported";
+	</script>
+
+
+<script crossorigin="anonymous">
+	//replace nojs class with js on html element
+	(function(html){
+		html.className = html.className.replace(/\bnojs\b/,'js')
+	})(document.documentElement);
+
+	// add metric shim
+	window.s = {
+		t: () => {},
+		tl: () => {},
+		clearVars: () => {},
+		pageName: 'disabled',
+		disabled: true
+	};
+</script>
+
+    
+            <link data-srs rel="stylesheet" href="https://store.storeimages.cdn-apple.com/4668/store.apple.com/static-resources/rs-globalelements-2.25.0-4bbf8/dist/ac-globalnav.css" media="screen, print"  />
+
+
+
+
+        <link data-srs rel="stylesheet" href="https://store.storeimages.cdn-apple.com/4668/store.apple.com/static-resources/rs-external-1.74.1-85ac2/dist/in/external.css" media="screen, print"  />
+        <link data-srs rel="stylesheet" href="https://store.storeimages.cdn-apple.com/4668/store.apple.com/static-resources/rs-vendor-1.36.0-38108/dist/common-css@1.3.3/dist/common.css" media="screen, print"  />
+        <link data-srs rel="stylesheet" href="https://store.storeimages.cdn-apple.com/4668/store.apple.com/static-resources/rs-ipad-4.45.3-eff90/dist/step1evolution.css" media="screen, print"  />
+
+        <link data-srs rel="stylesheet" href="https://www.apple.com/wss/fonts?families=SF+Pro,v3:200,300,400,500,600|SF+Pro+Icons,v3|Apple+Monochrome+Emoji,v3|Apple+Monochrome+Emoji+Ind,v2|Graphik,v1"  />
+
+    
+
+
+
+<link rel="stylesheet" href="https://store.storeimages.cdn-apple.com/4668/store.apple.com/shop/Catalog/global/css/dd/buy-flow/ipad.css" media="screen, print" />
+<link rel="stylesheet" href="https://store.storeimages.cdn-apple.com/4668/store.apple.com/shop/Catalog/global/css/web/fee/buy-flow/ipad/as-ipad-pro.css" media="screen, print" />
+<link rel="stylesheet" href="https://store.storeimages.cdn-apple.com/4668/store.apple.com/shop/Catalog/global/css/dd/campaign/diwali.css" media="screen, print" />
+
+	<script crossorigin="anonymous">
+		window.irOn=true;
+	</script>
+
+    
+        <script data-srs
+
+            src="https://store.storeimages.cdn-apple.com/4668/store.apple.com/static-resources/rs-external-1.74.1-85ac2/dist/unsupportedBrowser.min.js"
+
+
+         nomodule crossorigin="anonymous" integrity="sha384-xA4aSWL+MVd9UwGaciKIe6Ws2in1+cSOXfCZ/KgWWJeJ1eBDhPaftM2S97id4HfU"></script>
+        <script data-srs
+
+            src="https://store.storeimages.cdn-apple.com/4668/store.apple.com/static-resources/rs-echo-3.35.1-cfadd/dist/echo.min.js"
+
+
+         async crossorigin="anonymous" type="module" integrity="sha384-0I+kZmpldKJb/SXzAO0FAPzFZfihmidAtr0GGlmveZTTcYctWo5XBEGzXUIBtfDI"></script>
+        <script data-srs
+
+            src="https://store.storeimages.cdn-apple.com/4668/store.apple.com/static-resources/rs-external-1.74.1-85ac2/dist/external.js"
+
+
+         crossorigin="anonymous" integrity="sha384-NTbqmRN1XvDxnsUvkcHO9DrZEcmCa3pc4i9dmeOoe4dy6mlL7qVN1D75qRanApEW"></script>
+        <script data-srs
+
+            src="https://store.storeimages.cdn-apple.com/4668/store.apple.com/static-resources/rs-external-1.74.1-85ac2/dist/log.js"
+
+
+         crossorigin="anonymous" integrity="sha384-Lpw75dcRr7edu/M8cDUYQwQ1un8+qbzwwYIKToObJpfOn6ojmGE1jjLJG/Hkx2hs"></script>
+        <script data-srs
+
+            src="https://store.storeimages.cdn-apple.com/4668/store.apple.com/static-resources/rs-vendor-1.36.0-38108/dist/adobe-appmeasurement@3.0.0/third-party/js/ActivityMap.js"
+
+
+         crossorigin="anonymous" integrity="sha384-1BlDpZz9HnfIFjQdcsaUw/pAX0CahbI4PMPj1Z5XWURAnf0yB/t0e0N67vGRNrOW"></script>
+        <script data-srs
+
+            src="https://store.storeimages.cdn-apple.com/4668/store.apple.com/static-resources/rs-vendor-1.36.0-38108/dist/adobe-appmeasurement@3.0.0/third-party/js/AppMeasurement.js"
+
+
+         crossorigin="anonymous" integrity="sha384-jCdgBbxALZsf+8fwj1dHUYG0m12IfDTcySU5niui301KztArcUL2ZqP1I6z1y4u3"></script>
+        <script data-srs
+
+            src="https://store.storeimages.cdn-apple.com/4668/store.apple.com/static-resources/rs-analytics-1.12.0-54ed8/dist/analytics.js"
+
+
+         crossorigin="anonymous" integrity="sha384-g/Os09MonGb/qseTfGP1dtTN083Eem3rhig3AqhggOeWMkomzLBz4YPL30xKnYFx"></script>
+        <script data-srs
+
+            src="https://store.storeimages.cdn-apple.com/4668/store.apple.com/static-resources/rs-vendor-1.36.0-38108/dist/lodash@4.17.21/lodash.min.js"
+
+
+   
