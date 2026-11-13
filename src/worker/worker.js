@@ -209,7 +209,7 @@ export default {
           headers: { ...COMMON_HEADERS, 'Retry-After': '60' },
         });
       }
-      return forwardToStreamlit(request, url, env.AADHAR_ORIGIN);
+      return forwardToStreamlit(request, url, env.AADHAR_ORIGIN, ctx);
     }
 
     // ── Route: /api/* ───────────────────────────────────────────────────────
@@ -335,21 +335,10 @@ export default {
       // Transient failure — the next tick retries.
     }
 
-    // Same treatment for the Aadhaar Streamlit service, which is also on the
-    // Render free plan and would otherwise sleep after 15 min idle. Ping
-    // Streamlit's own health endpoint (not the app root) so the wake-up does
-    // not run the script. Already covered by the 21:00-06:00 IST return above.
-    const aadhar = env.AADHAR_ORIGIN;
-    if (aadhar) {
-      try {
-        await fetch(aadhar.replace(/\/+$/, '') + '/aadhar-dashboard/_stcore/health', {
-          method: 'GET',
-          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; dashv1-aadhar-keepalive)' },
-        });
-      } catch (err) {
-        // Transient failure — the next tick retries.
-      }
-    }
+    // The Aadhaar Streamlit service is deliberately not pinged here. It runs
+    // 24/7 and has its own aadhar-keepalive Worker, which does not skip the
+    // night. This cron still sleeps 21:00-06:00 IST for the Node backend, so
+    // pinging Aadhaar from here would stop at exactly the wrong time.
   },
 };
 
@@ -747,7 +736,7 @@ async function forwardToServer(request, url, serverOrigin) {
   return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: newHeaders });
 }
 
-async function forwardToStreamlit(request, url, origin) {
+async function forwardToStreamlit(request, url, origin, ctx) {
   const base = String(origin).replace(/\/+$/, '');
   const target = new URL(base + url.pathname + (url.search || ''));
   const headers = new Headers(request.headers);
@@ -765,6 +754,37 @@ async function forwardToStreamlit(request, url, origin) {
   if (isWebSocket) headers.set('Upgrade', 'websocket');
   const isBodyless = request.method === 'GET' || request.method === 'HEAD';
 
+  // Streamlit's static bundle is content-hashed and the origin already sends
+  // `Cache-Control: public, immutable, max-age=31536000`. Render is itself
+  // fronted by Cloudflare, so this is a cross-zone fetch and `cf.cacheEverything`
+  // is ignored (verified: the subrequest stayed `CF-Cache-Status: DYNAMIC`).
+  // The Cache API belongs to this Worker's zone and works for cross-zone
+  // origins, so use it explicitly. Only GET under /static: HTML, the
+  // _stcore API and the WebSocket must never be cached.
+  const isStaticAsset = request.method === 'GET'
+    && url.pathname.startsWith('/aadhar-dashboard/static/');
+  // Different clients accept different encodings, and a cached gzip body must
+  // not be served to a client that only accepts identity. Normalise the set so
+  // header ordering does not fragment the cache.
+  const acceptEncoding = String(request.headers.get('Accept-Encoding') || '').toLowerCase();
+  const encoding = ['br', 'gzip', 'deflate', 'zstd']
+    .filter((name) => acceptEncoding.includes(name))
+    .join('-') || 'identity';
+  const cacheKey = isStaticAsset
+    ? new Request('https://dashboardharyana.site' + url.pathname + '?enc=' + encoding, { method: 'GET' })
+    : null;
+  const cache = cacheKey ? caches.default : null;
+
+  if (cache) {
+    try {
+      const cached = await cache.match(cacheKey);
+      if (cached) return cached;
+    } catch (err) {
+      // The Cache API is unavailable on some hosts (for example workers.dev).
+      // A cache miss must never turn a working dashboard into an error.
+    }
+  }
+
   let resp;
   try {
     resp = await fetch(target.toString(), {
@@ -778,8 +798,49 @@ async function forwardToStreamlit(request, url, origin) {
     return maintenanceResponse_(err && err.message);
   }
 
+  // Store successful static responses for the next request in this colo.
+  // `tee()` keeps the client response streaming while the cache write drains
+  // the other branch; assets are ~0.6 MB compressed in total, well under the
+  // Worker memory limit.
+  if (cache && resp.ok && resp.body) {
+    const cacheHeaders = new Headers(resp.headers);
+    cacheHeaders.delete('Set-Cookie');
+    cacheHeaders.set('Cache-Control', 'public, immutable, max-age=31536000');
+    const [forClient, forCache] = resp.body.tee();
+    ctx.waitUntil(
+      cache.put(cacheKey, new Response(forCache, {
+        status: resp.status,
+        statusText: resp.statusText,
+        headers: cacheHeaders,
+      })).catch(() => {}),
+    );
+    resp = new Response(forClient, {
+      status: resp.status,
+      statusText: resp.statusText,
+      headers: resp.headers,
+    });
+  }
+
   if (resp.webSocket) return resp;
   if (resp.status === 101) return maintenanceResponse_('upstream returned an invalid WebSocket response');
+
+  // Render's free tier refuses to wake a hibernated service with 429 +
+  // `x-render-routing: hibernate-rate-limited`. A 429 tells a browser/client to
+  // retry immediately, which makes the block worse; 503 + Retry-After tells it
+  // the dependency is unavailable and to wait.
+  if (resp.status === 429
+      && String(resp.headers.get('x-render-routing') || '').toLowerCase() === 'hibernate-rate-limited') {
+    return new Response('The Aadhaar dashboard is waking up. Please retry in a minute.', {
+      status: 503,
+      headers: {
+        ...COMMON_HEADERS,
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Retry-After': '60',
+      },
+    });
+  }
+
   if (resp.status === 502 || resp.status === 503 || resp.status === 504) {
     return maintenanceResponse_('Aadhaar dashboard unavailable (HTTP ' + resp.status + ')');
   }
